@@ -1,0 +1,6 @@
+# Raw input data (large, public NASA/NAIF files): see README.md "Data"
+/data/
+__pycache__/
+*.pyc
+node_modules/
+dist/
