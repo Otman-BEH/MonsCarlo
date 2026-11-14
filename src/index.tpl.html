@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lunar Skyline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Lunar <span>Skyline</span></h1>
+    <button id="tour-go" type="button" class="primary">Take the 60-second tour</button>
+    <button id="share" type="button">Copy link to this scenario</button>
+    <p class="tag">Where the Sun and Earth sit against the terrain horizon of any lunar landing site, on any date, and whether a mission can live with it. Built for the NASA Space Apps challenge Lunar Landing Site Navigator.</p>
+  </header>
+
+  <section class="panel controls" aria-label="Site and time">
+    <label class="fl c-site" for="site">Landing site
+      <select id="site"></select>
+    </label>
+    <label class="fl c-lat" for="lat">Lat °N
+      <input id="lat" type="number" step="0.01" min="-90" max="90">
+    </label>
+    <label class="fl c-lon" for="lon">Lon °E
+      <input id="lon" type="number" step="0.01" min="-180" max="360">
+    </label>
+    <label class="fl c-eye" for="eye">Mast, m
+      <input id="eye" type="number" step="1" min="0" max="2000" value="2">
+    </label>
+    <div class="c-go"><button id="usecoord" type="button" style="width:100%">Use coordinates</button></div>
+    <label class="fl c-when" for="when">Date and time, UTC
+      <input id="when" type="datetime-local">
+    </label>
+    <div class="steps c-steps">
+      <button id="bnow" type="button">Now</button>
+      <button data-step="-24" type="button">−1 d</button>
+      <button data-step="-1" type="button">−1 h</button>
+      <button data-step="1" type="button">+1 h</button>
+      <button data-step="24" type="button">+1 d</button>
+      <button data-step="708" type="button">+1 lunar day</button>
+      <button id="play" type="button" class="primary">Play</button>
+    </div>
+    <p class="siteinfo" id="siteinfo"></p>
+    <p class="readout" id="sharemsg" aria-live="polite"></p>
+  </section>
+
+  <nav class="views" aria-label="Views">
+    <button id="v-explore" type="button" data-view="explore">See the site</button>
+    <button id="v-plan" type="button" data-view="plan">Plan a mission</button>
+    <button id="v-compare" type="button" data-view="compare">Compare sites and dates</button>
+    <button id="v-learn" type="button" data-view="learn">Why the south pole?</button>
+  </nav>
+
+  <div id="boot">Loading lunar terrain and computing the ephemeris…</div>
+
+  <div class="grid" id="app" hidden>
+    <!-- PLAN -->
+    <section class="panel" data-v="plan" aria-label="Mission needs">
+      <div class="phead"><h2>Mission needs</h2></div>
+      <p class="cap">Describe the lander. Every verdict, calendar cell and alternative below is tested against these numbers.</p>
+      <div class="form">
+        <label class="fl" for="m-days">Surface mission, days<input id="m-days" type="number" min="1" max="60" step="1" value="10"></label>
+        <label class="fl" for="m-array">Solar array<select id="m-array"><option value="track">Sun-tracking</option><option value="flat">Fixed, horizontal</option></select></label>
+        <label class="fl" for="m-peak">Array output in full Sun, W<input id="m-peak" type="number" min="0" max="100000" step="10" value="400"></label>
+        <label class="fl" for="m-cap">Battery, Wh<input id="m-cap" type="number" min="1" max="1000000" step="100" value="2000"></label>
+        <label class="fl" for="m-lsun">Load in sunlight, W<input id="m-lsun" type="number" min="0" max="100000" step="10" value="180"></label>
+        <label class="fl" for="m-ldark">Load in darkness, W<input id="m-ldark" type="number" min="0" max="100000" step="10" value="60"></label>
+        <label class="fl" for="m-res">Battery reserve, %<input id="m-res" type="number" min="0" max="90" step="5" value="20"></label>
+        <label class="fl" for="m-gap">Longest link gap allowed, h<input id="m-gap" type="number" min="0" max="2000" step="1" value="12"></label>
+        <label class="fl" for="m-margin">Terrain margin, °<input id="m-margin" type="number" min="0" max="3" step="0.1" value="0.3"></label>
+        <label class="fl" for="m-auto">Ride out a blackout of, h<input id="m-auto" type="number" min="0" max="72" step="1" value="6"></label>
+        <label class="chk" for="m-dte"><input id="m-dte" type="checkbox" checked> Needs a direct Earth link</label>
+      </div>
+      <h3 class="subh">Stress test: what if something breaks?</h3>
+      <div class="form">
+        <label class="fl" for="m-fault">Fault<select id="m-fault"><option value="none">Nothing fails</option><option value="array">Solar array loses 30% output</option><option value="load">Unexpected 100 W load</option><option value="battery">Battery loses 25% capacity</option><option value="antenna">Antenna down for 24 hours</option></select></label>
+        <label class="fl" for="m-fday">Starts on mission day<input id="m-fday" type="number" min="0" max="60" step="0.5" value="3"></label>
+        <label class="chk" for="m-safe"><input id="m-safe" type="checkbox"> Safe mode: drop to the darkness load when the battery is under 40%, until it recovers to 70%</label>
+      </div>
+      <p class="cap">The terrain margin raises every horizon by that angle. A plan that only passes without it is flagged as marginal.</p>
+    </section>
+
+    <section class="panel" data-v="plan" aria-label="Mission verdict">
+      <div class="phead"><h2>If you land here at this time</h2><div class="pills" id="mv-pill"></div></div>
+      <p class="say" id="mv-say"></p>
+      <div class="tiles t4">
+        <div class="tile"><div class="k">Lowest battery</div><div class="v" id="mv-soc"></div><div class="s" id="mv-soc-s"></div></div>
+        <div class="tile earth"><div class="k">Longest link gap</div><div class="v" id="mv-gap"></div><div class="s" id="mv-gap-s"></div></div>
+        <div class="tile"><div class="k">Battery needed</div><div class="v" id="mv-need"></div><div class="s" id="mv-need-s"></div></div>
+        <div class="tile sun"><div class="k">Time in sunlight</div><div class="v" id="mv-lit"></div><div class="s" id="mv-lit-s"></div></div>
+      </div>
+      <p class="readout" id="mv-fault"></p>
+      <canvas id="surv" role="img" aria-label="Mission survival timeline: sunlight, Earth line of sight and battery level for each mission day"></canvas>
+      <ul class="legend"><li><i style="background:var(--sun)"></i>Sunlight on the array</li><li><i style="background:var(--earth)"></i>Earth line of sight</li><li><i style="background:var(--go)"></i>Battery level</li><li><i style="background:var(--muted)"></i>Battery with the terrain margin applied</li><li><i style="background:var(--warn)"></i>Safe mode</li></ul>
+      <div class="row"><button id="report" type="button">Copy mission report</button><button id="reportdl" type="button">Download report</button><span class="readout" id="reportmsg"></span></div>
+    </section>
+
+    <section class="panel span2" data-v="plan" aria-label="Design lab">
+      <div class="phead"><h2>Design lab: the lightest hardware that survives here</h2><div class="pills" id="d-pill"></div></div>
+      <p class="cap">This works backwards from the mission. Every point on the chart is one solar array and battery pair, tested with the same hour-by-hour simulation, terrain margin and blackout rule as the verdict above. Tap the chart to try a design.</p>
+      <div class="row">
+        <label class="fl" for="d-wkg">Solar array, W per kg<input id="d-wkg" type="number" min="5" max="500" step="5" value="80"></label>
+        <label class="fl" for="d-whkg">Battery, Wh per kg<input id="d-whkg" type="number" min="20" max="500" step="10" value="160"></label>
+        <button id="d-hard" type="button">Try a hard case</button>
+      </div>
+      <div class="risk">
+        <div class="riskl">
+          <div class="tiles">
+            <div class="tile"><div class="k">Lightest design that passes</div><div class="v" id="d-best">…</div><div class="s" id="d-best-s"></div>
+              <div class="row" style="margin-top:8px"><button id="d-apply" type="button">Use this design</button></div></div>
+            <div class="tile"><div class="k">Your design</div><div class="v" id="d-cur">…</div><div class="s" id="d-cur-s"></div></div>
+          </div>
+          <div class="bars" id="d-alt"></div>
+          <canvas id="dab" role="img" aria-label="Battery level through the mission for your design and for the lightest design"></canvas>
+          <ul class="legend"><li><i style="background:var(--muted)"></i>Your design</li><li><i style="background:var(--go)"></i>Lightest design</li></ul>
+        </div>
+        <div>
+          <canvas id="dfront" role="img" aria-label="Survival frontier: which solar array and battery sizes pass the mission"></canvas>
+          <ul class="legend" style="margin-top:8px"><li><i style="background:var(--go)"></i>Passes with the terrain margin</li><li><i style="background:var(--warn)"></i>Passes only without it</li><li><i style="background:var(--cell)"></i>Fails</li></ul>
+        </div>
+      </div>
+      <h3 class="subh">Opportunity atlas: would another landing date need less hardware?</h3>
+      <p class="cap">The same search repeated for a landing every 12 hours. Low points are landing times that need the least array and battery. Gaps are times when no hardware helps, because the Sun or the Earth is not there. Tap the chart to move the landing.</p>
+      <canvas id="datlas" role="img" aria-label="Mass of the lightest passing design for each landing time"></canvas>
+      <div class="tblwrap"><table id="d-tbl"></table></div>
+    </section>
+
+    <section class="panel span2" data-v="plan" aria-label="Landing risk">
+      <div class="phead"><h2>Landing risk: no lander touches down exactly on target</h2><div class="pills" id="k-pill"></div></div>
+      <p class="cap">A Monte Carlo test. Thousands of missions are simulated, each with a slightly different touchdown point, landing time, terrain height and hardware performance. A touchdown on ground steeper than the safe slope counts as a failure. The share that still meets the mission needs is the chance of success.</p>
+      <div class="row">
+        <label class="fl" for="k-acc">Landing accuracy, m (3σ)<input id="k-acc" type="number" min="200" max="5000" step="100" value="500"></label>
+        <label class="fl" for="k-time">Landing time uncertainty, h (3σ)<input id="k-time" type="number" min="0" max="72" step="1" value="6"></label>
+        <label class="fl" for="k-slope">Steepest safe slope, °<input id="k-slope" type="number" min="1" max="45" step="1" value="12"></label>
+        <button id="k-new" type="button">New random draw</button>
+        <span class="readout" id="k-msg"></span>
+      </div>
+      <details id="k-assume"><summary>Change the assumptions</summary>
+        <div class="row" style="margin-top:10px">
+          <label class="fl" for="k-sp">Array output error, % (1σ)<input id="k-sp" type="number" min="0" max="50" step="1" value="5"></label>
+          <label class="fl" for="k-sl">Load error, % (1σ)<input id="k-sl" type="number" min="0" max="50" step="1" value="5"></label>
+          <label class="fl" for="k-sb">Battery capacity error, % (1σ)<input id="k-sb" type="number" min="0" max="50" step="1" value="3"></label>
+          <label class="fl" for="k-st">Terrain height error, ° (1σ)<input id="k-st" type="number" min="0" max="2" step="0.05" value="0.15"></label>
+          <label class="fl" for="k-seed">Random seed<input id="k-seed" type="number" min="1" max="2000000000" step="1" value="20261114"></label>
+          <label class="chk" for="k-corr"><input id="k-corr" type="checkbox"> Cold case: loads run high and the battery runs low together</label>
+        </div>
+      </details>
+      <div class="risk">
+        <div class="riskl">
+          <div class="tiles">
+            <div class="tile"><div class="k">Chance of success</div><div class="v" id="k-p">…</div><div class="s" id="k-p-s"></div></div>
+            <div class="tile"><div class="k">With a perfect landing</div><div class="v" id="k-det">…</div><div class="s" id="k-det-s"></div></div>
+          </div>
+          <div class="tile"><div class="k">Best aim point nearby</div><div class="v" id="k-best">…</div><div class="s" id="k-best-s"></div>
+            <div class="row" style="margin-top:8px"><button id="k-go" type="button">Retarget there</button></div></div>
+          <div class="bars" id="k-causes"></div>
+          <div class="bars" id="k-drivers"></div>
+        </div>
+        <div>
+          <canvas id="risk" role="img" aria-label="Map of the landing area coloured by the chance of mission success at each touchdown point"></canvas>
+          <ul class="legend" style="margin-top:8px"><li><i style="background:var(--go)"></i>Greener ground: more simulated missions succeed there</li><li><i style="background:#fff;border:1px solid var(--muted);border-radius:50%"></i>Dashed circle: where the lander may come down</li><li><i style="background:repeating-linear-gradient(135deg,var(--bad) 0 2px,transparent 2px 5px)"></i>Hatched: steeper than the safe slope</li></ul>
+        </div>
+      </div>
+      <p class="cap" id="k-cap"></p>
+    </section>
+
+    <section class="panel span2" data-v="plan" aria-label="Mission Rescue">
+      <div class="phead"><h2>Mission Rescue: the landing slipped. Can the mission still fly?</h2></div>
+      <p class="readout" id="r-plan"></p>
+      <div class="row">
+        <label class="fl grow" for="r-slip">Schedule slip: <span id="r-slipv"></span><input id="r-slip" type="range" min="0" max="60" step="1" value="14"></label>
+        <label class="fl" for="r-flex">Can wait up to, days<input id="r-flex" type="number" min="0" max="60" step="1" value="21"></label>
+        <label class="fl" for="r-scope">Search<select id="r-scope"><option value="pole">South-pole sites</option><option value="cmp">Compared sites</option><option value="all">All listed sites</option></select></label>
+        <button id="r-set" type="button">Use current site and time as the plan</button>
+      </div>
+      <div class="cards" id="r-cards"></div>
+      <div class="tblwrap"><table id="r-tbl"></table></div>
+      <p class="cap" id="r-cap"></p>
+    </section>
+
+    <!-- EXPLORE -->
+    <section class="panel span2" data-v="explore" aria-label="Surface view">
+      <div class="phead"><h2>Stand at the landing site</h2>
+        <div class="steps"><button id="s-sun" type="button">Face the Sun</button><button id="s-earth" type="button">Face Earth</button><button id="s-zoom" type="button">Zoom</button></div>
+      </div>
+      <canvas id="surf" role="img" aria-label="First-person view of the lunar terrain from the landing site, with the Sun and Earth in the sky"></canvas>
+      <p class="cap" id="surfcap"></p>
+    </section>
+
+    <section class="panel" data-v="explore" aria-label="Status now">
+      <div class="phead"><h2>Status at this moment</h2></div>
+      <div class="pills" id="pills"></div>
+      <p class="say" id="say"></p>
+      <div class="tiles">
+        <div class="tile sun"><div class="k">Sun above terrain</div><div class="v" id="t-sun"></div><div class="s" id="t-sun-s"></div></div>
+        <div class="tile sun"><div class="k" id="t-sset-k">Sunset in</div><div class="v" id="t-sset"></div><div class="s" id="t-sset-s"></div></div>
+        <div class="tile earth"><div class="k">Earth above terrain</div><div class="v" id="t-earth"></div><div class="s" id="t-earth-s"></div></div>
+        <div class="tile earth"><div class="k" id="t-eset-k">Earthset in</div><div class="v" id="t-eset"></div><div class="s" id="t-eset-s"></div></div>
+      </div>
+      <dl class="kv">
+        <div><dt>Solar availability</dt><dd id="kv-power"></dd></div>
+        <div><dt>Earth line of sight</dt><dd id="kv-los"></dd></div>
+        <div><dt>Ground stations</dt><dd id="kv-dsn"></dd></div>
+        <div><dt>Link budget</dt><dd>Antenna pointing, link margin and station scheduling are not modelled.</dd></div>
+      </dl>
+    </section>
+
+    <section class="panel" data-v="explore" aria-label="Sky view">
+      <div class="phead"><h2>The sky from the site</h2>
+        <ul class="legend"><li><i style="background:var(--sun)"></i>Sun and its path, next lunar day</li><li><i style="background:var(--earth)"></i>Earth and its path</li><li><i style="background:#6f6b64"></i>Terrain</li></ul>
+      </div>
+      <canvas id="sky" role="img" aria-label="Panorama of the horizon with the Sun and Earth"></canvas>
+      <p class="cap" id="skycap"></p>
+    </section>
+
+    <section class="panel" data-v="explore" aria-label="Map">
+      <div class="phead"><h2>Map</h2>
+        <div class="seg" role="group" aria-label="Map view"><button id="m-pole" type="button">South pole</button><button id="m-globe" type="button">Globe</button><button id="m-flat" type="button">Flat map</button></div>
+      </div>
+      <div class="seg" id="layerseg" role="group" aria-label="Map layer" style="justify-self:start"><button id="l-sun" type="button">Sunlight now</button><button id="l-earth" type="button">Earth in view</button></div>
+      <canvas id="map" role="img" aria-label="Map of the Moon with current sunlight"></canvas>
+      <p class="cap" id="mapcap"></p>
+    </section>
+
+    <section class="panel" data-v="explore" aria-label="Timeline">
+      <div class="phead"><h2>Sun and Earth over time</h2>
+        <div class="seg" role="group" aria-label="Window length"><button data-span="30" type="button">30 d</button><button data-span="90" type="button">90 d</button><button data-span="365" type="button">1 yr</button></div>
+      </div>
+      <p class="cap">Degrees above the terrain horizon. Above the line the body is visible; below it the terrain hides it. Events inside the shaded band depend on the terrain margin. Drag to move the clock.</p>
+      <canvas id="tl" role="img" aria-label="Timeline of Sun and Earth height above the terrain horizon"></canvas>
+      <p class="readout" id="tlread"></p>
+      <div class="row"><button id="csv" type="button">Copy window as CSV</button><button id="csvdl" type="button">Download CSV</button><span class="readout" id="csvmsg"></span></div>
+    </section>
+
+    <!-- COMPARE -->
+    <section class="panel span2" data-v="compare" aria-label="Compare sites">
+      <div class="phead"><h2>Compare sites over the same window</h2>
+        <div class="seg" role="group" aria-label="Window length"><button data-span="30" type="button">30 d</button><button data-span="90" type="button">90 d</button><button data-span="365" type="button">1 yr</button></div>
+      </div>
+      <div class="row">
+        <div class="chips" id="chips"></div>
+        <label class="fl" for="addcmp">Add a site
+          <select id="addcmp"></select>
+        </label>
+      </div>
+      <p class="cap">The same instant at every site: where the Sun and Earth sit against each site's own terrain horizon, with their paths over the next lunar day. Press Play, or drag the bars below, to watch them move together.</p>
+      <canvas id="cmpsky" role="img" aria-label="Horizon panorama with the Sun and Earth for each compared site at the selected time"></canvas>
+      <div class="tblwrap"><table id="cmptbl"></table></div>
+      <canvas id="cmp" role="img" aria-label="Sunlight and Earth line-of-sight bars for each compared site"></canvas>
+      <ul class="legend"><li><i style="background:var(--sun)"></i>Sun above terrain</li><li><i style="background:var(--earth)"></i>Earth above terrain</li><li><i style="background:var(--go)"></i>Both</li></ul>
+    </section>
+
+    <section class="panel span2" data-v="compare" aria-label="Landing-date calendar">
+      <div class="phead"><h2>Landing-date calendar: what a schedule slip costs</h2></div>
+      <p class="cap">Each column is a possible landing day over the next twelve months, tested against the mission needs. Tap a day to move the clock there.</p>
+      <canvas id="cal" role="img" aria-label="Calendar of landing days that meet the mission needs, for each compared site"></canvas>
+      <ul class="legend"><li><i style="background:var(--go)"></i>Meets the needs, with the terrain margin</li><li><i style="background:var(--warn)"></i>Meets them only without the margin</li><li><i style="background:var(--cell)"></i>Does not meet them</li></ul>
+      <p class="readout" id="calread"></p>
+    </section>
+
+    <!-- LEARN -->
+    <section class="panel span2" data-v="learn" aria-label="Equator and pole compared">
+      <div class="phead"><h2>The same moment, two very different skies</h2>
+        <div class="steps"><button id="l-play" type="button" class="primary">Play a lunar month</button></div>
+      </div>
+      <p class="cap">Each picture is a full turn of the horizon at <span id="l-when"></span>, with the real terrain along the bottom. At Apollo 11's site the Sun arcs high overhead and Earth hangs high in the sky. On the rim of Shackleton crater both sit on the horizon, among the hills.</p>
+      <canvas id="learnsky" role="img" aria-label="Horizon panoramas with the Sun and Earth at Apollo 11 and at Shackleton rim for the selected time"></canvas>
+      <ul class="legend"><li><i style="background:var(--sun)"></i>Sun and its path over the next lunar day</li><li><i style="background:var(--earth)"></i>Earth and its path</li><li><i style="background:#6f6b64"></i>Terrain</li></ul>
+      <div class="tiles t3" id="l-tiles"></div>
+      <p class="cap" id="l-facts"></p>
+    </section>
+
+    <section class="panel span2" data-v="learn" aria-label="Why the pole is different">
+      <div class="phead"><h2>Why the Sun never climbs at the Moon's pole</h2></div>
+      <canvas id="tilt" role="img" aria-label="Earth's axis is tilted 23.4 degrees and the Moon's only 1.5 degrees, so sunlight reaches the Moon's poles almost exactly sideways"></canvas>
+      <div class="cols">
+        <div><h3>Sunlight comes in sideways</h3>
+          <p>Earth leans 23.4°, which gives its poles a summer Sun well above the horizon. The Moon leans only 1.5°. At its poles the Sun circles the horizon all month and never climbs, so shadows are kilometres long and a single ridge decides whether a lander has power.</p></div>
+        <div><h3>Earth hangs low and wobbles</h3>
+          <p>The Moon always shows Earth the same face, so from any one place Earth stays in nearly the same part of the sky. At the pole that part of the sky is the horizon. A slow nodding of the Moon lifts Earth a few degrees above the horizon and then drops it below, about every 27 days. When it drops, a lander without a relay satellite loses its radio link.</p></div>
+        <div><h3>Why go anyway</h3>
+          <p>Crater floors near the pole have not seen the Sun for billions of years. They are among the coldest places measured in the solar system, cold enough to hold water ice. A few ridges beside them are sunlit most of the time. Missions want both within reach: ice to study and use, and light for power. Finding where and when that works is what this tool is for.</p></div>
+      </div>
+      <div class="row"><button id="l-stand" type="button" class="primary">Stand on the rim of Shackleton</button><button id="l-compare" type="button">Compare the two sites in detail</button></div>
+    </section>
+
+    <section class="panel span2 about" aria-label="Method and accuracy">
+      <div class="phead"><h2>Method, accuracy and limits</h2></div>
+      <div class="cols">
+        <div><h3>Positions</h3>
+          <p>Sun and Earth directions are computed in your browser for any date, in the Moon's body-fixed frame, including lunar libration and the parallax between the Moon's centre and the site. Checked against JPL's DE421 ephemeris and lunar orientation through SPICE: 3,166 epochs from November 2026 to December 2028 at six sites. The largest difference in elevation or azimuth was 0.004°. A separate check against NASA's live JPL Horizons service (1,260 comparisons at six sites) agrees to the same 0.004°. Rise and set times are refined to a few seconds after an hourly search.</p></div>
+        <div><h3>Terrain</h3>
+          <p>Three tiers, named beside every site. Listed south-pole sites use horizons ray-cast at the full 80 m resolution of NASA's LOLA south-pole model (LDEM_80S_80MPP_ADJ, 720 directions, out to 330 km). Any other point south of 80°S is ray-cast in the browser from the same model: at 80 m within 3 km of a listed site, 240 m out to 15 km, and 400 m beyond. Elsewhere a 1/8° to 1/4° LOLA grid is used.</p></div>
+        <div><h3>Limits</h3>
+          <ul>
+            <li>Power is geometry: array output in full Sun times the visible fraction of the solar disc, scaled for Sun distance. Temperature, dust, array pointing limits and degradation are not modelled.</li>
+            <li>Earth contact means line of sight to Earth's centre. Ground-station figures are geometry only.</li>
+            <li>Hourly sampling can miss a visibility window shorter than an hour.</li>
+            <li>The chance of success comes with a 95% interval that reflects the finite number of simulated missions only. It is not a mission reliability guarantee: the spreads fed in are assumptions you can change under "Change the assumptions". Slope is measured over about 160 m, so boulders and small craters are not seen.</li>
+            <li>Design-lab masses are screening figures: array output and battery energy divided by the W per kg and Wh per kg you enter. Structure, wiring, thermal control and margins are not included.</li>
+            <li>The stress test applies one fault at a time, and safe mode is a simple rule. Neither models how real flight software behaves.</li>
+            <li>The landing-risk analysis ray-casts each touchdown cell in the browser: from 80 m terrain within 3 km of a listed site, 240 m out to 15 km, and 400 m beyond. Away from listed sites it uses 400 m only, so it cannot see hazards smaller than that.</li>
+            <li>At 400 m and coarser, features smaller than the grid are smoothed. Use the terrain margin to see how sensitive a result is.</li>
+            <li>Coordinates of planned missions are published targets and may change.</li>
+          </ul></div>
+      </div>
+      <p>Data: NASA GSFC PGDA LOLA south-pole elevation model (Barker et al.), LOLA global grid and Moon mosaic from the LLNL <code>ssa-data-lunar</code> package; ephemeris by <a href="https://github.com/cosinekitty/astronomy">Astronomy Engine</a>. Reference tools: <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a>, <a href="https://quickmap.lroc.asu.edu/">LROC Quickmap</a>, <a href="https://trek.nasa.gov/moon/">Moon Trek</a>.</p>
+    </section>
+  </div>
+  <div class="tour" id="tour" hidden role="region" aria-label="Guided tour">
+    <p class="tourt"><b id="tour-n"></b> <span id="tour-t"></span></p>
+    <div class="steps"><button id="tour-b" type="button">Back</button><button id="tour-x" type="button" class="primary">Next</button><button id="tour-c" type="button">Close</button></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
+<script>
+const LUNAR_DATA = /*__DATA__*/;
+/*__JS__*/
+</script>
+</body>
+</html>
