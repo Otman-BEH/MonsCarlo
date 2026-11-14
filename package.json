@@ -1,0 +1,15 @@
+{
+  "name": "lunar-skyline",
+  "version": "1.0.0",
+  "description": "Lunar Landing Site Navigator: Sun and Earth against the terrain horizon of any lunar site",
+  "scripts": {
+    "test": "node build/validate.js && node build/test_core.js",
+    "build": "python3 build/build.py",
+    "check:horizons": "node build/horizons_check.js"
+  },
+  "keywords": [],
+  "author": "",
+  "dependencies": {
+    "astronomy-engine": "^2.1.19"
+  }
+}
