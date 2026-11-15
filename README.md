@@ -1,4 +1,4 @@
-# Lunar Skyline
+# Mons Carlo
 
 Team Mons Carlo, NASA Space Apps Challenge 2026.
 
@@ -99,4 +99,4 @@ The submission needs a public link, so the service runs in a container on any ho
 The first start downloads the data (a few minutes); `/health` reports progress. Locally the server peaked at about
 820 MB while serving every view (Monte Carlo included), so 2 GB of memory leaves room. The
 Dockerfile has not yet been built and run end to end; test it locally with
-`docker build -t lunar-skyline . && docker run -p 8000:8000 -v "$PWD/backend/data:/data" lunar-skyline`.
+`docker build -t mons-carlo . && docker run -p 8000:8000 -v "$PWD/backend/data:/data" mons-carlo`.

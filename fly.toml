@@ -3,7 +3,7 @@
 #   fly volumes create skyline_data --size 3    (GB, same region as the app)
 #   fly deploy
 # The first start downloads the NASA data (about 620 MB) and takes a few minutes; /health shows progress.
-app = "lunar-skyline"
+app = "mons-carlo"
 primary_region = "lhr"
 
 [build]

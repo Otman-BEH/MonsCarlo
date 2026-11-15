@@ -1,4 +1,4 @@
-"""Start the Lunar Skyline backend:  python run.py
+"""Start the Mons Carlo backend:  python run.py
 
 1. verify or download the raw NASA / JPL files listed in manifest.json
 2. precompute derived products (skipped when the stamp matches)
@@ -29,7 +29,7 @@ def main(argv=None) -> int:
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--no-serve", action="store_true", help="prepare the data, then exit")
     a = ap.parse_args(argv)
-    print(f"Lunar Skyline backend {config.API_VERSION}, data in {config.DATA_DIR}")
+    print(f"Mons Carlo backend {config.API_VERSION}, data in {config.DATA_DIR}")
 
     if not a.skip_fetch:
         from skyline.prep import fetch_data

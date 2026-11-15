@@ -33,7 +33,7 @@ HORIZONS_URL = "https://ssd.jpl.nasa.gov/api/horizons.api"
 HORIZONS_TIMEOUT_S = 10.0
 HORIZONS_PAUSE_S = 1.0
 PREFETCH_MONTHS = 14
-USER_AGENT = "lunar-skyline-backend"
+USER_AGENT = "mons-carlo-backend"
 
 # Horizon masks
 EYES_M = [0, 2, 5, 10, 20, 50, 100]

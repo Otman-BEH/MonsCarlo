@@ -27,7 +27,7 @@ Ephemeris: JPL Horizons API, cached by month in SQLite (SPICE DE440 fallback). T
 (PGDA products 78 and 90). Every response names its sources in `meta`.
 """
 
-app = FastAPI(title="Lunar Skyline API", version=config.API_VERSION, description=DESCRIPTION)
+app = FastAPI(title="Mons Carlo API", version=config.API_VERSION, description=DESCRIPTION)
 # local use by the web app and other tools on this machine
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "DELETE"], allow_headers=["*"])
 app.add_middleware(GZipMiddleware, minimum_size=2000)
@@ -75,7 +75,7 @@ async def _value(_: Request, ex: ValueError):
 
 @app.get("/api", include_in_schema=False)
 def api_root():
-    return {"name": "Lunar Skyline API", "version": config.API_VERSION, "docs": "/docs",
+    return {"name": "Mons Carlo API", "version": config.API_VERSION, "docs": "/docs",
             "try": ["/report?site=shack", "/sky?site=mala", "/sites", "/landers"]}
 
 

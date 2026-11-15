@@ -1,4 +1,4 @@
-/* Lunar Skyline web page. Every number comes from the Lunar Skyline server (backend/, FastAPI): positions, skylines,
+/* Mons Carlo web page. Every number comes from the Mons Carlo server (backend/, FastAPI): positions, skylines,
    series, verdicts, design lab, rescue, calendar, landing risk. This file only fetches, interpolates between hourly
    values for smooth playback, and draws. The server's API is documented at /docs. */
 (async function () {
@@ -825,7 +825,7 @@
       g.textAlign = 'left'; g.textBaseline = 'middle'; g.font = FONTC(13); g.fillStyle = both ? '#3fc78d' : '#e8894a'; g.fillText(head, bx + 14, by + 16);
       g.font = FONT(13); rowsH.forEach(([t, col], k) => { const y = by + 38 + k * 20; g.fillStyle = col; g.beginPath(); g.arc(bx + 19, y, 4.5, 0, 7); g.fill(); g.fillText(t, bx + 32, y); });
     }
-    $('surfcap').textContent = 'The view from ' + S.eye + ' m above the ground at ' + short(S.site) + ', ' + fmtDT(S.t) + ', ' + Math.round(fovH) + '° wide. Terrain and shadows come from NASA\'s LOLA height maps, served by the Lunar Skyline server; the Sun and Earth are drawn at their true sizes and nothing is stretched. There is no air, so far hills look as sharp as near ones. Drag sideways to look around.';
+    $('surfcap').textContent = 'The view from ' + S.eye + ' m above the ground at ' + short(S.site) + ', ' + fmtDT(S.t) + ', ' + Math.round(fovH) + '° wide. Terrain and shadows come from NASA\'s LOLA height maps, served by the Mons Carlo server; the Sun and Earth are drawn at their true sizes and nothing is stretched. There is no air, so far hills look as sharp as near ones. Drag sideways to look around.';
   }
   function polarXY(lat, lon, R, cx, cy) { const rho = 2 * RM * Math.tan((90 + lat) / 2 * D2R) / RHO * R; return [cx + rho * Math.sin(lon * D2R), cy - rho * Math.cos(lon * D2R)]; }
   let mapGeom = null;
@@ -978,7 +978,7 @@
   // ---------- report ----------
   function reportText() {
     const c = S.cfg, m = siteMask(S.site) || { h0: 0, lo: 0, hi: 0, tiers: [] }, mv = S.mv, rq = rescueNow(), r = rq.r, L = [];
-    L.push('# Lunar Skyline mission report', '', 'Generated ' + fmtDT(Date.now()) + '.', '');
+    L.push('# Mons Carlo mission report', '', 'Generated ' + fmtDT(Date.now()) + '.', '');
     L.push('## Scenario', '- Site: ' + S.site.name + ' (' + fmtLat(S.site.lat) + ', ' + fmtLon(S.site.lon) + '), terrain height ' + Math.round(m.h0) + ' m, mast ' + S.eye + ' m', '- Terrain: ' + tierText(m) + ', ' + sg(m.lo, 1) + ' to ' + sg(m.hi, 1), mv ? '- Landing: ' + fmtDT(mv.t) : '- Landing: ' + fmtDT(landingTime()), '- Surface mission: ' + c.days + ' days', '');
     L.push('## Mission needs', '- Solar array: ' + c.peakW + ' W in full Sun, ' + (c.tracking ? 'sun-tracking' : 'fixed horizontal'), '- Load: ' + c.loadSun + ' W in sunlight, ' + c.loadDark + ' W in darkness', '- Battery: ' + c.capWh + ' Wh, reserve ' + Math.round(c.minSoc * 100) + '%, charge efficiency ' + Math.round(c.chargeEff * 100) + '%',
       '- Direct Earth link: ' + (c.needEarth ? 'required, longest gap ' + c.maxGapH + ' h' : 'not required'), '- Terrain margin: ' + c.margin + '° added to every horizon', '');
@@ -1004,7 +1004,7 @@
       r.alternatives.slice(0, 8).forEach((a, k2) => L.push('| ' + (k2 + 1) + ' | ' + a.location.name.split(',')[0] + ' | ' + (a.state ? fmtDT(Date.parse(a.landing_time)).replace(' UTC', '') : 'none') + ' | ' + (a.state ? '+' + a.extra_wait_days.toFixed(2) + ' d' : 'n/a') + ' | ' + STN[a.state] + ' | ' + Math.round(a.nominal.min_soc * 100) + '% | ' + fmtH(a.nominal.longest_link_gap_h) + ' | ' + (a.terrain || '') + ' |'));
       L.push('');
     }
-    L.push('## Method and limits', '- Sun and Earth positions: JPL Horizons (fetched month by month and cached by the Lunar Skyline server; JPL SPICE DE440 kernels when Horizons is unreachable); checked against JPL DE421 through SPICE to 0.00002°.',
+    L.push('## Method and limits', '- Sun and Earth positions: JPL Horizons (fetched month by month and cached by the Mons Carlo server; JPL SPICE DE440 kernels when Horizons is unreachable); checked against JPL DE421 through SPICE to 0.00002°.',
       '- Terrain: NASA LOLA elevation models: 5 m site maps where they exist, the 80 m south-pole model from 80°S, the 240 m model from 60°S, and a coarse LOLA grid elsewhere. Skylines are ray-cast on the server, 720 directions out to 330 km.',
       '- Power is geometric: array output in full Sun times the visible fraction of the solar disc, scaled for Sun distance. Thermal effects, dust and pointing limits are not modelled.',
       '- Earth contact is line of sight to Earth\'s centre. Antenna pointing, link margin and ground-station scheduling are not modelled.', '- Hourly sampling; rise and set times refined to seconds.');
@@ -1183,7 +1183,7 @@
   function download(name, text, type) {
     const a = document.createElement('a'), url = URL.createObjectURL(new Blob([text], { type })); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
-  const fileStem = () => 'lunar-skyline-' + (S.site.id === 'custom' ? 'custom' : S.site.id) + '-' + new Date(S.t).toISOString().slice(0, 10);
+  const fileStem = () => 'mons-carlo-' + (S.site.id === 'custom' ? 'custom' : S.site.id) + '-' + new Date(S.t).toISOString().slice(0, 10);
   $('csv').addEventListener('click', async () => { try { const t = await csvText(); copy(t, 'csvmsg', 'Copied ' + (t.trim().split('\n').length - 1) + ' rows for ' + S.site.name + '.'); } catch (err) { $('csvmsg').textContent = 'Could not get the data: ' + err.message; } });
   $('csvdl').addEventListener('click', async () => { try { const t = await csvText(); download(fileStem() + '.csv', t, 'text/csv'); $('csvmsg').textContent = 'Saved ' + (t.trim().split('\n').length - 1) + ' rows for ' + S.site.name + '.'; } catch (err) { $('csvmsg').textContent = 'Could not get the data: ' + err.message; } });
   $('reportdl').addEventListener('click', () => { download(fileStem() + '-report.md', reportText() + '\n', 'text/markdown'); $('reportmsg').textContent = 'Report saved as a Markdown file.'; });
@@ -1250,7 +1250,7 @@
     render();
     window.__ready = true;
   } catch (err) {
-    $('boot').innerHTML = 'The Lunar Skyline server could not be reached (' + (err && err.message ? err.message : err) + '). Start it with <code>python run.py</code> in the <code>backend</code> folder, then open <a href="http://127.0.0.1:8000/">http://127.0.0.1:8000/</a>.';
+    $('boot').innerHTML = 'The Mons Carlo server could not be reached (' + (err && err.message ? err.message : err) + '). Start it with <code>python run.py</code> in the <code>backend</code> folder, then open <a href="http://127.0.0.1:8000/">http://127.0.0.1:8000/</a>.';
     throw err;
   }
 })();

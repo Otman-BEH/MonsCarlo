@@ -1,6 +1,6 @@
-# Lunar Skyline backend
+# Mons Carlo backend
 
-A local Python service for Lunar Skyline. It answers, for any lunar site, date and lander: where are the Sun and Earth
+A local Python service for Mons Carlo. It answers, for any lunar site, date and lander: where are the Sun and Earth
 against the real terrain skyline, when is there power and a radio link, and does this lander survive the mission there
 (optionally with a Monte Carlo landing risk).
 

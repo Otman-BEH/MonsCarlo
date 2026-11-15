@@ -1,4 +1,4 @@
-# Lunar Skyline: the API and the web page in one container.
+# Mons Carlo: the API and the web page in one container.
 # The NASA data (about 620 MB) is not in the image: on first start run.py downloads it into $SKYLINE_DATA (mount a
 # persistent volume there), precomputes, pre-fetches the ephemeris, then serves. Later starts skip work already done.
 FROM python:3.13-slim

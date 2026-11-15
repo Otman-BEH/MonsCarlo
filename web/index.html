@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lunar Skyline</title>
+<title>Mons Carlo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
@@ -12,7 +12,7 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <h1>Lunar <span>Skyline</span></h1>
+    <h1>Mons <span>Carlo</span></h1>
     <button id="tour-go" type="button" class="primary">Take the 60-second tour</button>
     <button id="share" type="button">Copy link to this scenario</button>
     <p class="tag">Where the Sun and Earth sit against the terrain horizon of any lunar landing site, on any date, and whether a mission can live with it. Built for the NASA Space Apps challenge Lunar Landing Site Navigator.</p>
@@ -55,7 +55,7 @@
     <button id="v-learn" type="button" data-view="learn">Why the south pole?</button>
   </nav>
 
-  <div id="boot">Connecting to the Lunar Skyline server…</div>
+  <div id="boot">Connecting to the Mons Carlo server…</div>
 
   <div class="grid" id="app" hidden>
     <!-- PLAN -->
@@ -292,7 +292,7 @@
       <div class="phead"><h2>Method, accuracy and limits</h2></div>
       <div class="cols">
         <div><h3>Positions</h3>
-          <p>Sun and Earth positions come from NASA's JPL Horizons service, fetched by the Lunar Skyline server one month at a time and cached (JPL's SPICE DE440 kernels stand in if Horizons cannot be reached). They are Moon-fixed vectors, so lunar libration and the parallax between the Moon's centre and the site are included. Checked against JPL's DE421 ephemeris through SPICE (3,166 epochs at six sites): the largest difference is 0.00002°. Rise and set times are refined to a few seconds after an hourly search.</p></div>
+          <p>Sun and Earth positions come from NASA's JPL Horizons service, fetched by the Mons Carlo server one month at a time and cached (JPL's SPICE DE440 kernels stand in if Horizons cannot be reached). They are Moon-fixed vectors, so lunar libration and the parallax between the Moon's centre and the site are included. Checked against JPL's DE421 ephemeris through SPICE (3,166 epochs at six sites): the largest difference is 0.00002°. Rise and set times are refined to a few seconds after an hourly search.</p></div>
         <div><h3>Terrain</h3>
           <p>Tiers, named beside every site. The server ray-casts every skyline (720 directions, out to 330 km) from NASA's LOLA elevation models: the 5 m site maps where they exist (Shackleton rim, the connecting ridge, de Gerlache rim, the Chang'e 7 target and the pole), the 80 m south-pole model from 80°S, the 240 m model from 60°S, and a 1/8° to 1/4° LOLA grid elsewhere. The same terrain draws the surface view and the shadow map.</p></div>
         <div><h3>Limits</h3>
@@ -308,7 +308,7 @@
             <li>Coordinates of planned missions are published targets and may change.</li>
           </ul></div>
       </div>
-      <p>Data: NASA GSFC PGDA LOLA elevation models (Barker et al., products 78 and 90), LOLA global grid and Moon mosaic from the LLNL <code>ssa-data-lunar</code> package; ephemeris from <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a> and JPL NAIF SPICE kernels. Every number on this page comes from the Lunar Skyline server; its API is documented at <a href="docs">/docs</a>. Reference tools: <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a>, <a href="https://quickmap.lroc.asu.edu/">LROC Quickmap</a>, <a href="https://trek.nasa.gov/moon/">Moon Trek</a>. Code and text were drafted with an AI assistant (Claude).</p>
+      <p>Data: NASA GSFC PGDA LOLA elevation models (Barker et al., products 78 and 90), LOLA global grid and Moon mosaic from the LLNL <code>ssa-data-lunar</code> package; ephemeris from <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a> and JPL NAIF SPICE kernels. Every number on this page comes from the Mons Carlo server; its API is documented at <a href="docs">/docs</a>. Reference tools: <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a>, <a href="https://quickmap.lroc.asu.edu/">LROC Quickmap</a>, <a href="https://trek.nasa.gov/moon/">Moon Trek</a>. Code and text were drafted with an AI assistant (Claude).</p>
     </section>
   </div>
   <div class="tour" id="tour" hidden role="region" aria-label="Guided tour">

@@ -3,10 +3,10 @@
 Paste each block into the matching field. Replace everything in [brackets].
 
 ## Project name
-Lunar Skyline
+Mons Carlo
 
 ## High-level project summary
-Lunar Skyline lets anyone stand on a landing site on the Moon and see where the Sun and the Earth sit against the real terrain horizon, for any date. It then answers the question a mission team actually has: will this lander have power and a radio link for its whole mission, and what are the options if the landing slips? A Python server does every calculation and serves the web page that draws the results; its API lets other apps and scripts ask the same questions. It combines Sun and Earth positions from NASA's JPL Horizons service, NASA's LOLA terrain down to 5 m resolution, an hour-by-hour battery and communication model, a search for alternative sites and dates, and a Monte Carlo test of what happens when the lander misses its target.
+Mons Carlo lets anyone stand on a landing site on the Moon and see where the Sun and the Earth sit against the real terrain horizon, for any date. It then answers the question a mission team actually has: will this lander have power and a radio link for its whole mission, and what are the options if the landing slips? A Python server does every calculation and serves the web page that draws the results; its API lets other apps and scripts ask the same questions. It combines Sun and Earth positions from NASA's JPL Horizons service, NASA's LOLA terrain down to 5 m resolution, an hour-by-hour battery and communication model, a search for alternative sites and dates, and a Monte Carlo test of what happens when the lander misses its target.
 
 ## Link to project demo
 [Public link to the 7-slide deck or a 30-second video]
