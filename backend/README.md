@@ -66,7 +66,7 @@ One call answers the challenge question, and the rest give you every number behi
 | `GET /windows` | Sunlit, Earth-in-view and both-at-once intervals over a period, percentages, the longest dark period and radio gap, and an optional hourly series; `format=csv` works too. |
 | `GET /mission`, `POST /mission` | A verdict (meets, marginal, fails) with reasons, nominal and terrain-margin results, an optional battery trace (`trace=true`) and an optional Monte Carlo landing risk (`risk=true`). GET takes the reference lander plus flat overrides; POST takes the full nested lander, mission and uncertainty. |
 | `GET /horizon` | The terrain horizon: 720 azimuths at one or more heights (`height_m=2,10`). |
-| `GET /sites`, `GET /health` | The site catalogue (26 sites) and data readiness. |
+| `GET /sites`, `GET /health` | The site catalogue (16 sites) and data readiness. |
 | `GET /landers`, `GET /landers/{id}`, `POST /landers`, `DELETE /landers/{id}` | Lander presets and saved custom landers (SQLite). |
 | `POST /design` | Design lab: the survival frontier (smallest array for 36 battery sizes, with and without the terrain margin), the lightest pair, ways to make the current design pass or get lighter, and a 60-day atlas of the lightest design per landing time. |
 | `POST /calendar` | The verdict for a landing on each of up to 400 days, for up to 8 sites, with the first cause of failure. |
@@ -142,8 +142,11 @@ fault. Uncertainty settings belong to the Monte Carlo. Field names carry their u
   self-shadowing between faces.
 - The Sun and Earth get separate heights: the Sun is judged against the horizon at the array height, Earth against the
   horizon at the antenna height.
-- Presets: `reference` (the original app's default lander), `polar-vertical` and `horizontal-deck`. All three are
-  illustrative. We haven't added a real lander yet.
+- Presets (12, in `monscarlo/engine/presets/landers.json`): nine real landers (ispace Series 1 and APEX 1.0,
+  Intuitive Machines Nova-C, Firefly Blue Ghost, ISRO Vikram, Astrobotic Griffin and Peregrine, Blue Origin Blue Moon
+  MK1, and the Apollo 11 Lunar Module) and three generic ones (`reference`, the original app's default lander,
+  `polar-vertical` and `horizontal-deck`). Each real preset names its source and lists under `assumed` every value the
+  operator has not published, which is then our estimate. The three generic ones are illustrative.
 
 ## Terrain
 
@@ -182,7 +185,7 @@ interpolation and then bisection.
 
 ## Validation
 
-`python -m pytest` runs 94 tests, and `-m live` adds two live Horizons checks. Tests that need the NASA data or SPICE
+`python -m pytest` collects 107 tests. Two of them are live Horizons checks that only run with `-m live`. Tests that need the NASA data or SPICE
 kernels skip themselves until `python run.py` has downloaded them. The parity fixtures come from the original JS engine
 (`backend/tools/make_golden.js`, run on a checkout of commit `afd9e78`; the comment at the top of the file explains how).
 
@@ -197,10 +200,10 @@ kernels skip themselves until `python run.py` has downloaded them. The parity fi
 | Custom polar point, 80 m DEM vs the original 400 m browser raster | mean 0.25°, max 1.07° (different resolution, expected) |
 | Custom points away from the pole vs the original | exact |
 | SPICE DE440 vs the DE421 truth file (`tests/fixtures/truth.json`, 3,166 epochs, 6 sites) | largest difference 0.000015° |
-| Horizons reconstruction vs SPICE (December 2026, 4 sites) | largest difference 0.00001° |
+| Horizons reconstruction vs SPICE (December 2026, 4 sites) | largest difference 0.000006° |
 | `/sky` and `/mission` through the API (Horizons ephemeris) vs the original JS (Astronomy Engine) | under 0.01°, same verdicts |
 | Monte Carlo, stacked simulation vs the per-cell `cellTrials` port | identical per-cell results |
-| Design lab (frontier, lightest pair, minimum battery, atlas) vs the original, 3 cases | identical |
+| Design lab (frontier, lightest pair, minimum battery, atlas) vs the original, 3 cases | identical (the `/design` endpoint now narrows the minimum battery with 30 halvings where the original used 16, so its figure can be up to 1 Wh below the original's) |
 | DSN Moon elevation vs the original (Astronomy Engine) | within 0.06° above 15° elevation (the original adds atmospheric refraction, which only matters near the horizon) |
 
 Notes:

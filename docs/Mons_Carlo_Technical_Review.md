@@ -323,9 +323,10 @@ Plain **[S]**. NASA's own reasoning says more Earth visibility is preferred if a
 several regions are kept to protect launch availability **[S]**. Both are arguments for comparing across sites and
 dates.
 
-**How Mons Carlo uses this.** The catalogue grew to 26 sites: the nine polar sites (Shackleton rim, Connecting ridge,
-de Gerlache rim, the Chang'e 7 target, Malapert Massif, the VIPER site, IM-2, IM-1 and the pole itself) plus Apollo 11
-to 17, Chang'e 3 to 6, Chandrayaan-3, SLIM, Blue Ghost 1 to 3, IM-3 and Schrödinger basin. Shackleton rim, Connecting
+**How Mons Carlo uses this.** The catalogue has 16 sites: the nine polar sites (Shackleton rim, Connecting ridge,
+de Gerlache rim, the Chang'e 7 target, Malapert Massif, the VIPER site, IM-2, IM-1 and the pole itself), four planned
+missions (IM-3 at Reiner Gamma, Blue Ghost Missions 2 and 3, and ispace Mission 3 at Schrödinger basin) and three past
+landings (Apollo 11, Chang'e 4 and Chandrayaan-3). Shackleton rim, Connecting
 ridge, de Gerlache rim and Malapert Massif are placed on the highest ground within 600 m of their published coordinates,
 because that's where anyone would actually land. Any other point can be entered as custom coordinates. Coordinates for
 planned missions are published targets and should be checked before anyone relies on a result.
@@ -365,7 +366,7 @@ of what we planned above:
 - a first-person surface view from mast height on the real LOLA terrain, with cast shadows and the Sun and Earth (with
   its phase) at true size;
 - a 3D globe of the whole Moon lit from the true Sun direction, and a live south-pole shadow map;
-- **Plan a mission**: a battery simulation with a verdict (meets, marginal, fails) and the reason, a design lab that
+- **Mission planning**: a battery simulation with a verdict (meets, marginal, fails) and the reason, a design lab that
   works back from the mission to the lightest array and battery that pass, a stress test with injected faults and an
   optional safe mode, Mission Rescue for schedule slips, and the Monte Carlo landing risk;
 - a guided tour, share links that capture the whole scenario, and CSV and Markdown export.
@@ -388,7 +389,7 @@ What's in the test suite now:
 | Check | Result |
 |---|---|
 | SPICE DE440 vs a DE421 truth file (3,166 epochs, 6 sites) | largest difference 0.000015° |
-| Our Horizons reconstruction vs SPICE (December 2026, 4 sites) | largest difference 0.00001° |
+| Our Horizons reconstruction vs SPICE (December 2026, 4 sites) | largest difference 0.000006° |
 | Backend vs our original in-browser engine: sky geometry, 48 mission cases, random numbers, design lab, Monte Carlo cells | identical, or equal to float32 rounding |
 | Site horizons in 80 m mode vs the original precomputed profiles (2 to 10 m masts) | within 0.05° |
 | DSN Moon elevation vs Astronomy Engine | within 0.06° above 15° elevation |

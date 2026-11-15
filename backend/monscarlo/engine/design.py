@@ -135,7 +135,9 @@ def lab(se, i0: int, cfg: dict, mass_of=(80.0, 160.0), atlas_first: int | None =
     out = {"frontier": F, "mass_of": {"array_w_per_kg": mass_of[0], "battery_wh_per_kg": mass_of[1]}}
     if b:
         pa = min_array(se, np.array([i0]), cfg, np.array([cfg["capWh"]]), True, F["pMax"], 14, shape)[0]
-        cb = bisect_up(lambda c: _ok(se, i0, cfg, cfg["margin"], np.full(len(c), cfg["peakW"]), c, shape), np.array([10.0]), np.array([60000.0]), 16)[0]
+        # 30 halvings of 10 Wh to 60 kWh pin the smallest passing battery to under 0.1 mWh. With 16 the answer could sit
+        # almost 1 Wh high, and the page, which rounds up to 10 Wh, then showed 460 Wh where the true minimum was 450 Wh.
+        cb = bisect_up(lambda c: _ok(se, i0, cfg, cfg["margin"], np.full(len(c), cfg["peakW"]), c, shape), np.array([10.0]), np.array([60000.0]), 30)[0]
         v = M.verdict(se, i0, cfg, shape)
         load = None
         if v["state"] < 2:
