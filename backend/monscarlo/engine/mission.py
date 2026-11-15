@@ -32,6 +32,7 @@ class MissionSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     duration_days: float = Field(default=10, gt=0, le=60)
     needs_earth: bool = True
+    use_dsn: bool = Field(default=False, description="Earth contact also needs a Deep Space Network complex with the Moon above 10 degrees")
     max_gap_h: float = Field(default=12, ge=0, le=10000)
     autonomy_h: float = Field(default=6, ge=0, le=1000, description="blackout rule: at its lowest charge the battery must still carry the dark load this long")
     terrain_margin_deg: float = Field(default=0.3, ge=0, le=10)
@@ -67,7 +68,7 @@ def make_cfg(lander: dict, spec: MissionSpec | dict) -> dict:
     return {
         "days": m.duration_days, "peakW": power.total_peak_w(arr), "loadSun": p["loads"]["sunlit_w"], "loadDark": p["loads"]["dark_w"],
         "capWh": p["battery"]["capacity_wh"], "minSoc": p["battery"]["min_soc"], "chargeEff": p["battery"]["charge_eff"],
-        "tracking": arr["type"] == "tracking", "array": arr, "needEarth": m.needs_earth, "maxGapH": m.max_gap_h,
+        "tracking": arr["type"] == "tracking", "array": arr, "needEarth": m.needs_earth, "useDsn": m.use_dsn, "maxGapH": m.max_gap_h,
         "margin": m.terrain_margin_deg, "fault": m.fault.model_dump(), "safe": p["safe_mode"], "autonomyH": m.autonomy_h,
     }
 
@@ -183,7 +184,7 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
     if n > 0 and _frac1(se, i0, margin) <= 0.5:
         fails.append("the Sun is not up at landing")
     if need_e and n > 0 and not (float(eclr[i0]) - margin > 0):
-        fails.append("no Earth line of sight at landing")
+        fails.append("no Earth contact at landing (Earth hidden or no ground station in view)" if cfg.get("useDsn") else "no Earth line of sight at landing")
     if not math.isfinite(E) or not math.isfinite(minE):
         fails.append("the mission inputs are not valid numbers")
     if minE < floor:
@@ -193,7 +194,8 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
         fails.append(f"battery cannot ride out a {js_num(cfg['autonomyH'])} h blackout (its lowest charge covers {js_fixed((minE - floor) / max(1e-9, ldark), 1)} h)")
     if need_e and maxGap > cfg["maxGapH"]:
         g = js_fixed(maxGap / 24, 1) + " d" if maxGap >= 48 else f"{maxGap} h"
-        fails.append(f"Earth is out of view for {g} (limit {js_num(cfg['maxGapH'])} h)")
+        fails.append(f"no Earth contact for {g} (limit {js_num(cfg['maxGapH'])} h)" if cfg.get("useDsn")
+                     else f"Earth is out of view for {g} (limit {js_num(cfg['maxGapH'])} h)")
     usable = (0.75 if (F and F["kind"] == "battery") else 1.0) - cfg["minSoc"]
     return {"ok": len(fails) == 0, "fails": fails, "minSoc": max(0.0, minE / cap), "kMin": kMin, "kFail": kFail, "maxGapH": maxGap,
             "maxDarkH": maxDark, "linkPct": 100 * linkH / n if n else 0.0, "litPct": 100 * litH / n if n else 0.0,
@@ -217,7 +219,7 @@ def cause_of(f: str) -> int:
         return 1
     if "battery" in f or "blackout" in f:
         return 2
-    if "out of view" in f:
+    if "out of view" in f or "contact for" in f:
         return 3
     return 5
 

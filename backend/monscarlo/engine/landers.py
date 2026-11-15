@@ -85,8 +85,12 @@ class Lander(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
     name: str = Field(min_length=1, max_length=120)
-    source: str = Field(default="illustrative", max_length=500)
+    source: str = Field(default="illustrative", max_length=1000)
     illustrative: bool = True
+    operator: str = Field(default="", max_length=120)
+    status: str = Field(default="", max_length=300, description="flight history or next planned flight")
+    facts: list[str] = Field(default_factory=list, description="published figures that are not simulation inputs (mass, size, payload)")
+    assumed: list[str] = Field(default_factory=list, description="dotted paths of inputs that are estimates, not published figures")
     power: Power
     comms: Comms = Comms()
     landing: Landing = Landing()
@@ -100,7 +104,7 @@ class Lander(BaseModel):
 
 @lru_cache(maxsize=1)
 def _presets() -> dict[str, dict]:
-    d = json.loads(PRESETS_PATH.read_text())
+    d = json.loads(PRESETS_PATH.read_text(encoding="utf-8"))
     out = {}
     for l in d["landers"]:
         Lander.model_validate(l)
@@ -140,8 +144,9 @@ def get(lid: str, store: Store | None = None) -> dict:
     return s
 
 
-def list_all(store: Store | None = None) -> list[dict]:
-    out = [{"id": l["id"], "name": l["name"], "source": l["source"], "illustrative": l["illustrative"], "kind": "preset"} for l in _presets().values()]
+def list_all(store: Store | None = None, full: bool = False) -> list[dict]:
+    out = [{"id": l["id"], "name": l["name"], "source": l["source"], "illustrative": l["illustrative"], "kind": "preset",
+            **({"spec": Lander.model_validate(l).model_dump()} if full else {})} for l in _presets().values()]
     out += [{"id": l["id"], "name": l["name"], "source": l["source"], "illustrative": l["illustrative"], "kind": "saved"} for l in (store or default_store()).list_landers()]
     return out
 

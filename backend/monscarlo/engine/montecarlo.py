@@ -14,6 +14,7 @@ from typing import Optional
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import dsn as DSN
 from . import mission as M
 from . import power as PW
 from . import visibility as V
@@ -333,7 +334,7 @@ def _trial_params(d: dict, sig: dict, cfg: dict, i0: int, n_ser: int) -> dict:
 
 
 def run_risk(terrain: Terrain, table: np.ndarray, i0: int, lat: float, lon: float, lander: dict, cfg: dict,
-             unc: Uncertainty, mode: str = "best", naz: int = 180, workers: int = 8) -> dict:
+             unc: Uncertainty, mode: str = "best", naz: int = 180, workers: int = 8, dsn_ok: np.ndarray | None = None) -> dict:
     """Port of main's runRisk. table: hourly (n, 6) window; i0: landing index in it.
 
     Every cell's horizon is cast (in parallel threads), then all trials of all cells run as one vectorised simulation.
@@ -370,7 +371,7 @@ def run_risk(terrain: Terrain, table: np.ndarray, i0: int, lat: float, lon: floa
         hm = terrain.horizon(float(LAT.flat[k]), float(LON.flat[k]), heights, naz, mode, use_cache=False, fast=True)
         v = V.View(lat=float(LAT.flat[k]), lon=float(LON.flat[k]), ground_m=hm.ground_m, sun_mask=hm.at_height(ah),
                    earth_mask=hm.at_height(eh), array_h=ah, antenna_h=eh)
-        return V.series(v, table)
+        return DSN.apply(V.series(v, table), dsn_ok)
     with ThreadPoolExecutor(max(1, workers)) as ex:
         sers = list(ex.map(cast, cells))
     C = len(cells)

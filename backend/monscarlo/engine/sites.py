@@ -17,7 +17,7 @@ SITES_PATH = Path(__file__).resolve().parent / "sites.json"
 
 @lru_cache(maxsize=1)
 def catalogue() -> list[dict]:
-    return json.loads(SITES_PATH.read_text())["sites"]
+    return json.loads(SITES_PATH.read_text(encoding="utf-8"))["sites"]
 
 
 def by_id(sid: str) -> dict | None:
