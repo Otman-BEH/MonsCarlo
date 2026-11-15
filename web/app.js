@@ -41,10 +41,44 @@ import { createTerrain } from './js/terrain.js';
   let C = {};
   function readTheme() {
     const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
-    C = { ink: v('--ink'), muted: v('--muted'), line: v('--line'), sun: v('--sun'), earth: v('--earth'), go: v('--go'), warn: v('--warn'), bad: v('--bad'), cell: v('--cell'), panel: v('--panel'), bg: v('--bg') };
+    C = { ink: v('--ink'), muted: v('--muted'), line: v('--line'), line2: v('--line-2'), sun: v('--sun'), earth: v('--earth'), go: v('--go'), warn: v('--warn'), bad: v('--bad'), cell: v('--cell'), panel: v('--panel'), panel2: v('--panel-2'), bg: v('--bg'),
+          sky: v('--sky'), skyInk: v('--sky-ink'), skyMuted: v('--sky-muted'), skySun: v('--sky-sun'), skyEarth: v('--sky-earth'), terrain: v('--terrain'), crest: v('--terrain-crest'), skyGo: v('--sky-go'), skyWarn: v('--sky-warn'), skyBad: v('--sky-bad'),
+          seq: [1, 2, 3, 4, 5, 6].map(k => v('--seq-' + k)) };
+    HATCH = {};
   }
-  const FONT = (px, w) => (w || 500) + ' ' + px + 'px "IBM Plex Sans", system-ui, -apple-system, sans-serif';
-  const FONTC = (px, w) => (w || 600) + ' ' + Math.round(px * 0.92) + 'px "IBM Plex Sans", system-ui, -apple-system, sans-serif';
+  // Chart text: numbers (ticks, readouts, tags) in IBM Plex Mono, labels (lane names, axis titles) in uppercase IBM Plex
+  // Sans with wide tracking. Nothing on a chart is smaller than 12 px.
+  const FONT = (px, w) => (w || 500) + ' ' + Math.max(12, px) + 'px "IBM Plex Mono", ui-monospace, Consolas, monospace';
+  const FONTC = (px, w) => (w || 600) + ' ' + Math.max(12, Math.round(px * 0.92)) + 'px "IBM Plex Sans", system-ui, -apple-system, sans-serif';
+  const FONTS = (px, w) => (w || 600) + ' ' + Math.max(12, px) + 'px "IBM Plex Sans", system-ui, -apple-system, sans-serif';
+  // an uppercase label with the 0.06em tracking of the page's labels
+  function labTxt(g, t, x, y, px) { g.font = FONTC(px || 13); if ('letterSpacing' in g) { g.letterSpacing = (0.06 * Math.max(12, px || 12)).toFixed(2) + 'px'; g.fillText(t.toUpperCase(), x, y); g.letterSpacing = '0px'; } else g.fillText(t.toUpperCase(), x, y); }
+  function labW(g, t, px) { g.font = FONTC(px || 13); return g.measureText(t.toUpperCase()).width + t.length * 0.06 * Math.max(12, px || 12); }
+  // the diagonal hatch that marks "marginal" everywhere: warn stripes on the given ground
+  let HATCH = {};
+  function hatch(g, ground) {
+    const k = ground || C.cell; if (HATCH[k]) return HATCH[k];
+    const t = document.createElement('canvas'); t.width = t.height = 6; const tg = t.getContext('2d');
+    tg.fillStyle = k; tg.fillRect(0, 0, 6, 6); tg.strokeStyle = C.warn; tg.lineWidth = 2;
+    tg.beginPath(); for (const o of [-6, 0, 6]) { tg.moveTo(o, 6); tg.lineTo(o + 6, 0); } tg.stroke();
+    return HATCH[k] = g.createPattern(t, 'repeat');
+  }
+  // a rounded bar (the lanes, the calendar squares)
+  function rbar(g, x, y, w, h, r) { r = Math.min(r, w / 2, h / 2); g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); g.fill(); }
+  // a filled tag with mono text: the clock tag, the lowest-point tag
+  function pillTag(g, t, x, y, bg, fg, align) {
+    g.font = FONT(12); const tw = g.measureText(t).width + 20, h = 24, lx = align === 'center' ? x - tw / 2 : align === 'right' ? x - tw : x;
+    g.fillStyle = bg; rbar(g, lx, y, tw, h, 4); g.fillStyle = fg; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(t, lx + 10, y + h / 2 + 0.5); return { x: lx, w: tw };
+  }
+  // verdict icons (tick, exclamation, cross) as inline SVG for badges
+  const ICON = {
+    2: '<svg viewBox="0 0 16 16" class="ic" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    1: '<svg viewBox="0 0 16 16" class="ic" aria-hidden="true"><path d="M8 2.5v7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="8" cy="13" r="1.3" fill="currentColor"/></svg>',
+    0: '<svg viewBox="0 0 16 16" class="ic" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' };
+  const VCLS = ['bad', 'warn', 'go'];
+  const badge = (st, text) => '<span class="pill big ' + VCLS[st] + '">' + ICON[st] + (text || STL[st]) + '</span>';
+  const offBadge = text => '<span class="pill big off">' + text + '</span>';
+  const stBadge = st => '<span class="st s' + st + '">' + ICON[st] + STN[st] + '</span>';
   const shown = el => el.offsetParent !== null;
   function prep(cv) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2), w = cv.clientWidth, h = cv.clientHeight;
@@ -52,7 +86,7 @@ import { createTerrain } from './js/terrain.js';
     const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
     return { g, w, h };
   }
-  function waiting(cv, text) { if (!shown(cv)) return; const { g, w, h } = prep(cv); g.fillStyle = C.muted; g.font = FONT(13); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text || 'Loading…', w / 2, Math.min(h / 2, 40)); }
+  function waiting(cv, text) { if (!shown(cv)) return; const { g, w, h } = prep(cv); g.fillStyle = C.muted; g.font = FONTS(13, 400); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text || 'Loading…', w / 2, Math.min(h / 2, 40)); }
 
   // ---------- the loaded window: hourly data from calAnchor, long enough for the chosen span plus a lunar day ----------
   // 120 days normally (about 1 MB less per site than a full year), 400 days when the one-year span is on screen.
@@ -177,21 +211,23 @@ import { createTerrain } from './js/terrain.js';
 
   // ---------- plan: mission verdict and survival timeline ----------
   function drawMission() {
-    const mv = missionNow(), cfg = S.cfg;
-    if (mv.pending) { S.mv = null; $('mv-pill').innerHTML = '<span class="pill big off">' + (mv.err ? 'Server error' : 'Simulating…') + '</span>'; $('mv-say').textContent = mv.err || ''; waiting($('surv'), mv.err ? ' ' : 'Simulating the mission…'); return; }
+    const mv = missionNow(), cfg = S.cfg, ban = $('mv-ban');
+    $('mv-mlab').textContent = cfg.margin;
+    const setBan = (st, title) => { ban.className = 'verdict' + (st === null ? '' : ' s' + st); $('mv-ic').innerHTML = st === null ? '' : ICON[st]; $('mv-pill').textContent = title; };
+    if (mv.pending) { S.mv = null; setBan(null, mv.err ? 'Server error' : 'Simulating…'); $('mv-say').textContent = mv.err || ''; waiting($('surv'), mv.err ? ' ' : 'Simulating the mission…'); return; }
     S.mv = mv; const { nom, rob, st } = mv;
-    $('mv-pill').innerHTML = mv.stale ? '<span class="pill big off">' + (mv.err ? 'Server error' : 'Updating…') + '</span>' : '<span class="pill big ' + ['bad', 'warn', 'go'][st] + '">' + STL[st] + '</span>';
+    if (mv.stale) setBan(null, mv.err ? 'Server error' : 'Updating…'); else setBan(st, ['Fails', 'Marginal', 'Meets the needs'][st]);
     const where = short(S.site) + ', landing ' + fmtDT(mv.t) + ', ' + cfg.days + '-day mission: ';
     $('mv-say').textContent = where + (st === 2 ? 'power and Earth contact last the whole mission, even with every horizon raised by ' + cfg.margin + '°.'
-      : st === 1 ? 'it works on the modelled terrain, but with horizons raised by ' + cfg.margin + '° ' + rob.fails.join(' and ') + '.'
+      : st === 1 ? 'it works on the mapped terrain, but with horizons raised by ' + cfg.margin + '° ' + rob.fails.join(' and ') + '.'
       : nom.fails.join(', and ') + '.')
       + (nom.heat ? (nom.heat.heater_hours ? ' Heaters ran for ' + nom.heat.heater_hours + ' h and used ' + fmtCap(nom.heat.heater_wh) + ' to hold the electronics at ' + Math.round(nom.heat.coldest_c) + ' °C.' : ' The heaters were never needed: the coldest the electronics got was ' + Math.round(nom.heat.coldest_c) + ' °C.') : '');
-    $('mv-soc').textContent = Math.round(nom.minSoc * 100) + '%'; $('mv-soc-s').textContent = 'On mission day ' + (nom.kMin / 24).toFixed(1) + ' · reserve ' + Math.round(cfg.minSoc * 100) + '% · with margin ' + Math.round(rob.minSoc * 100) + '%';
-    $('mv-gap').textContent = fmtH(nom.maxGapH); $('mv-gap-s').textContent = (cfg.needEarth ? 'Limit ' + cfg.maxGapH + ' h' : 'No direct link required') + ' · contact ' + nom.linkPct.toFixed(0) + '% of the mission' + (cfg.needEarth && cfg.useDsn ? ' (with DSN)' : '');
-    $('mv-need').textContent = fmtWh(nom.battNeedWh); $('mv-need-s').textContent = 'To ride out the longest shortfall with the reserve · fitted ' + fmtWh(cfg.capWh);
-    $('mv-lit').textContent = nom.litPct.toFixed(0) + '%'; $('mv-lit-s').textContent = 'Longest dark stretch ' + fmtH(nom.maxDarkH) + ' · with margin ' + rob.litPct.toFixed(0) + '%';
+    $('mv-soc').textContent = Math.round(nom.minSoc * 100) + '%'; $('mv-soc-s').textContent = 'Reserve is ' + Math.round(cfg.minSoc * 100) + '% · day ' + (nom.kMin / 24).toFixed(1) + ' · with margin ' + Math.round(rob.minSoc * 100) + '%';
+    $('mv-lit').textContent = fmtH(nom.maxDarkH); $('mv-lit-s').textContent = 'Sunlit ' + nom.litPct.toFixed(0) + '% of the mission · with margin ' + rob.litPct.toFixed(0) + '%';
+    $('mv-gap').textContent = fmtH(nom.maxGapH); $('mv-gap-s').textContent = (cfg.needEarth ? 'Limit is ' + cfg.maxGapH + ' h' : 'No direct link required') + ' · contact ' + nom.linkPct.toFixed(0) + '% of the time';
+    $('mv-need').textContent = fmtWh(nom.battNeedWh); $('mv-need-s').textContent = 'Fitted ' + fmtWh(cfg.capWh) + ', to ride out the longest shortfall';
     const FN = faultName(cfg.fault);
-    $('c-pill').innerHTML = cfg.fault.kind === 'none' ? '' : mv.stale ? '<span class="pill big off">Updating…</span>' : '<span class="pill big ' + (nom.ok ? 'go">Survives' : 'bad">Does not survive') + '</span>';
+    $('c-pill').innerHTML = cfg.fault.kind === 'none' ? '' : mv.stale ? offBadge('Updating…') : nom.ok ? badge(2, 'Survives') : badge(0, 'Does not survive');
     if (cfg.fault.kind === 'none') $('mv-fault').textContent = cfg.safe && nom.safeH ? 'Safe mode was needed for ' + nom.safeH + ' h even with nothing going wrong.' : '';
     else if (mv.stress) {
       const clean = mv.stress.without_fault, other = mv.stress.safe_mode_toggled, out = r => r.ok ? 'the mission survives' : 'the mission fails (' + r.fails[0] + ')';
@@ -200,33 +236,44 @@ import { createTerrain } from './js/terrain.js';
                     : 'Without safe mode ' + out(nom) + '. With it ' + out(other) + (other.safe_mode_hours ? ', at the cost of ' + other.safe_mode_hours + ' h at reduced power.' : '.'));
     }
     const cv = $('surv'); if (!shown(cv)) return;
-    const { g, w, h } = prep(cv), px = 52, pw = w - px - 10, n = nom.n, bt = 44, bh = h - bt - 24;
+    // two yes/no lanes, then the battery chart: nights shaded, the reserve as a red band, the lowest point tagged
+    const { g, w, h } = prep(cv), narrow = w < 600, px = narrow ? 84 : 150, pr = narrow ? 64 : 84, pw = w - px - pr, n = nom.n;
+    const ln = 14, l1 = 6, l2 = l1 + ln + 8, bt = l2 + ln + 20, bb = h - 34, bh = bb - bt;
     const X = k => px + k / Math.max(1, n) * pw, Y = v => bt + (1 - v) * bh;
-    g.font = FONTC(12, 500); g.textAlign = 'right'; g.textBaseline = 'middle'; g.fillStyle = C.muted;
-    g.fillText('SUN', px - 6, 8); g.fillText(cfg.useDsn && cfg.needEarth ? 'CONTACT' : 'EARTH', px - 6, 24);
-    g.fillStyle = C.cell; g.fillRect(px, 2, pw, 12); g.fillRect(px, 18, pw, 12);
-    for (let k = 0; k < n; k++) {
-      const x = X(k), ww = pw / n + 0.5;
-      if (nom.sun[k] > 0) { g.globalAlpha = 0.25 + 0.75 * nom.sun[k]; g.fillStyle = C.sun; g.fillRect(x, 2, ww, 12); }
-      if (nom.link[k]) { g.globalAlpha = 1; g.fillStyle = C.earth; g.fillRect(x, 18, ww, 12); }
-    }
-    g.globalAlpha = 0.28; g.fillStyle = C.warn; for (let k = 0; k < n; k++) if (nom.safeArr[k]) g.fillRect(X(k), bt, pw / n + 0.5, bh);
-    g.globalAlpha = 1; g.font = FONT(11);
-    for (const v of [0, 0.5, 1]) { g.strokeStyle = C.line; g.lineWidth = 1; g.beginPath(); g.moveTo(px, Y(v)); g.lineTo(px + pw, Y(v)); g.stroke(); g.fillStyle = C.muted; g.textAlign = 'right'; g.fillText(Math.round(v * 100) + '%', px - 6, Y(v)); }
-    g.setLineDash([5, 4]); g.strokeStyle = C.bad; g.beginPath(); g.moveTo(px, Y(cfg.minSoc)); g.lineTo(px + pw, Y(cfg.minSoc)); g.stroke(); g.setLineDash([]);
-    g.fillStyle = C.bad; g.textAlign = 'left'; g.textBaseline = 'bottom'; g.font = FONTC(12, 500); g.fillText('RESERVE', px + 4, Y(cfg.minSoc) - 2);
-    const line = (soc, col, lw, dash, fill) => {
-      g.beginPath(); for (let k = 0; k <= n; k++) { k ? g.lineTo(X(k), Y(soc[k])) : g.moveTo(X(k), Y(soc[k])); }
-      if (fill) { g.save(); g.lineTo(X(n), Y(0)); g.lineTo(X(0), Y(0)); g.closePath(); g.globalAlpha = 0.16; g.fillStyle = col; g.fill(); g.restore(); g.beginPath(); for (let k = 0; k <= n; k++) { k ? g.lineTo(X(k), Y(soc[k])) : g.moveTo(X(k), Y(soc[k])); } }
-      g.strokeStyle = col; g.lineWidth = lw; g.setLineDash(dash); g.lineJoin = 'round'; g.stroke(); g.setLineDash([]);
+    const lane = (y, pred, alpha, col, name) => {
+      g.fillStyle = C.cell; rbar(g, px, y, pw, ln, 3);
+      let s = -1; for (let k = 0; k <= n; k++) { const on = k < n && pred(k); if (on && s < 0) s = k; if (!on && s >= 0) { g.fillStyle = col; g.globalAlpha = alpha ? alpha(s, k) : 1; rbar(g, X(s), y, Math.max(1.5, X(k) - X(s)), ln, 3); g.globalAlpha = 1; s = -1; } }
+      g.fillStyle = C.muted; g.textAlign = 'right'; g.textBaseline = 'middle'; labTxt(g, name, px - 8, y + ln / 2 + 1, 12);
     };
-    line(rob.soc, C.muted, 1.3, [3, 3], false); line(nom.soc, C.go, 2, [], true);
-    if (nom.faultK >= 0 && nom.faultK <= n) { const x = X(nom.faultK); g.setLineDash([2, 3]); g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, bt + bh); g.stroke(); g.setLineDash([]); g.fillStyle = C.ink; g.font = FONTC(12); g.textBaseline = 'top'; g.textAlign = x > px + pw - 60 ? 'right' : 'left'; g.fillText('FAULT', x + (x > px + pw - 60 ? -5 : 5), bt + 16); }
-    if (nom.kFail > 0) { const x = X(nom.kFail); g.strokeStyle = C.bad; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, bt + bh); g.stroke(); g.fillStyle = C.bad; g.font = FONTC(12); g.textBaseline = 'top'; g.textAlign = x > px + pw - 120 ? 'right' : 'left'; g.fillText('RESERVE BREACHED', x + (x > px + pw - 120 ? -5 : 5), bt + 2); }
-    g.font = FONT(11); g.fillStyle = C.muted; g.textBaseline = 'top'; const days = n / 24, per = pw / Math.max(1, days), stepD = [1, 2, 5, 10, 20].find(v => v * per >= 46) || 30;
-    for (let d = 0; d <= days + 1e-9; d += stepD) { const x = X(d * 24); g.strokeStyle = C.line; g.beginPath(); g.moveTo(x, bt + bh); g.lineTo(x, bt + bh + 4); g.stroke(); if (d > 0 && d * per < 52) continue; g.textAlign = d === 0 ? 'left' : d >= days - 0.01 ? 'right' : 'center'; g.fillText(d === 0 ? 'Landing' : 'Day ' + d, x, bt + bh + 7); }
+    lane(l1, k => nom.sun[k] > 0, (a, b) => { let m = 0; for (let k = a; k < b; k++) m += nom.sun[k]; return 0.45 + 0.55 * m / (b - a); }, C.sun, 'Sunlight');
+    lane(l2, k => !!nom.link[k], null, C.earth, cfg.useDsn && cfg.needEarth ? 'Contact' : 'Earth in view');
+    // nights behind the curve
+    g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.font = FONT(12);
+    let s0 = -1; for (let k = 0; k <= n; k++) { const dark = k < n && !(nom.sun[k] > 0); if (dark && s0 < 0) s0 = k; if (!dark && s0 >= 0) { const xa = X(s0), xb = X(k); g.fillStyle = C.cell; g.globalAlpha = 0.6; g.fillRect(xa, bt, xb - xa, bh); g.globalAlpha = 1; if (xb - xa > 44) { g.fillStyle = C.muted; g.fillText('night', (xa + xb) / 2, bt + 16); } s0 = -1; } }
+    g.fillStyle = C.warn; g.globalAlpha = 0.18; for (let k = 0; k < n; k++) if (nom.safeArr[k]) g.fillRect(X(k), bt, pw / n + 0.5, bh); g.globalAlpha = 1;
+    g.font = FONT(12); g.textBaseline = 'middle';
+    for (const v of [0, 0.25, 0.5, 0.75, 1]) { g.strokeStyle = C.line; g.lineWidth = 1; g.beginPath(); g.moveTo(px, Y(v)); g.lineTo(px + pw, Y(v)); g.stroke(); g.fillStyle = C.muted; g.textAlign = 'right'; g.fillText(Math.round(v * 100) + '%', px - 8, Y(v)); }
+    if (!narrow) { g.fillStyle = C.muted; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; labTxt(g, 'Battery', 0, bt + 12, 12); labTxt(g, 'Charge', 0, bt + 28, 12); }
+    // the reserve band
+    g.fillStyle = C.bad; g.globalAlpha = 0.14; g.fillRect(px, Y(cfg.minSoc), pw, Y(0) - Y(cfg.minSoc)); g.globalAlpha = 1;
+    g.setLineDash([6, 4]); g.strokeStyle = C.bad; g.lineWidth = 1.5; g.beginPath(); g.moveTo(px, Y(cfg.minSoc)); g.lineTo(px + pw, Y(cfg.minSoc)); g.stroke(); g.setLineDash([]);
+    g.fillStyle = C.bad; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; labTxt(g, 'Reserve', px + pw + 8, Y(cfg.minSoc) + 4, 12); g.font = FONT(12); g.fillText(Math.round(cfg.minSoc * 100) + '%', px + pw + 8, Y(cfg.minSoc) + 20);
+    const line = (soc, col, lw, dash) => { g.beginPath(); for (let k = 0; k <= n; k++) { k ? g.lineTo(X(k), Y(soc[k])) : g.moveTo(X(k), Y(soc[k])); } g.strokeStyle = col; g.lineWidth = lw; g.setLineDash(dash); g.lineJoin = 'round'; g.stroke(); g.setLineDash([]); };
+    line(rob.soc, C.muted, 1.5, [5, 4]); line(nom.soc, C.ink, 2.5, []);
+    if (nom.faultK >= 0 && nom.faultK <= n) { const x = X(nom.faultK); g.setLineDash([2, 3]); g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, bt); g.lineTo(x, bb); g.stroke(); g.setLineDash([]); g.fillStyle = C.ink; g.textBaseline = 'top'; const rt = x > px + pw - 60; g.textAlign = rt ? 'right' : 'left'; labTxt(g, 'Fault', x + (rt ? -5 : 5), bt + 46, 12); }
+    if (nom.kFail > 0) { const x = X(nom.kFail); g.strokeStyle = C.bad; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, bt); g.lineTo(x, bb); g.stroke(); g.fillStyle = C.bad; g.textBaseline = 'top'; const rt = x > px + pw - 150; g.textAlign = rt ? 'right' : 'left'; labTxt(g, 'Reserve breached', x + (rt ? -5 : 5), bt + 26, 12); }
+    // the lowest point, tagged; the terrain-margin case gets its own lowest value in words
+    const kMin = Math.max(0, Math.min(n, nom.kMin)), mx = X(kMin), my = Y(nom.minSoc);
+    const tag = 'Lowest ' + Math.round(nom.minSoc * 100) + '% · day ' + (kMin / 24).toFixed(1);
+    g.font = FONT(12); const tw = g.measureText(tag).width + 20, tx = mx + 12 + tw > px + pw ? mx - 12 - tw : mx + 12, above = my - 34 >= bt + 2, ty = above ? my - 34 : Math.min(bb - 26, my + 10);
+    pillTag(g, tag, tx, ty, C.ink, C.bg);
+    g.beginPath(); g.arc(mx, my, 5, 0, 7); g.fillStyle = C.panel; g.fill(); g.strokeStyle = C.ink; g.lineWidth = 2.5; g.stroke();
+    if (cfg.margin > 0 && Math.round(rob.minSoc * 100) !== Math.round(nom.minSoc * 100)) { let kr = 0; for (let k = 0; k <= n; k++) if (rob.soc[k] < rob.soc[kr]) kr = k; const rt = 'terrain ' + cfg.margin + '° higher: ' + Math.round(rob.minSoc * 100) + '%'; g.font = FONT(12); const rw = g.measureText(rt).width, rx = Math.max(px + 4, Math.min(px + pw - rw - 4, X(kr) + 10)); let ry = Math.min(bb - 6, Y(rob.soc[kr]) + 20); if (ry > ty - 4 && ry - 14 < ty + 28 && rx < tx + tw && rx + rw > tx) ry = ty + 44 < bb ? ty + 44 : ty - 8;
+      g.lineWidth = 4; g.strokeStyle = C.panel; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.strokeText(rt, rx, ry); g.fillStyle = C.muted; g.fillText(rt, rx, ry); }
+    // days along the bottom
+    g.font = FONT(12); g.fillStyle = C.muted; g.textBaseline = 'top'; const days = n / 24, per = pw / Math.max(1, days), stepD = [1, 2, 5, 10, 20].find(v => v * per >= 56) || 30;
+    for (let d = 0; d <= days + 1e-9; d++) { const x = X(d * 24); g.strokeStyle = C.line; g.lineWidth = 1; g.beginPath(); g.moveTo(x, bb); g.lineTo(x, bb + 5); g.stroke(); if (d % stepD && d < days - 0.01) continue; if (d > 0 && d < days - 0.01 && (days - d) * per < 50) continue; g.textAlign = d === 0 ? 'left' : d >= days - 0.01 ? 'right' : 'center'; g.fillText(d === 0 ? 'Landing' : 'Day ' + d, x, bb + 10); }
   }
-
   // ---------- plan: mission design (sizing, server: /design) ----------
   const LAB = { F: null, atlas: null, geo: null, ageo: null, res: null, cb: null, pa: null };
   const fmtW = p => Math.round(p).toLocaleString('en-US') + ' W', fmtCap = c => fmtWh(c);
@@ -239,7 +286,7 @@ import { createTerrain } from './js/terrain.js';
   function drawLab() {
     const cv = $('dfront'); if (!shown(cv)) return;
     const q = labNow(), R = q.r, cfg = S.cfg;
-    if (!R || !S.mv || S.mv.pending) { $('d-pill').innerHTML = '<span class="pill big off">' + (q.err ? 'Server error' : 'Working…') + '</span>'; waiting(cv, q.err || 'Trying solar and battery sizes…'); waiting($('datlas'), ' '); return; }
+    if (!R || !S.mv || S.mv.pending) { $('d-pill').innerHTML = offBadge(q.err ? 'Server error' : 'Working…'); waiting(cv, q.err || 'Trying solar and battery sizes…'); waiting($('datlas'), ' '); return; }
     LAB.res = R; LAB.F = R.frontier; const F = R.frontier, st = S.mv.st, stale = q.stale || S.mv.stale, any = F.rob.some(v => v !== null);
     const cb = R.min_battery_at_your_array_wh, pa = R.min_array_at_your_battery_w;
     LAB.cb = cb == null ? null : Math.ceil((cb - 1e-3) / 10) * 10; LAB.pa = pa == null ? null : Math.ceil(pa / 5) * 5;
@@ -254,25 +301,29 @@ import { createTerrain } from './js/terrain.js';
       $('d-pa-s').textContent = LAB.pa === null ? 'With a ' + fmtWh(cfg.capWh) + ' battery, no amount of solar is enough.' : 'With your ' + fmtWh(cfg.capWh) + ' battery. You have ' + fmtW(cfg.peakW) + ': ' + diff(cfg.peakW, LAB.pa, fmtW) + '.';
     }
     $('d-cb-go').disabled = LAB.cb === null || stale; $('d-pa-go').disabled = LAB.pa === null || stale;
-    $('d-pill').innerHTML = stale ? '<span class="pill big off">' + (q.err ? 'Server error' : 'Updating…') + '</span>'
-      : !any ? '<span class="pill big bad">No size works at this time</span>' : '<span class="pill big ' + ['bad', 'warn', 'go'][st] + '">' + ['Your lander falls short', 'Marginal', 'Your lander passes'][st] + '</span>';
+    $('d-pill').innerHTML = stale ? offBadge(q.err ? 'Server error' : 'Updating…')
+      : !any ? badge(0, 'No size works at this time') : badge(st, ['Your lander falls short', 'Marginal', 'Your lander passes'][st]);
     const x = R.max_sunlit_load_w;
     $('d-alt').innerHTML = any && st < 2 ? '<ul class="alts"><li>' + (x === null || x === undefined || x < 1 ? 'Cutting power use in sunlight alone would not be enough with this hardware.' : 'Or keep the hardware and cut power use in sunlight from ' + fmtW(cfg.loadSun) + ' to ' + fmtW(Math.floor(x)) + '.') + '</li></ul>' : '';
     // pass/fail chart: solar output against battery size
-    const { g, w, h } = prep(cv), L = 50, Rm = 12, T = 12, B = 30, pw = w - L - Rm, ph = h - T - B, x0 = Math.log(60), x1 = Math.log(60000), y0 = Math.log(20), y1 = Math.log(F.pMax);
+    const { g, w, h } = prep(cv), L = 66, Rm = 12, T = 12, B = 34, pw = w - L - Rm, ph = h - T - B, x0 = Math.log(60), x1 = Math.log(60000), y0 = Math.log(20), y1 = Math.log(F.pMax);
     const X = c => L + (Math.log(c) - x0) / (x1 - x0) * pw, Y = p => T + (1 - (Math.log(Math.max(20, Math.min(F.pMax, p))) - y0) / (y1 - y0)) * ph;
     LAB.geo = { L, T, pw, ph, x0, x1, y0, y1 };
     g.fillStyle = C.cell; g.fillRect(L, T, pw, ph);
-    const region = (lower, col) => { const idx = F.caps.map((_, k) => k).filter(k => lower[k] !== null); if (!idx.length) return; g.beginPath(); idx.forEach((k, j) => { const xx = X(F.caps[k]), yy = Y(lower[k]); j ? g.lineTo(xx, yy) : g.moveTo(xx, yy); }); for (let j = idx.length - 1; j >= 0; j--) g.lineTo(X(F.caps[idx[j]]), T); g.closePath(); g.fillStyle = col; g.globalAlpha = 0.45; g.fill(); g.globalAlpha = 1; };
-    region(F.nom, C.warn); region(F.rob, C.cell); region(F.rob, C.go);
-    const line = (arr, col, lw) => { g.beginPath(); let pen = false; F.caps.forEach((c, k) => { if (arr[k] === null) { pen = false; return; } const xx = X(c), yy = Y(arr[k]); pen ? g.lineTo(xx, yy) : g.moveTo(xx, yy); pen = true; }); g.strokeStyle = col; g.lineWidth = lw; g.lineJoin = 'round'; g.stroke(); };
-    line(F.nom, C.warn, 1.5); line(F.rob, C.go, 2.2);
-    g.font = FONT(11); g.fillStyle = C.muted; g.strokeStyle = C.line; g.lineWidth = 1; g.textAlign = 'center'; g.textBaseline = 'top';
-    [[100, '100 Wh'], [1000, '1 kWh'], [10000, '10 kWh']].forEach(([c, t]) => { g.beginPath(); g.moveTo(X(c), T + ph); g.lineTo(X(c), T + ph + 4); g.stroke(); g.fillText(t, X(c), T + ph + 7); });
-    g.textAlign = 'right'; g.textBaseline = 'middle'; [50, 100, 200, 500, 1000, 2000, 5000].forEach(pp => { if (pp > F.pMax) return; g.beginPath(); g.moveTo(L - 4, Y(pp)); g.lineTo(L, Y(pp)); g.stroke(); g.fillText(pp + ' W', L - 7, Y(pp)); });
-    g.font = FONTC(12, 500); g.textAlign = 'right'; g.textBaseline = 'alphabetic'; g.fillText('BATTERY CAPACITY', L + pw, T + ph + 28); g.textAlign = 'left'; g.textBaseline = 'top'; g.fillText('SOLAR OUTPUT', L + 6, T + 5);
-    const tagAt = (t, xx, yy) => { g.font = FONTC(13); const tw = g.measureText(t).width, lx = xx + 10 + tw > L + pw ? xx - 10 - tw : xx + 10; g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineWidth = 3; g.strokeStyle = C.panel; g.strokeText(t, lx, yy); g.fillStyle = C.ink; g.fillText(t, lx, yy); };
-    const dot = (xx, yy) => { g.beginPath(); g.arc(xx, yy, 4.5, 0, 7); g.fillStyle = C.go; g.fill(); g.strokeStyle = C.ink; g.lineWidth = 1.2; g.stroke(); };
+    const region = (lower, fill, alpha) => { const idx = F.caps.map((_, k) => k).filter(k => lower[k] !== null); if (!idx.length) return null; g.beginPath(); idx.forEach((k, j) => { const xx = X(F.caps[k]), yy = Y(lower[k]); j ? g.lineTo(xx, yy) : g.moveTo(xx, yy); }); for (let j = idx.length - 1; j >= 0; j--) g.lineTo(X(F.caps[idx[j]]), T); g.closePath(); g.fillStyle = fill; g.globalAlpha = alpha; g.fill(); g.globalAlpha = 1; return idx; };
+    region(F.nom, hatch(g, C.cell), 1); region(F.rob, C.cell, 1); const ridx = region(F.rob, C.go, 0.35);
+    const line = (arr, col, lw, dash) => { g.beginPath(); let pen = false; F.caps.forEach((c, k) => { if (arr[k] === null) { pen = false; return; } const xx = X(c), yy = Y(arr[k]); pen ? g.lineTo(xx, yy) : g.moveTo(xx, yy); pen = true; }); g.strokeStyle = col; g.lineWidth = lw; g.lineJoin = 'round'; g.setLineDash(dash || []); g.stroke(); g.setLineDash([]); };
+    line(F.nom, C.warn, 1.5, [5, 4]); line(F.rob, C.go, 2.5);
+    // name the two regions on the chart
+    g.textBaseline = 'middle'; g.textAlign = 'left';
+    if (ridx && ridx.length) { const k = ridx[Math.floor(ridx.length * 0.7)], xx = Math.min(L + pw - 70, X(F.caps[k])), yy = Math.max(T + 30, (T + Y(F.rob[k])) / 2); g.fillStyle = C.go; labTxt(g, 'Passes', xx, yy, 12); }
+    g.fillStyle = C.muted; labTxt(g, 'Fails', L + 10, T + ph - 14, 12);
+    g.font = FONT(12); g.fillStyle = C.muted; g.strokeStyle = C.line; g.lineWidth = 1; g.textAlign = 'center'; g.textBaseline = 'top';
+    [[100, '100 Wh'], [1000, '1 kWh'], [10000, '10 kWh']].forEach(([c, t]) => { g.beginPath(); g.moveTo(X(c), T + ph); g.lineTo(X(c), T + ph + 5); g.stroke(); g.fillText(t, X(c), T + ph + 8); });
+    g.textAlign = 'right'; g.textBaseline = 'middle'; [50, 100, 200, 500, 1000, 2000, 5000].forEach(pp => { if (pp > F.pMax) return; g.beginPath(); g.moveTo(L - 5, Y(pp)); g.lineTo(L, Y(pp)); g.stroke(); g.fillText(pp + ' W', L - 8, Y(pp)); });
+    g.fillStyle = C.muted; g.textAlign = 'right'; g.textBaseline = 'alphabetic'; labTxt(g, 'Battery capacity', L + pw, T + ph + 32, 12); g.textAlign = 'left'; g.textBaseline = 'top'; labTxt(g, 'Solar output', L + 8, T + 7, 12);
+    const tagAt = (t, xx, yy) => { g.font = FONTS(13); const tw = g.measureText(t).width, lx = xx + 10 + tw > L + pw ? xx - 10 - tw : xx + 10; g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineWidth = 4; g.strokeStyle = C.panel; g.strokeText(t, lx, yy); g.fillStyle = C.ink; g.fillText(t, lx, yy); };
+    const dot = (xx, yy) => { g.beginPath(); g.arc(xx, yy, 4.5, 0, 7); g.fillStyle = C.go; g.fill(); g.strokeStyle = C.panel; g.lineWidth = 2; g.stroke(); };
     const cx = X(Math.max(60, Math.min(60000, cfg.capWh))), cy = Y(cfg.peakW);
     g.setLineDash([3, 3]); g.strokeStyle = C.muted; g.lineWidth = 1;
     if (LAB.cb !== null) { g.beginPath(); g.moveTo(cx, cy); g.lineTo(X(Math.max(60, Math.min(60000, LAB.cb))), cy); g.stroke(); }
@@ -286,24 +337,25 @@ import { createTerrain } from './js/terrain.js';
   function drawAtlas(R) {
     const cv = $('datlas'), cfg = S.cfg, Bw = R.atlas_battery_wh || [], ST = R.atlas_state || [], NA = Bw.length, t0 = Date.parse(R.atlas_start), span = NA * R.atlas_step_h / 24, step = R.atlas_step_h * HOUR;
     LAB.atlas = { t0, step };
-    const { g, w, h } = prep(cv), L = 56, Rm = 10, T = 10, ch = h - T - 30, pw = w - L - Rm;
+    const { g, w, h } = prep(cv), L = 76, Rm = 10, T = 12, ch = h - T - 32, pw = w - L - Rm;
     let mx = cfg.capWh; for (const v of Bw) if (v !== null && v > mx) mx = v; mx *= 1.15;
     const X = j => L + j / NA * pw, Y = v => T + (1 - v / mx) * ch; LAB.ageo = { L, pw, NA };
     const raw = mx / 4, mag = Math.pow(10, Math.floor(Math.log10(raw))), stepV = [1, 2, 5, 10].map(m => m * mag).find(v => v >= raw);
-    g.font = FONT(11); g.textAlign = 'right'; g.textBaseline = 'middle';
-    for (let v = 0; v <= mx; v += stepV) { g.strokeStyle = C.line; g.lineWidth = 1; g.beginPath(); g.moveTo(L, Y(v)); g.lineTo(L + pw, Y(v)); g.stroke(); g.fillStyle = C.muted; g.fillText(fmtWh(v), L - 6, Y(v)); }
-    const col = [C.bad, C.warn, C.go];
+    g.font = FONT(12); g.textAlign = 'right'; g.textBaseline = 'middle';
+    for (let v = 0; v <= mx; v += stepV) { g.strokeStyle = v === 0 ? C.line2 : C.line; g.lineWidth = 1; g.beginPath(); g.moveTo(L, Y(v)); g.lineTo(L + pw, Y(v)); g.stroke(); g.fillStyle = C.muted; g.fillText(fmtWh(v), L - 8, Y(v)); }
+    // bars in the verdict colours; marginal is hatched so it reads without colour
+    const bw = Math.max(1, pw / NA - 1);
     for (let j = 0; j < NA; j++) {
-      if (Bw[j] === null) { g.fillStyle = C.cell; g.fillRect(X(j), T, pw / NA + 0.5, ch); continue; }
-      g.fillStyle = col[ST[j] || 0]; g.globalAlpha = 0.75; g.fillRect(X(j) + 0.5, Y(Bw[j]), Math.max(1, pw / NA - 1), Y(0) - Y(Bw[j])); g.globalAlpha = 1;
+      if (Bw[j] === null) { g.fillStyle = C.cell; g.globalAlpha = 0.7; g.fillRect(X(j), T, pw / NA + 0.5, ch); g.globalAlpha = 1; continue; }
+      const s = ST[j] || 0; g.fillStyle = s === 1 ? hatch(g, C.panel) : s === 2 ? C.go : C.bad; g.fillRect(X(j) + 0.5, Y(Bw[j]), bw, Y(0) - Y(Bw[j]));
     }
-    g.setLineDash([5, 4]); g.strokeStyle = C.ink; g.lineWidth = 1.3; g.beginPath(); g.moveTo(L, Y(cfg.capWh)); g.lineTo(L + pw, Y(cfg.capWh)); g.stroke(); g.setLineDash([]);
-    g.font = FONTC(12, 500); g.fillStyle = C.ink; g.textAlign = 'left'; g.textBaseline = 'bottom'; g.fillText('YOUR BATTERY ' + fmtWh(cfg.capWh), L + 4, Y(cfg.capWh) - 2);
+    g.setLineDash([5, 4]); g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(L, Y(cfg.capWh)); g.lineTo(L + pw, Y(cfg.capWh)); g.stroke(); g.setLineDash([]);
+    const yl = 'Your battery ' + fmtWh(cfg.capWh); g.textAlign = 'left'; g.textBaseline = 'bottom'; const lw = labW(g, yl, 12) + 12; g.fillStyle = C.panel; g.globalAlpha = 0.85; g.fillRect(L + 2, Y(cfg.capWh) - 19, lw, 16); g.globalAlpha = 1; g.fillStyle = C.ink; labTxt(g, yl, L + 8, Y(cfg.capWh) - 4, 12);
     timeAxis(g, L, T + ch + 2, pw, t0, span);
     const cx = L + (S.t - t0) / (span * DAY) * pw; if (cx >= L && cx <= L + pw) { g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx, T); g.lineTo(cx, T + ch); g.stroke(); }
     const order = []; for (let j = 0; j < NA; j++) if (Bw[j] !== null) order.push(j); order.sort((a, b) => Bw[a] - Bw[b]);
     const top = []; for (const j of order) { if (top.every(q => Math.abs(q - j) >= 6)) top.push(j); if (top.length === 4) break; }
-    $('d-tbl').innerHTML = top.length ? '<thead><tr><th>Land on</th><th>Battery needed</th><th>Your lander as it is</th><th></th></tr></thead><tbody>' + top.map(j => '<tr><td>' + fmtDT(t0 + j * step).replace(' UTC', '') + '</td><td>' + fmtWh(Bw[j]) + '</td><td><span class="st s' + ST[j] + '">' + STN[ST[j]] + '</span></td><td><button type="button" data-ai="' + j + '">Go to this date</button></td></tr>').join('') + '</tbody>'
+    $('d-tbl').innerHTML = top.length ? '<thead><tr><th>Land on</th><th>Battery needed</th><th>Your lander as it is</th><th></th></tr></thead><tbody>' + top.map(j => '<tr><td>' + fmtDT(t0 + j * step).replace(' UTC', '') + '</td><td>' + fmtWh(Bw[j]) + '</td><td>' + stBadge(ST[j]) + '</td><td><button type="button" data-ai="' + j + '">Go to this date</button></td></tr>').join('') + '</tbody>'
       : '<tbody><tr><td>No landing time in these 60 days works with any battery size, with the solar panels this lander has.</td></tr></tbody>';
   }
 
@@ -330,17 +382,28 @@ import { createTerrain } from './js/terrain.js';
       drivers: k.drivers.map(d => [d.if, d.success_p]), total: k.total_missions, seconds: k.seconds, landing: Date.parse(j.landing_time), bg: null, ci: c };
     riskLast = r; riskMemo = { key, r }; return r;
   }
+  // the six-step ramp for a chance of success: 0-20, 20-40, 40-60, 60-80, 80-95, 95%+
+  const seqOf = p => C.seq[p >= 0.95 ? 5 : p >= 0.8 ? 4 : Math.max(0, Math.min(3, Math.floor(p * 5)))];
+  // a boxed tag on a night scene: sky ground, sky ink, mono text
+  function skyTag(g, t, x, y, w, opts) {
+    const o = opts || {}; g.font = FONT(12); const tw = g.measureText(t).width + 16, h = 22;
+    let lx = o.left ? x - 12 - tw : x + 12; if (lx + tw > w - 4) lx = x - 12 - tw; if (lx < 4) lx = Math.min(w - tw - 4, x + 12);
+    const ty = Math.max(4, Math.min((o.h || w) - h - 4, y - h / 2));
+    g.fillStyle = C.sky; g.globalAlpha = 0.9; rbar(g, lx, ty, tw, h, 4); g.globalAlpha = 1;
+    if (o.stroke) { g.strokeStyle = o.stroke; g.globalAlpha = 0.7; g.lineWidth = 1; g.beginPath(); g.roundRect ? g.roundRect(lx + 0.5, ty + 0.5, tw - 1, h - 1, 4) : g.rect(lx, ty, tw, h); g.stroke(); g.globalAlpha = 1; }
+    g.fillStyle = o.col || C.skyInk; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(t, lx + 8, ty + h / 2 + 0.5);
+  }
   function drawRisk() {
     const cv = $('risk'), r = riskNow(), cur = r && !r.pending && !r.stale;
     if (!riskOk()) {
       $('k-pill').innerHTML = ''; ['k-p', 'k-det', 'k-best'].forEach(id => { $(id).textContent = '—'; }); ['k-p-s', 'k-det-s', 'k-best-s'].forEach(id => { $(id).textContent = ''; }); $('k-causes').innerHTML = ''; $('k-drivers').innerHTML = ''; $('k-go').disabled = true;
       $('k-cap').textContent = 'This analysis needs the polar terrain, which covers 80°S to the south pole. Pick a south-pole site to use it.'; $('k-msg').textContent = ''; $('k-say').textContent = '';
     } else if (r && !r.pending) {
-      const pc = Math.round(r.p * 100), lvl = r.p >= 0.9 ? ['go', 'Low risk'] : r.p >= 0.6 ? ['warn', 'Moderate risk'] : ['bad', 'High risk'];
-      $('k-pill').innerHTML = cur ? '<span class="pill big ' + lvl[0] + '">' + lvl[1] + '</span>' : '<span class="pill big off">' + (r.err ? 'Server error' : 'Updating…') + '</span>';
+      const pc = Math.round(r.p * 100), lvl = r.p >= 0.9 ? [2, 'Low risk'] : r.p >= 0.6 ? [1, 'Moderate risk'] : [0, 'High risk'];
+      $('k-pill').innerHTML = cur ? badge(lvl[0], lvl[1]) : offBadge(r.err ? 'Server error' : 'Updating…');
       $('k-msg').textContent = cur ? r.total.toLocaleString('en-US') + ' landings in ' + r.seconds + ' s' : r.err || 'Simulating…';
-      $('k-p').textContent = pc + '%'; $('k-p-s').textContent = '95% interval ' + ciTxt(r.lo, r.hi) + ' · ' + r.total.toLocaleString('en-US') + ' simulated missions';
-      const mid = (r.n * r.n - 1) / 2, d = r.slope[mid] > S.sig.slope ? 0 : r.det[mid]; $('k-det').textContent = STN[d]; $('k-det-s').textContent = 'Nothing varied · slope at the aim point ' + r.slope[mid].toFixed(0) + '°';
+      $('k-p').textContent = pc + '%'; $('k-p-s').textContent = r.total.toLocaleString('en-US') + ' simulated landings inside the dashed circle. 95% interval ' + ciTxt(r.lo, r.hi) + '.';
+      const mid = (r.n * r.n - 1) / 2, d = r.slope[mid] > S.sig.slope ? 0 : r.det[mid]; $('k-det').innerHTML = stBadge(d); $('k-det-s').textContent = 'Nothing varied · slope at the aim point ' + r.slope[mid].toFixed(0) + '°';
       const better = r.best.clear;
       // The verdict further up is for one touchdown point and one landing hour. When that passes but many of the scattered
       // landings do not, say so in words, with the most common cause.
@@ -351,36 +414,38 @@ import { createTerrain } from './js/terrain.js';
       } else $('k-say').textContent = '';
       $('k-best').textContent = better ? Math.round(r.best.p * 100) + '%' : 'Keep this aim'; $('k-go').disabled = !better || !cur; $('k-go').hidden = !better;
       $('k-best-s').textContent = better ? 'Checked on a separate set of draws: 95% interval ' + ciTxt(r.best.lo, r.best.hi) + '. Move the aim ' + fmtDist(r.best.dist) + ' toward ' + r.best.bearing.toFixed(0) + '° ' + compass(r.best.bearing) + ', to ' + fmtLat(r.best.lat) + ' ' + fmtLon(r.best.lon) : 'Nowhere within ' + fmtDist(1.5 * r.Rkm) + ' is clearly better';
-      const fail = 1 - r.p; let h = '<div class="bt">Why landings fail, share of all runs</div>';
-      CAUSES.forEach((nm, j) => { if (j >= 4 && r.causes[j] < 0.005) return; h += '<div class="br"><span>' + nm + '</span><span class="bb"><i style="width:' + Math.min(100, r.causes[j] * 100).toFixed(1) + '%"></i></span><span class="bv">' + Math.round(r.causes[j] * 100) + '%</span></div>'; });
-      $('k-causes').innerHTML = fail < 0.005 ? '<div class="bt">No simulated mission failed</div>' : h;
+      // failure causes, most frequent first, each bar scaled to the share of failed runs
+      const fail = 1 - r.p, ord = CAUSES.map((nm, j) => [nm, r.causes[j]]).filter(([, v]) => v >= 0.005).sort((a, b) => b[1] - a[1]);
+      let hh = '<div class="bt">Why landings fail, share of all runs</div>';
+      ord.forEach(([nm, v]) => { hh += '<div class="br"><span>' + nm + '</span><span class="bb"><i style="width:' + Math.min(100, v / Math.max(fail, 1e-9) * 100).toFixed(1) + '%"></i></span><span class="bv">' + Math.round(v * 100) + '%</span></div>'; });
+      $('k-causes').innerHTML = fail < 0.005 || !ord.length ? '<div class="bt">No simulated mission failed</div>' : hh;
       let dh = '<div class="bt">What would help most: points gained if this were known exactly</div>';
       r.drivers.forEach(([nm, v]) => { const gain = Math.round((v - r.p) * 100); dh += '<div class="br"><span>' + nm + '</span><span class="bb gain"><i style="width:' + Math.max(0, Math.min(100, (v - r.p) * 100)).toFixed(1) + '%"></i></span><span class="bv">' + (gain >= 2 ? '+' + gain : '0') + '</span></div>'; });
       $('k-drivers').innerHTML = dh;
-      $('k-cap').textContent = 'Landing ' + fmtDT(r.landing) + '. The map is ' + fmtDist(2 * r.E) + ' across, in ' + fmtDist(r.sp) + ' cells, with the Moon\'s near side toward the top. Tap any point on it to aim there.';
-    } else { $('k-pill').innerHTML = '<span class="pill big off">' + (r && r.err ? 'Server error' : 'Simulating…') + '</span>'; $('k-cap').textContent = ''; $('k-msg').textContent = r && r.err ? r.err : 'Simulating thousands of landings on the server…'; }
-    if (!shown(cv)) return; cv.style.height = cv.clientWidth + 'px'; const { g, w } = prep(cv); g.fillStyle = '#0a0c11'; g.fillRect(0, 0, w, w);
-    if (!r || r.pending || !riskOk()) { g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText(riskOk() ? 'Simulating…' : 'South-pole sites only', w / 2, w / 2); return; }
+      $('k-cap').textContent = 'Landing ' + fmtDT(r.landing) + '. The map is ' + fmtDist(2 * r.E) + ' across, in ' + fmtDist(r.sp) + ' cells, with the Moon\'s near side toward the top. Each cell is coloured by the share of simulated missions that succeed when the lander touches down there. Tap any point on it to aim there.';
+    } else { $('k-pill').innerHTML = offBadge(r && r.err ? 'Server error' : 'Simulating…'); $('k-cap').textContent = ''; $('k-msg').textContent = r && r.err ? r.err : 'Simulating thousands of landings on the server…'; }
+    if (!shown(cv)) return; cv.style.height = cv.clientWidth + 'px'; const { g, w } = prep(cv); g.fillStyle = C.sky; g.fillRect(0, 0, w, w);
+    if (!r || r.pending || !riskOk()) { g.fillStyle = C.skyMuted; g.font = FONTS(13, 400); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(riskOk() ? 'Simulating…' : 'South-pole sites only', w / 2, w / 2); return; }
     if (!r.bg && TER.ready()) {
       const B = 150, c = document.createElement('canvas'); c.width = c.height = B; const cg = c.getContext('2d'), im = cg.createImageData(B, B), H = new Float32Array(B * B), px = 2 * r.E / B;
       for (let j = 0; j < B; j++) for (let i = 0; i < B; i++) H[j * B + i] = TER.elevXY(r.x0 + (i + 0.5 - B / 2) * px, r.y0 + (B / 2 - (j + 0.5)) * px);
-      for (let j = 0; j < B; j++) for (let i = 0; i < B; i++) { const i1 = Math.min(B - 1, i + 1), i0 = Math.max(0, i - 1), j1 = Math.min(B - 1, j + 1), j0 = Math.max(0, j - 1); const sh = Math.max(0, Math.min(1, 0.5 - 1.3 * ((H[j * B + i1] - H[j * B + i0]) + (H[j1 * B + i] - H[j0 * B + i])) / ((i1 - i0) * px * 1000))); const o = (j * B + i) * 4, v = 30 + 150 * sh; im.data[o] = v; im.data[o + 1] = v; im.data[o + 2] = v + 6; im.data[o + 3] = 255; }
+      for (let j = 0; j < B; j++) for (let i = 0; i < B; i++) { const i1 = Math.min(B - 1, i + 1), i0 = Math.max(0, i - 1), j1 = Math.min(B - 1, j + 1), j0 = Math.max(0, j - 1); const sh = Math.max(0, Math.min(1, 0.5 - 1.3 * ((H[j * B + i1] - H[j * B + i0]) + (H[j1 * B + i] - H[j0 * B + i])) / ((i1 - i0) * px * 1000))); const o = (j * B + i) * 4, v = 20 + 120 * sh; im.data[o] = v; im.data[o + 1] = v + 2; im.data[o + 2] = v + 10; im.data[o + 3] = 255; }
       cg.putImageData(im, 0, 0); r.bg = c;
     }
     if (r.bg) { g.imageSmoothingEnabled = true; g.drawImage(r.bg, 0, 0, w, w); }
-    const cwd = w / r.n; g.fillStyle = '#3fc78d';
-    for (let iy = 0; iy < r.n; iy++) for (let ix = 0; ix < r.n; ix++) { const p = r.P[iy * r.n + ix]; if (p <= 0) continue; g.globalAlpha = (cur ? 0.72 : 0.3) * p; g.fillRect(ix * cwd, iy * cwd, cwd + 0.5, cwd + 0.5); }
-    g.globalAlpha = 1; g.strokeStyle = 'rgba(240,116,98,0.9)'; g.lineWidth = 1;
+    const cwd = w / r.n;
+    for (let iy = 0; iy < r.n; iy++) for (let ix = 0; ix < r.n; ix++) { const p = r.P[iy * r.n + ix]; g.fillStyle = seqOf(Math.max(0, p)); g.globalAlpha = cur ? 0.82 : 0.35; g.fillRect(ix * cwd, iy * cwd, cwd + 0.5, cwd + 0.5); }
+    g.globalAlpha = 1; g.strokeStyle = C.bad; g.lineWidth = 1.2;
     for (let iy = 0; iy < r.n; iy++) for (let ix = 0; ix < r.n; ix++) if (r.slope[iy * r.n + ix] > S.sig.slope) { const x = ix * cwd, y = iy * cwd; g.beginPath(); g.moveTo(x + 2, y + cwd - 2); g.lineTo(x + cwd - 2, y + 2); g.stroke(); }
-    g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.setLineDash([5, 4]); g.beginPath(); g.arc(w / 2, w / 2, r.Rkm / (2 * r.E) * w, 0, 7); g.stroke(); g.setLineDash([]);
-    g.beginPath(); g.arc(w / 2, w / 2, 4, 0, 7); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = '#000'; g.lineWidth = 1; g.stroke();
-    g.font = FONTC(13); g.textBaseline = 'middle'; const label = (t, x, y, left) => { const tw = g.measureText(t).width, lx = (left && x - 10 - tw > 4) || x + 10 + tw > w - 4 ? x - 10 - tw : x + 10; g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.85)'; g.strokeText(t, lx, y); g.fillStyle = '#fff'; g.fillText(t, lx, y); };
-    label('Aim', w / 2, w / 2 - 12);
-    if (r.best.clear) { const bx = (r.best.ix + 0.5) * cwd, by = (r.best.iy + 0.5) * cwd; g.beginPath(); g.moveTo(bx, by - 7); g.lineTo(bx + 7, by); g.lineTo(bx, by + 7); g.lineTo(bx - 7, by); g.closePath(); g.fillStyle = '#3fc78d'; g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke(); label('Best aim ' + Math.round(r.best.p * 100) + '%', bx, by + (by < w / 2 ? -12 : 12), bx < w / 2); }
+    // where the lander may come down, the aim point, the better aim point, a scale bar
+    g.strokeStyle = C.skyInk; g.lineWidth = 1.5; g.setLineDash([6, 5]); g.beginPath(); g.arc(w / 2, w / 2, r.Rkm / (2 * r.E) * w, 0, 7); g.stroke(); g.setLineDash([]);
+    const cross = (x, y) => { g.lineCap = 'round'; for (const [col, lw] of [[C.sky, 5], [C.skyInk, 2]]) { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); g.moveTo(x - 8, y); g.lineTo(x + 8, y); g.moveTo(x, y - 8); g.lineTo(x, y + 8); g.stroke(); } g.lineCap = 'butt'; };
+    cross(w / 2, w / 2); skyTag(g, 'Aim point', w / 2, w / 2 + 23, w, { left: true });
+    if (r.best.clear) { const bx = (r.best.ix + 0.5) * cwd, by = (r.best.iy + 0.5) * cwd; g.beginPath(); g.moveTo(bx, by - 9); g.lineTo(bx + 9, by); g.lineTo(bx, by + 9); g.lineTo(bx - 9, by); g.closePath(); g.fillStyle = C.skyInk; g.fill(); g.strokeStyle = C.sky; g.lineWidth = 2; g.stroke(); skyTag(g, 'Better aim: ' + Math.round(r.best.p * 100) + '%', bx, by, w, { left: bx > w * 0.6 }); }
     const Ls = [0.1, 0.2, 0.5, 1, 2, 5, 10].reduce((a, b) => Math.abs(b - r.E / 2.5) < Math.abs(a - r.E / 2.5) ? b : a), lp = Ls / (2 * r.E) * w;
-    g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.moveTo(10, w - 12); g.lineTo(10 + lp, w - 12); g.stroke(); g.font = FONT(11); g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.85)'; g.strokeText(fmtDist(Ls), 10, w - 22); g.fillStyle = '#fff'; g.fillText(fmtDist(Ls), 10, w - 22);
+    g.strokeStyle = C.skyInk; g.lineWidth = 2; g.beginPath(); g.moveTo(14, w - 16); g.lineTo(14 + lp, w - 16); g.moveTo(14, w - 20); g.lineTo(14, w - 12); g.moveTo(14 + lp, w - 20); g.lineTo(14 + lp, w - 12); g.stroke();
+    g.font = FONT(12); g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.lineWidth = 4; g.strokeStyle = C.sky; g.strokeText(fmtDist(Ls), 14, w - 26); g.fillStyle = C.skyInk; g.fillText(fmtDist(Ls), 14, w - 26);
   }
-
   // ---------- plan: mission rescue (server: /rescue) ----------
   function rows() { return [S.site].concat(S.cmp.filter(id => id !== S.site.id).map(byId).filter(Boolean)).slice(0, 5); }
   function rescueNow() {
@@ -393,12 +458,12 @@ import { createTerrain } from './js/terrain.js';
     const q = rescueNow(), r = q.r;
     if (!r) { $('r-cards').innerHTML = '<div class="card"><div class="s">' + (q.err ? 'The server could not search: ' + q.err : 'Checking each site and landing time…') + '</div></div>'; $('r-tbl').innerHTML = ''; $('r-cap').textContent = ''; return; }
     const why = v => v.state === 2 ? 'Power and Earth contact hold for all ' + S.cfg.days + ' days, with the terrain margin.' : v.state === 1 ? 'Works on the modelled terrain; with the margin ' + v.reasons[0] + '.' : cap1(v.reasons.join(', and ')) + '.';
-    const card = (k, t, v) => '<div class="card s' + v.state + '"><div class="k">' + k + '</div><div class="v">' + STN[v.state] + ' · ' + fmtDate(t) + '</div><div class="s">' + why(v) + '</div></div>';
+    const card = (k, t, v) => '<div class="card s' + v.state + '"><div class="k">' + k + '</div><div class="v">' + badge(v.state, STN[v.state]) + fmtDate(t) + '</div><div class="s">' + why(v) + '</div></div>';
     $('r-cards').innerHTML = card('As planned, ' + short(S.plan.site), S.plan.t, r.plan) + card('After a ' + S.slip + '-day slip, same site', S.plan.t + S.slip * DAY, r.after_slip);
     let h = '<thead><tr><th>#</th><th>Site</th><th>Land on</th><th>Extra wait</th><th>Verdict</th><th>Lowest battery</th><th>Longest link gap</th><th>Good landing days</th><th>Why</th></tr></thead><tbody>';
     r.alternatives.slice(0, 8).forEach((a, k) => {
       const t = a.landing_time ? Date.parse(a.landing_time) : null, wait = a.extra_wait_days, nm = a.location.id ? short(byId(a.location.id) || a.location) : a.location.name;
-      h += '<tr><td>' + (k + 1) + '</td><td><button type="button" data-open="' + (a.location.id || '') + '" data-lat="' + a.location.lat + '" data-lon="' + a.location.lon + '" data-t="' + (t || S.plan.t) + '">' + nm + '</button></td><td>' + (a.state ? fmtDT(t).replace(' UTC', '') : '—') + '</td><td>' + (a.state ? (wait === 0 ? 'none' : '+' + (wait % 1 ? wait.toFixed(2) : wait) + ' d') : '—') + '</td><td><span class="st s' + a.state + '">' + STN[a.state] + '</span></td><td>' + Math.round(a.nominal.min_soc * 100) + '%</td><td>' + fmtH(a.nominal.longest_link_gap_h) + '</td><td>' + a.good_landing_days + ' of ' + (S.flex + 1) + '</td><td>' + why(a) + '</td></tr>';
+      h += '<tr><td>' + (k + 1) + '</td><td><button type="button" data-open="' + (a.location.id || '') + '" data-lat="' + a.location.lat + '" data-lon="' + a.location.lon + '" data-t="' + (t || S.plan.t) + '">' + nm + '</button></td><td>' + (a.state ? fmtDT(t).replace(' UTC', '') : '—') + '</td><td>' + (a.state ? (wait === 0 ? 'none' : '+' + (wait % 1 ? wait.toFixed(2) : wait) + ' d') : '—') + '</td><td>' + stBadge(a.state) + '</td><td>' + Math.round(a.nominal.min_soc * 100) + '%</td><td>' + fmtH(a.nominal.longest_link_gap_h) + '</td><td>' + a.good_landing_days + ' of ' + (S.flex + 1) + '</td><td>' + why(a) + '</td></tr>';
     });
     $('r-tbl').innerHTML = h + '</tbody>';
     const ok = r.alternatives.filter(a => a.state === 2).length, mg = r.alternatives.filter(a => a.state === 1).length;
@@ -406,37 +471,49 @@ import { createTerrain } from './js/terrain.js';
   }
 
   // ---------- explore: status ----------
+  // A 24-hour sparkline of clearance above the terrain into an <svg viewBox="0 0 200 30">: the dashed line is the terrain
+  function spark(id, arr, se, col) {
+    const el = $(id); if (!el) return;
+    if (!se) { el.innerHTML = ''; return; }
+    const x0 = (S.t - TAB.t0) / HOUR, pts = [];
+    for (let k = 0; k <= 24; k++) { const x = x0 + k, i = Math.floor(x), f = x - i; if (i < 0 || i + 1 >= se.n) break; pts.push(arr[i] * (1 - f) + arr[i + 1] * f); }
+    if (pts.length < 2) { el.innerHTML = ''; return; }
+    const lo = Math.min(0, ...pts), hi = Math.max(0, ...pts), sp = Math.max(1e-6, hi - lo), Y = v => (3 + (hi - v) / sp * 24).toFixed(1), X = k => (k / 24 * 200).toFixed(1);
+    el.innerHTML = '<line x1="0" x2="200" y1="' + Y(0) + '" y2="' + Y(0) + '" stroke="var(--line-2)" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>'
+      + '<polyline points="' + pts.map((v, k) => X(k) + ',' + Y(v)).join(' ') + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'
+      + '<circle cx="1.5" cy="' + Y(pts[0]) + '" r="3" fill="' + col + '"/>';
+  }
+  const stateLine = (ok, yes, no) => '<span class="state ' + (ok ? 'go' : 'bad') + '">' + ICON[ok ? 2 : 0] + (ok ? yes : no) + '</span>';
   function drawStatus() {
     const c = S.cur, lit = c.sunClr > 0, link = c.earthClr > 0;
     const pills = [];
-    pills.push(lit ? ['sun', c.sunFrac < 0.999 ? 'Sun partly visible' : 'Sunlit'] : (c.sunFrac > 0 ? ['warn', 'Sun mostly hidden'] : ['off', 'Dark']));
-    pills.push(link ? ['earth', 'Earth line of sight'] : ['off', 'No Earth line of sight']);
-    pills.push(lit && link ? ['go', 'Sun and Earth both visible'] : lit ? ['warn', 'Sun only'] : link ? ['warn', 'Earth only'] : ['off', 'Neither visible']);
-    $('pills').innerHTML = pills.map(p => '<span class="pill ' + p[0] + '">' + p[1] + '</span>').join('');
+    pills.push(lit ? ['sun', 2, c.sunFrac < 0.999 ? 'Sun partly visible' : 'Sunlit'] : (c.sunFrac > 0 ? ['warn', 1, 'Sun mostly hidden'] : ['off', 0, 'Dark']));
+    pills.push(link ? ['earth', 2, 'Earth line of sight'] : ['off', 0, 'No Earth line of sight']);
+    pills.push(lit && link ? ['go', 2, 'Sun and Earth both visible'] : lit ? ['warn', 1, 'Sun only'] : link ? ['warn', 1, 'Earth only'] : ['off', 0, 'Neither visible']);
+    $('pills').innerHTML = pills.map(p => '<span class="pill ' + p[0] + '">' + ICON[p[1]] + p[2] + '</span>').join('');
     const se = S.ev && S.ev.sun, ee = S.ev && S.ev.earth, look = 90;
     const sunTxt = lit ? 'The Sun is ' + Math.abs(c.sunClr).toFixed(2) + '° above the terrain to the ' + compass(c.sunAz) + ', with ' + Math.round(c.sunFrac * 100) + '% of its disc showing.'
       : 'The Sun is ' + Math.abs(c.sunClr).toFixed(2) + '° below the terrain horizon' + (c.sunFrac > 0 ? ', with ' + Math.round(c.sunFrac * 100) + '% of its disc still showing.' : '.');
     const earthTxt = link ? 'Earth is ' + Math.abs(c.earthClr).toFixed(2) + '° clear of the terrain.' : (c.earthEl < -c.earthRad ? 'Earth is below the horizon.' : 'Earth is hidden behind terrain.');
     $('say').textContent = sunTxt + ' ' + earthTxt;
-    $('t-sun').previousElementSibling.textContent = c.sunClr >= 0 ? 'Sun above terrain' : 'Sun below terrain';
-    $('t-earth').previousElementSibling.textContent = c.earthClr >= 0 ? 'Earth above terrain' : 'Earth below terrain';
-    $('t-sun').textContent = Math.abs(c.sunClr).toFixed(2) + '°'; $('t-sun-s').textContent = 'Elevation ' + sg(c.sunEl, 2) + ' · bearing ' + c.sunAz.toFixed(0) + '° ' + compass(c.sunAz);
-    $('t-earth').textContent = Math.abs(c.earthClr).toFixed(2) + '°'; $('t-earth-s').textContent = 'Elevation ' + sg(c.earthEl, 2) + ' · bearing ' + c.earthAz.toFixed(0) + '° ' + compass(c.earthAz);
-    $('t-sset-k').textContent = lit ? 'Sunset in' : 'Sunrise in'; $('t-sset-x').textContent = lit ? 'After sunset: no solar power, battery only' : 'Until sunrise: no solar power, battery only';
+    // at a glance: signed clearance in mono, a state line with a tick or cross, and the next 24 hours as a sparkline
+    const ser0 = ser(S.site);
+    $('t-sun').textContent = sg(c.sunClr, 2).replace('+', ''); $('t-sun-st').innerHTML = stateLine(lit, c.sunFrac < 0.999 ? 'Partly in sunlight' : 'In sunlight', c.sunFrac > 0 ? 'Mostly behind terrain' : 'Behind terrain');
+    $('t-earth').textContent = sg(c.earthClr, 2).replace('+', ''); $('t-earth-st').innerHTML = stateLine(link, 'In view', c.earthEl < -c.earthRad ? 'Below the horizon' : 'Behind terrain');
+    spark('t-sun-sp', ser0 && ser0.sunClr, ser0, 'var(--sun)'); spark('t-earth-sp', ser0 && ser0.earthClr, ser0, 'var(--earth)');
+    $('t-sun-s').textContent = 'Next 24 h. Dashed line is the terrain.'; $('t-earth-s').textContent = 'Next 24 h. Dashed line is the terrain.';
+    $('t-sset-k').textContent = lit ? 'Sunset in' : 'Sunrise in'; $('t-sset-x').textContent = lit ? 'After sunset: battery only.' : 'Until then: battery only.';
     $('t-sset').textContent = !S.ev ? '…' : se ? fmtDur(se.t - S.t) : '> ' + look + ' d'; $('t-sset-s').textContent = !S.ev ? '' : se ? fmtDT(se.t) : (lit ? 'No sunset in the next ' + look + ' days' : 'No sunrise in the next ' + look + ' days');
-    $('t-eset-k').textContent = link ? 'Earthset in' : 'Earthrise in'; $('t-eset-x').textContent = link ? 'After Earthset: no direct contact with Earth' : 'Until Earthrise: no direct contact with Earth';
+    $('t-eset-k').textContent = link ? 'Earthset in' : 'Earthrise in'; $('t-eset-x').textContent = link ? 'After Earthset: no direct contact.' : 'Until then: no direct contact.';
     $('t-eset').textContent = !S.ev ? '…' : ee ? fmtDur(ee.t - S.t) : (link ? 'Never sets' : 'Never rises'); $('t-eset-s').textContent = !S.ev ? '' : ee ? fmtDT(ee.t) : 'Within the next ' + look + ' days';
-    const flat = c.sunFrac * Math.max(0, Math.sin(c.sunEl * D2R)), w = S.cfg.peakW * c.irr * c.sunFrac * arrayShape(S.cfg, c.sunEl, c.sunAz);
-    const gP = $('g-power').parentElement, gL = $('g-link').parentElement;
-    $('g-power').textContent = Math.round(w) + ' W'; $('g-power-s').textContent = Math.round(c.sunFrac * 100) + '% of the Sun visible · ' + S.cfg.peakW + ' W ' + ARRN[S.cfg.arrayType] + ' array';
-    gP.classList.toggle('ok', w > 1); gP.classList.toggle('no', !(w > 1));
+    const flat = c.sunFrac * Math.max(0, Math.sin(c.sunEl * D2R)), w = S.cfg.peakW * c.irr * c.sunFrac * arrayShape(S.cfg, c.sunEl, c.sunAz), wp = S.cfg.peakW > 0 ? Math.max(0, Math.min(100, w / S.cfg.peakW * 100)) : 0;
+    $('g-power').textContent = Math.round(w) + ' W'; $('g-power-m').style.width = wp.toFixed(1) + '%';
+    $('g-power-s').innerHTML = '<span class="num">' + Math.round(wp) + '%</span> of the ' + ARRN[S.cfg.arrayType] + ' array\'s ' + S.cfg.peakW + ' W peak';
     const dsnUp = (S.dsn || []).filter(d => d.in_view !== undefined ? d.in_view : d.elevation_deg > 10);
     const ct = contactNext24(S.site);
-    $('g-link').textContent = ct ? Math.round(ct.pct) + '%' : '…';
-    $('g-link-s').textContent = 'Now: ' + (!link ? (c.earthEl < -c.earthRad ? 'Earth below the horizon' : 'Earth behind the hills')
-      : !S.dsn ? 'Earth in view' : dsnUp.length ? 'via ' + dsnUp.map(d => d.name).join(', ') : 'Earth in view, no DSN dish can see the Moon')
-      + (ct && ct.pct > 0 && ct.pct < 100 ? ' · ' + ct.hours + ' of 24 h' : '');
-    gL.classList.toggle('ok', !!ct && ct.pct >= 50); gL.classList.toggle('no', !!ct && ct.pct < 50);
+    $('g-link').textContent = ct ? fmtH(ct.hours) : '…'; $('g-link-m').style.width = ct ? ct.pct.toFixed(1) + '%' : '0';
+    $('g-link-s').innerHTML = (ct ? '<span class="num">' + Math.round(ct.pct) + '%</span> of the day, Earth in view' + (S.cfg.useDsn ? ' and a DSN dish up' : '') + '. ' : '')
+      + 'Now: ' + (!link ? (c.earthEl < -c.earthRad ? 'Earth below the horizon' : 'Earth behind the hills') : !S.dsn ? 'Earth in view' : dsnUp.length ? 'via ' + dsnUp.map(d => d.name).join(', ') : 'no DSN dish can see the Moon') + '.';
     $('kv-power').textContent = 'Sun-tracking array ' + Math.round(c.sunFrac * 100) + '%, flat array ' + Math.round(flat * 100) + '% of full output. Your ' + ARRN[S.cfg.arrayType] + ' array would give about ' + Math.round(w) + ' W.';
     $('kv-los').textContent = link ? 'Yes, Earth\'s centre clears the terrain by ' + c.earthClr.toFixed(2) + '°.' : 'No.';
     if (!S.dsn) $('kv-dsn').textContent = 'Checking the Deep Space Network…';
@@ -469,30 +546,39 @@ import { createTerrain } from './js/terrain.js';
     const yMax = hi < 9 ? 10 : hi < 27 ? 30 : 90;
     return { yMin: Math.min(yMax === 90 ? -12 : yMax === 30 ? -6 : -4, Math.floor(m.lo) - 1), yMax };
   }
+  const COMPASS_WORD = { N: 'north', NE: 'north-east', E: 'east', SE: 'south-east', S: 'south', SW: 'south-west', W: 'west', NW: 'north-west' };
+  // The horizon panorama. Always a night scene: the --sky colours in both themes. Paths are solid where the body clears
+  // the terrain and dotted, half strength, where the hills hide it; each body carries a tag with its clearance.
   function paintSky(g, w, h, site, c, range) {
-    const padL = 34, padR = 8, padT = 10, padB = 22, pw = w - padL - padR, ph = h - padT - padB;
+    const mini = w < 520 || h < 230, padL = mini ? 40 : 52, padR = 14, padT = 16, padB = mini ? 26 : 34, pw = w - padL - padR, ph = h - padT - padB;
     const se = ser(site), mm = siteMask(site);
-    g.fillStyle = '#0a0c11'; g.fillRect(0, 0, w, h);
-    if (!se || !c) { g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = FONT(13); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('Loading the horizon…', w / 2, h / 2); return; }
+    g.fillStyle = C.sky; g.fillRect(0, 0, w, h);
+    if (!se || !c) { g.fillStyle = C.skyMuted; g.font = FONTS(13, 400); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('Loading the horizon…', w / 2, h / 2); return; }
     const { yMin, yMax } = range || skyRange(site), m = mm.mask;
     const X = az => padL + az / 360 * pw, Y = el => padT + (yMax - el) / (yMax - yMin) * ph;
-    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    g.fillStyle = 'rgba(255,255,255,0.5)'; for (let i = 0; i < 70; i++) { const x = padL + rnd() * pw, y = padT + rnd() * ph * 0.9, r = rnd() < 0.15 ? 1.1 : 0.6; g.fillRect(x, y, r, r); }
-    g.font = FONT(11); g.textBaseline = 'middle'; g.textAlign = 'right';
+    g.font = FONT(12); g.textBaseline = 'middle'; g.textAlign = 'right';
     const stepY = yMax === 90 ? 15 : yMax === 30 ? 5 : 2;
     for (let e = Math.ceil(yMin / stepY) * stepY; e <= yMax; e += stepY) {
-      g.strokeStyle = e === 0 ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.08)'; g.setLineDash(e === 0 ? [4, 4] : []);
-      g.beginPath(); g.moveTo(padL, Y(e)); g.lineTo(w - padR, Y(e)); g.stroke();
-      g.fillStyle = 'rgba(255,255,255,0.6)'; g.fillText((e > 0 ? '+' : '') + e + '°', padL - 5, Y(e));
+      if (Y(e) < padT - 1) continue;
+      g.strokeStyle = C.skyMuted; g.globalAlpha = e === 0 ? 0.5 : 0.14; g.setLineDash(e === 0 ? [4, 4] : []); g.lineWidth = 1;
+      g.beginPath(); g.moveTo(padL, Y(e)); g.lineTo(w - padR, Y(e)); g.stroke(); g.globalAlpha = 1;
+      g.fillStyle = C.skyMuted; g.fillText((e > 0 ? '+' : e < 0 ? '−' : '') + Math.abs(e) + '°', padL - 8, Y(e));
     }
     g.setLineDash([]); g.textAlign = 'center'; g.textBaseline = 'alphabetic';
-    [['N', 0], ['E', 90], ['S', 180], ['W', 270], ['N', 360]].forEach(([t, a]) => { g.fillStyle = 'rgba(255,255,255,0.6)'; g.fillText(t, Math.max(padL + 5, Math.min(w - padR - 5, X(a))), h - 7); g.strokeStyle = 'rgba(255,255,255,0.08)'; g.beginPath(); g.moveTo(X(a), padT); g.lineTo(X(a), padT + ph); g.stroke(); });
+    const pts = mini ? [['N', 0], ['E', 90], ['S', 180], ['W', 270], ['N', 360]] : [['N', 0], ['NE', 45], ['E', 90], ['SE', 135], ['S', 180], ['SW', 225], ['W', 270], ['NW', 315], ['N', 360]];
+    pts.forEach(([t, a]) => { g.strokeStyle = C.skyMuted; g.globalAlpha = 0.1; g.beginPath(); g.moveTo(X(a), padT); g.lineTo(X(a), padT + ph); g.stroke(); g.globalAlpha = 1; g.fillStyle = t.length === 1 ? C.skyInk : C.skyMuted; g.fillText(t, Math.max(padL + 6, Math.min(w - padR - 6, X(a))), h - (mini ? 8 : 12)); });
     g.save(); g.beginPath(); g.rect(padL, padT, pw, ph); g.clip();
+    const M = a => maskAt(m, a);
+    // terrain: a solid fill with a bright crest, so the horizon is the strongest edge in the picture
+    g.fillStyle = C.terrain; g.beginPath(); g.moveTo(X(0), padT + ph + 2); for (let a = 0; a <= 360; a += 0.5) g.lineTo(X(a), Y(M(a))); g.lineTo(X(360), padT + ph + 2); g.closePath(); g.fill();
+    g.strokeStyle = C.crest; g.lineWidth = 1.5; g.lineJoin = 'round'; g.beginPath(); for (let a = 0; a <= 360; a += 0.5) { const x = X(a), y = Y(M(a)); a ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
+    if (!mini && Y(0) > padT + 10 && Y(0) < padT + ph - 4) { g.font = FONT(12); g.fillStyle = C.skyMuted; g.textAlign = 'left'; g.textBaseline = 'bottom'; g.fillText('level horizon', padL + 6, Y(0) - 4); }
     const x0 = (S.t - TAB.t0) / HOUR, nT = Math.round(SYNODIC * 24);
     const i0 = Math.max(0, Math.ceil(x0)), i1 = Math.min(se.n - 1, i0 + nT);
     function track(az, el, clr, col) {
+      g.lineCap = 'round';
       for (const vis of [false, true]) {
-        g.strokeStyle = col; g.globalAlpha = vis ? 0.9 : 0.28; g.lineWidth = vis ? 1.6 : 1; g.setLineDash(vis ? [] : [2, 3]); g.beginPath();
+        g.strokeStyle = col; g.globalAlpha = vis ? 1 : 0.5; g.lineWidth = vis ? 2 : 1.5; g.setLineDash(vis ? [] : [2, 5]); g.beginPath();
         let pen = false;
         for (let i = i0; i <= i1; i++) {
           const ok = (clr[i] > 0) === vis && (i === i0 || Math.abs(az[i] - az[i - 1]) < 180);
@@ -502,80 +588,101 @@ import { createTerrain } from './js/terrain.js';
         }
         g.stroke();
       }
-      g.setLineDash([]); g.globalAlpha = 1; g.fillStyle = col; g.font = FONT(10); g.textAlign = 'left';
-      for (let d = 1, i = i0 + 24; i <= i1; i += 24, d++) {
-        g.globalAlpha = clr[i] > 0 ? 0.95 : 0.4; g.beginPath(); g.arc(X(az[i]), Y(el[i]), 1.8, 0, 7); g.fill();
-        if (d % 7 === 0 && d < 28) g.fillText('+' + d + 'd', X(az[i]) + 4, Y(el[i]) - 5);
+      g.setLineDash([]); g.globalAlpha = 1; g.lineCap = 'butt';
+      // ringed day markers, labelled every 7 days
+      g.font = FONT(12); g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      for (let d = 7, i = i0 + 7 * 24; i <= i1 && d < 28; i += 7 * 24, d += 7) {
+        const x = X(az[i]), y = Y(el[i]); g.beginPath(); g.arc(x, y, 3, 0, 7); g.fillStyle = C.sky; g.fill(); g.strokeStyle = col; g.lineWidth = 1.5; g.stroke();
+        if (!mini) { g.fillStyle = col; g.fillText('+' + d + ' d', x, y - 10); }
       }
-      g.globalAlpha = 1;
     }
-    track(se.earthAz, se.earthEl, se.earthClr, '#62a0f2');
-    track(se.sunAz, se.sunEl, se.sunClr, '#f0b03a');
-    function body(az, el, kind, visible, clr) {
-      const x = X(az), y = Math.max(padT + 6, Math.min(padT + ph - 6, Y(el)));
-      if (kind === 'sun') {
-        if (visible) { const gr = g.createRadialGradient(x, y, 2, x, y, 26); gr.addColorStop(0, 'rgba(255,214,120,0.85)'); gr.addColorStop(1, 'rgba(255,190,60,0)'); g.fillStyle = gr; g.beginPath(); g.arc(x, y, 26, 0, 7); g.fill(); }
-        g.fillStyle = visible ? '#fff3cf' : 'rgba(240,176,58,0.35)'; g.beginPath(); g.arc(x, y, 6, 0, 7); g.fill();
-        g.strokeStyle = '#f0b03a'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 6, 0, 7); g.stroke();
-      } else {
-        g.fillStyle = visible ? '#3f7fd8' : 'rgba(98,160,242,0.3)'; g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill();
-        if (visible) { g.fillStyle = 'rgba(255,255,255,0.75)'; g.beginPath(); g.arc(x - 2, y - 2, 2.6, 0, 7); g.fill(); }
-        g.strokeStyle = '#9cc4ff'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 7, 0, 7); g.stroke();
-      }
-      const mini = w < 520, lab = (kind === 'sun' ? 'Sun ' : 'Earth ') + Math.abs(clr).toFixed(1) + '° ' + (clr > 0 ? 'above' : 'below') + (mini ? '' : ' terrain'); g.font = FONTC(13); const tw = g.measureText(lab).width;
-      const lx = x + 11 + tw > w - padR ? x - 11 - tw : x + 11; g.textAlign = 'left'; g.fillStyle = kind === 'sun' ? '#ffd98a' : '#b9d6ff';
-      let ly = mini && kind === 'sun' ? Math.min(padT + ph - 8, y + 15) : Math.max(padT + 12, y - 9);
-      // keep the two labels apart: if this one would overlap the label drawn first, put it below its body instead
-      const o = labels[0];
-      if (o && lx < o.x + o.w + 6 && lx + tw + 6 > o.x && Math.abs(ly - o.y) < 15) ly = Math.min(padT + ph - 6, Math.max(y + 17, o.y + 16));
-      labels.push({ x: lx, y: ly, w: tw });
-      g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.75)'; g.strokeText(lab, lx, ly); g.fillText(lab, lx, ly);
+    track(se.earthAz, se.earthEl, se.earthClr, C.skyEarth);
+    track(se.sunAz, se.sunEl, se.sunClr, C.skySun);
+    const bodies = [];
+    function body(az, el, kind, visible) {
+      const x = X(az), y = Math.max(padT + 8, Math.min(padT + ph - 8, Y(el))), col = kind === 'sun' ? C.skySun : C.skyEarth;
+      g.globalAlpha = visible ? 1 : 0.45;
+      if (kind === 'sun') { g.fillStyle = col; g.globalAlpha *= 0.12; g.beginPath(); g.arc(x, y, 20, 0, 7); g.fill(); g.globalAlpha = (visible ? 1 : 0.45) * 0.22; g.beginPath(); g.arc(x, y, 12, 0, 7); g.fill(); g.globalAlpha = visible ? 1 : 0.45; g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill(); }
+      else { g.fillStyle = col; g.beginPath(); g.arc(x, y, 8, 0, 7); g.fill(); g.fillStyle = C.sky; g.globalAlpha *= 0.45; g.beginPath(); g.moveTo(x - 8, y); g.arc(x, y, 8, Math.PI, 0, true); g.closePath(); g.fill(); }
+      if (!visible) { g.globalAlpha = 1; g.strokeStyle = col; g.lineWidth = 1.5; g.setLineDash([2, 3]); g.beginPath(); g.arc(x, y, 11, 0, 7); g.stroke(); g.setLineDash([]); }
+      g.globalAlpha = 1; bodies.push({ x, y, kind, col });
     }
-    const labels = [];
-    const M = a => maskAt(m, a);
-    const gr = g.createLinearGradient(0, Y(Math.min(yMax, 6)), 0, padT + ph); gr.addColorStop(0, 'rgba(126,121,113,0.96)'); gr.addColorStop(1, 'rgba(58,56,53,0.96)');
-    g.fillStyle = gr; g.beginPath(); g.moveTo(X(0), padT + ph + 2);
-    for (let a = 0; a <= 360; a += 0.5) g.lineTo(X(a), Y(M(a)));
-    g.lineTo(X(360), padT + ph + 2); g.closePath(); g.fill();
-    g.strokeStyle = 'rgba(214,208,196,0.9)'; g.lineWidth = 1; g.beginPath(); for (let a = 0; a <= 360; a += 0.5) { const x = X(a), y = Y(M(a)); a ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
-    body(c.earthAz, c.earthEl, 'earth', c.earthClr > 0, c.earthClr);
-    body(c.sunAz, c.sunEl, 'sun', c.sunClr > 0, c.sunClr);
+    body(c.earthAz, c.earthEl, 'earth', c.earthClr > 0);
+    body(c.sunAz, c.sunEl, 'sun', c.sunClr > 0);
     g.restore();
+    // tags with the name and the clearance, kept inside the frame and apart from each other
+    const boxes = [];
+    bodies.slice().reverse().forEach(b => {
+      const clr = b.kind === 'sun' ? c.sunClr : c.earthClr, name = b.kind === 'sun' ? 'Sun' : 'Earth';
+      const val = Math.abs(clr).toFixed(1) + '° ' + (clr > 0 ? 'above' : 'below') + ' terrain';
+      g.font = FONT(12); const tw = mini ? labW(g, name, 12) + g.measureText(' ' + Math.abs(clr).toFixed(1) + '°').width + 20 : Math.max(labW(g, name, 12), g.measureText(val).width) + 20, th = mini ? 24 : 40;
+      let bx = b.x + 18, by = b.y - th - 10;
+      if (bx + tw > w - 4) bx = b.x - 18 - tw; if (bx < 4) bx = 4;
+      if (by < 4) by = b.y + 16; if (by + th > h - 4) by = h - th - 4;
+      for (const o of boxes) if (bx < o.x + o.w + 6 && bx + tw + 6 > o.x && by < o.y + o.h + 6 && by + th + 6 > o.y) by = o.y + o.h + 6 + th < h - 4 ? o.y + o.h + 6 : Math.max(4, o.y - th - 6);
+      boxes.push({ x: bx, y: by, w: tw, h: th });
+      g.fillStyle = C.sky; g.globalAlpha = 0.88; rbar(g, bx, by, tw, th, 4); g.globalAlpha = 0.7; g.strokeStyle = b.col; g.lineWidth = 1; g.beginPath(); g.roundRect ? g.roundRect(bx + 0.5, by + 0.5, tw - 1, th - 1, 4) : g.rect(bx, by, tw, th); g.stroke(); g.globalAlpha = 1;
+      g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillStyle = b.col;
+      if (mini) { labTxt(g, name, bx + 10, by + 16, 12); const nw = labW(g, name, 12); g.font = FONT(12); g.fillStyle = C.skyInk; g.fillText(' ' + (clr > 0 ? '' : '−') + Math.abs(clr).toFixed(1) + '°', bx + 10 + nw, by + 16); }
+      else { labTxt(g, name, bx + 10, by + 16, 12); g.font = FONT(12); g.fillStyle = C.skyInk; g.fillText(val, bx + 10, by + 32); }
+    });
   }
   function drawSky() {
     const cv = $('sky'); if (!shown(cv)) return; const { g, w, h } = prep(cv);
     paintSky(g, w, h, S.site, S.cur);
+    const c = S.cur, b = v => '<b>' + Math.abs(v).toFixed(1) + '°</b>';
+    const sunW = c.sunClr > 0 ? 'The Sun is ' + b(c.sunClr) + ' clear of the hills to the ' + COMPASS_WORD[compass(c.sunAz)] + '.' : 'The Sun is ' + b(c.sunClr) + ' behind the hills to the ' + COMPASS_WORD[compass(c.sunAz)] + '.';
+    const earthW = c.earthClr > 0 ? 'Earth is ' + b(c.earthClr) + ' clear, ' + (c.earthEl < 10 ? 'low in the ' : 'in the ') + COMPASS_WORD[compass(c.earthAz)] + '.' : 'Earth is ' + b(c.earthClr) + ' behind the terrain, to the ' + COMPASS_WORD[compass(c.earthAz)] + '.';
+    $('skysay').innerHTML = sunW + ' ' + earthW;
     $('skycap').textContent = Math.abs(S.site.lat) > 80
-      ? 'A full turn of the horizon, with height above a level horizon on the vertical axis. Near the poles the Sun never climbs more than a degree or two, so one ridge decides whether a lander has power. Earth does not rise and set daily here: it drifts in a small loop as the Moon wobbles.'
-      : 'A full turn of the horizon, with height above a level horizon on the vertical axis. Away from the poles the Sun crosses the sky once per lunar day, about two weeks of light then two weeks of night, while Earth stays almost fixed in the sky.';
+      ? 'A full turn of the horizon. Height above a level horizon runs up the side. A path is solid where the body clears the terrain and dotted where the hills hide it. Near the poles the Sun never climbs more than a degree or two, so one ridge decides whether a lander has power, and Earth drifts in a small loop as the Moon wobbles.'
+      : 'A full turn of the horizon. Height above a level horizon runs up the side. A path is solid where the body clears the terrain and dotted where the hills hide it. Away from the poles the Sun crosses the sky once per lunar day, about two weeks of light then two weeks of night, while Earth stays almost fixed.';
   }
-
   // ---------- strips shared by timeline and compare ----------
+  // a yes/no lane: rounded runs on a rounded track
   function strip(g, pred, i0, i1, x, y, w, h, col) {
     g.fillStyle = col; const n = i1 - i0; let s = -1;
     for (let i = i0; i <= i1; i++) {
       const on = i < i1 && pred(i);
-      if (on && s < 0) s = i; if (!on && s >= 0) { const xa = x + (s - i0) / n * w, xb = x + (i - i0) / n * w; g.fillRect(xa, y, Math.max(0.6, xb - xa), h); s = -1; }
+      if (on && s < 0) s = i; if (!on && s >= 0) { const xa = x + (s - i0) / n * w, xb = x + (i - i0) / n * w; rbar(g, xa, y, Math.max(1.5, xb - xa), h, 3); s = -1; }
     }
   }
-  function timeAxis(g, x, y, w, t0, span) {
-    g.font = FONT(11); g.fillStyle = C.muted; g.textBaseline = 'top'; g.strokeStyle = C.line; g.lineWidth = 1;
+  const shareOf = (pred, i0, i1) => { let k = 0, n = 0; for (let i = i0; i < i1; i++) { n++; if (pred(i)) k++; } return n ? 100 * k / n : 0; };
+  // the ticks along a time axis, for the labels and for the gridlines through the chart
+  function timeTicks(t0, span) {
     const ticks = [];
     if (span <= 1) for (let k = 0; k <= 24; k += 3) { const t = t0 + k * HOUR; ticks.push([t, p2(new Date(t).getUTCHours()) + ':00']); }
-    else if (span <= 7) { for (let k = 0; k <= span * 24; k += 6) { const t = t0 + k * HOUR, hh = new Date(t).getUTCHours(); ticks.push([t, hh === 0 ? fmtDM(t) : p2(hh) + 'h']); } }
+    else if (span <= 7) for (let d = 0; d <= span; d++) ticks.push([t0 + d * DAY, fmtDM(t0 + d * DAY)]);
     else if (span <= 30) for (let d = 0; d <= span; d += 5) ticks.push([t0 + d * DAY, fmtDM(t0 + d * DAY)]);
     else if (span <= 90) for (let d = 0; d <= span; d += 15) ticks.push([t0 + d * DAY, fmtDM(t0 + d * DAY)]);
     else { const d = new Date(t0); let yy = d.getUTCFullYear(), mm = d.getUTCMonth() + 1; for (let k = 0; k < 13; k++, mm++) { if (mm > 11) { mm = 0; yy++; } const t = Date.UTC(yy, mm, 1); if (t <= t0 + span * DAY) ticks.push([t, MON[mm] + (mm === 0 ? ' ’' + String(yy).slice(2) : '')]); } }
+    return ticks;
+  }
+  function timeAxis(g, x, y, w, t0, span) {
+    g.font = FONT(12); g.fillStyle = C.muted; g.textBaseline = 'top'; g.strokeStyle = C.line; g.lineWidth = 1;
     let lastR = -1e9;
-    ticks.forEach(([t, lab]) => {
+    timeTicks(t0, span).forEach(([t, lab]) => {
       const px = x + (t - t0) / (span * DAY) * w; g.beginPath(); g.moveTo(px, y); g.lineTo(px, y + 4); g.stroke();
-      const tw = g.measureText(lab).width; let lx = px - tw / 2; lx = Math.max(x, Math.min(x + w - tw, lx));
-      if (lx > lastR + 6) { g.textAlign = 'left'; g.fillText(lab, lx, y + 6); lastR = lx + tw; }
+      const tw = g.measureText(lab).width; let lx = px + 4; lx = Math.max(x, Math.min(x + w - tw, lx));
+      if (lx > lastR + 8) { g.textAlign = 'left'; g.fillText(lab, lx, y + 7); lastR = lx + tw; }
     });
   }
-  function scrub(cv, padL, padR, setter) {
+  function gridX(g, x, w, t0, span, yTop, yBot) {
+    g.strokeStyle = C.line; g.globalAlpha = 0.6; g.lineWidth = 1;
+    timeTicks(t0, span).forEach(([t]) => { const px = Math.round(x + (t - t0) / (span * DAY) * w) + 0.5; g.beginPath(); g.moveTo(px, yTop); g.lineTo(px, yBot); g.stroke(); });
+    g.globalAlpha = 1;
+  }
+  // the clock: a 1.5 px line with a date-and-time tag at the top, the same on every time chart
+  function clockAt(g, cx, yTop, yBot, x0, x1) {
+    g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx, yTop + 26); g.lineTo(cx, yBot); g.stroke();
+    const d = new Date(S.t), t = fmtDM(S.t) + ' ' + p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes());
+    g.font = FONT(12); const tw = g.measureText(t).width + 20, lx = Math.max(x0, Math.min(x1 - tw, cx - tw / 2));
+    pillTag(g, t, lx, yTop, C.ink, C.bg);
+  }
+  // pad is read on every event: the charts set their margins from their width when they draw
+  function scrub(cv, pad, setter) {
     let down = false;
-    const at = e => { const r = cv.getBoundingClientRect(), f = Math.max(0, Math.min(1, (e.clientX - r.left - padL) / (r.width - padL - padR))); setter(S.anchor + f * S.span * DAY); };
+    const at = e => { const r = cv.getBoundingClientRect(), f = Math.max(0, Math.min(1, (e.clientX - r.left - pad.l) / (r.width - pad.l - pad.r))); setter(S.anchor + f * S.span * DAY); };
     cv.addEventListener('pointerdown', e => { down = true; S.scrubbing = true; try { cv.setPointerCapture(e.pointerId); } catch (_) {} at(e); });
     cv.addEventListener('pointermove', e => { if (down) at(e); });
     ['pointerup', 'pointercancel'].forEach(n => cv.addEventListener(n, () => { if (down) { down = false; S.scrubbing = false; renderSoon(); } }));
@@ -589,54 +696,92 @@ import { createTerrain } from './js/terrain.js';
   }
 
   // ---------- explore: timeline ----------
-  const TLP = { l: 72, r: 10 };
+  const TLP = { l: 150, r: 56 };
+  // the longest run of hours where pred holds, inside [i0, i1): its start and end times
+  function longestRun(pred, i0, i1) { let best = [0, 0], s = -1; for (let i = i0; i <= i1; i++) { const on = i < i1 && pred(i); if (on && s < 0) s = i; if (!on && s >= 0) { if (i - s > best[1] - best[0]) best = [s, i]; s = -1; } } return best[1] > best[0] ? [TAB.t0 + best[0] * HOUR, TAB.t0 + best[1] * HOUR] : null; }
+  const durTxt = ms => ms > 0 ? fmtDur(ms) : '0 h';
+  const rangeTxt = r => { if (!r) return 'none in the window'; const a = new Date(r[0]), b = new Date(r[1]); return a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() !== b.getUTCDate() ? a.getUTCDate() + ' to ' + fmtDM(r[1]) : fmtDM(r[0]) + ' to ' + fmtDM(r[1]); };
   function drawTimeline() {
     const cv = $('tl'); if (!shown(cv)) return; const se = ser(S.site); if (!se) { waiting(cv); return; } const { g, w, h } = prep(cv);
-    const a0 = idx(S.anchor), nW = Math.min(S.span * 24, se.n - 1 - a0), px = TLP.l, pw = w - TLP.l - TLP.r, top = 8, ch = h - 128, sy = top + ch + 10, st = nW > 3000 ? 2 : 1;
+    const narrow = w < 600; TLP.l = narrow ? 92 : 150; TLP.r = narrow ? 44 : 56;
+    const a0 = idx(S.anchor), nW = Math.min(S.span * 24, se.n - 1 - a0), px = TLP.l, pw = w - TLP.l - TLP.r, top = 34, ln = 14, lg = 10, nl = 5, lanesH = nl * ln + (nl - 1) * lg;
+    const ch = h - top - 22 - lanesH - 34, sy = top + ch + 22, yb = sy + lanesH, st = nW > 3000 ? 2 : 1;
     let lim = 1; for (let i = 0; i <= nW; i += st) lim = Math.max(lim, Math.abs(se.sunClr[a0 + i]), Math.abs(se.earthClr[a0 + i]));
     lim = lim <= 4 ? Math.ceil(lim) : lim <= 12 ? Math.ceil(lim / 2) * 2 : lim <= 30 ? 30 : lim <= 60 ? 60 : 90;
     const X = i => px + i / (S.span * 24) * pw, Y = v => top + (lim - Math.max(-lim, Math.min(lim, v))) / (2 * lim) * ch;
-    g.font = FONT(11); g.textBaseline = 'middle'; g.textAlign = 'right';
-    const sv = lim <= 4 ? 1 : lim / 2;
-    for (let v = -lim; v <= lim + 1e-9; v += sv) { g.strokeStyle = C.line; g.globalAlpha = v === 0 ? 1 : 0.5; g.beginPath(); g.moveTo(px, Y(v)); g.lineTo(px + pw, Y(v)); g.stroke(); g.globalAlpha = 1; g.fillStyle = C.muted; g.fillText((v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '°', px - 6, Y(v)); }
-    if (S.cfg.margin > 0) { g.fillStyle = C.muted; g.globalAlpha = 0.22; g.fillRect(px, Y(S.cfg.margin), pw, Math.max(1, Y(0) - Y(S.cfg.margin))); g.globalAlpha = 1; }
-    g.strokeStyle = C.muted; g.lineWidth = 1.2; g.beginPath(); g.moveTo(px, Y(0)); g.lineTo(px + pw, Y(0)); g.stroke();
-    function curve(a, col) {
-      g.beginPath(); g.moveTo(X(0), Y(0)); for (let i = 0; i <= nW; i += st) g.lineTo(X(i), Y(Math.max(0, a[a0 + i]))); g.lineTo(X(nW), Y(0)); g.closePath(); g.fillStyle = col; g.globalAlpha = 0.16; g.fill(); g.globalAlpha = 1;
-      g.beginPath(); for (let i = 0; i <= nW; i += st) { i ? g.lineTo(X(i), Y(a[a0 + i])) : g.moveTo(X(i), Y(a[a0 + i])); } g.strokeStyle = col; g.lineWidth = 1.8; g.lineJoin = 'round'; g.stroke();
-    }
+    // below the zero line is "behind terrain"; the band just above it is the terrain margin
+    g.fillStyle = C.cell; g.globalAlpha = 0.55; g.fillRect(px, Y(0), pw, Y(-lim) - Y(0)); g.globalAlpha = 1;
+    if (S.cfg.margin > 0) { g.fillStyle = C.cell; g.globalAlpha = 0.3; g.fillRect(px, Y(S.cfg.margin), pw, Math.max(1, Y(0) - Y(S.cfg.margin))); g.globalAlpha = 1; }
+    gridX(g, px, pw, S.anchor, S.span, top, yb);
+    g.font = FONT(12); g.textBaseline = 'middle'; g.textAlign = 'right';
+    const sv = lim <= 2 ? 1 : lim <= 4 ? 1 : lim / 2;
+    for (let v = -lim; v <= lim + 1e-9; v += sv) { g.strokeStyle = v === 0 ? C.line2 : C.line; g.lineWidth = 1; g.beginPath(); g.moveTo(px, Math.round(Y(v)) + 0.5); g.lineTo(px + pw, Math.round(Y(v)) + 0.5); g.stroke(); g.fillStyle = C.muted; g.fillText((v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '°', px - 8, Y(v)); }
+    if (!narrow) { g.fillStyle = C.muted; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; labTxt(g, 'Height above', 0, top + 12, 12); labTxt(g, 'terrain', 0, top + 28, 12); }
+    g.font = FONT(12); g.fillStyle = C.muted; g.textAlign = 'right'; g.textBaseline = 'alphabetic'; if (Y(-lim) - Y(0) > 30) g.fillText('shaded: behind terrain', px + pw - 6, Y(-lim) - 8);
+    const curve = (a, col) => {
+      g.beginPath(); g.moveTo(X(0), Y(0)); for (let i = 0; i <= nW; i += st) g.lineTo(X(i), Y(Math.max(0, a[a0 + i]))); g.lineTo(X(nW), Y(0)); g.closePath(); g.fillStyle = col; g.globalAlpha = 0.14; g.fill(); g.globalAlpha = 1;
+      g.beginPath(); for (let i = 0; i <= nW; i += st) { i ? g.lineTo(X(i), Y(a[a0 + i])) : g.moveTo(X(i), Y(a[a0 + i])); } g.strokeStyle = col; g.lineWidth = 2; g.lineJoin = 'round'; g.stroke();
+    };
     curve(se.earthClr, C.earth); curve(se.sunClr, C.sun);
-    const dsnOk = i => !se.dsnEl || se.dsnEl[i] > 10;
-    [['Sun', C.sun, i => se.sunClr[i] > 0], ['Earth', C.earth, i => se.earthClr[i] > 0], ['DSN', C.muted, dsnOk], ['Contact', C.earth, i => se.earthClr[i] > 0 && dsnOk(i)], ['Sun+cont.', C.go, i => se.sunClr[i] > 0 && se.earthClr[i] > 0 && dsnOk(i)]].forEach(([t, col, pred], k) => {
-      const y = sy + k * 16; g.fillStyle = C.cell; g.fillRect(px, y, pw, 11); strip(g, pred, a0, a0 + nW, px, y, X(nW) - px, 11, col);
-      g.fillStyle = C.muted; g.font = FONTC(12, 500); g.textAlign = 'right'; g.textBaseline = 'middle'; g.fillText(t.toUpperCase(), px - 6, y + 6);
+    // name each curve at its right end, kept apart
+    const ye = Y(se.earthClr[a0 + nW]), ys = Y(se.sunClr[a0 + nW]); let yE = ye + 4, yS = ys + 4; if (Math.abs(yE - yS) < 16) { if (yE < yS) yE = yS - 16; else yS = yE - 16; }
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillStyle = C.earth; labTxt(g, narrow ? 'E' : 'Earth', px + pw + 8, yE, 12); g.fillStyle = C.sun; labTxt(g, 'Sun', px + pw + 8, yS, 12);
+    // the yes/no lanes, named in full, each ending in its share of the window
+    const dsnOk = i => !se.dsnEl || se.dsnEl[i] > 10, i1 = a0 + nW;
+    const lanes = [[narrow ? 'Sun' : 'Sun up', C.sun, i => se.sunClr[i] > 0], [narrow ? 'Earth' : 'Earth in view', C.earth, i => se.earthClr[i] > 0], [narrow ? 'DSN' : 'DSN dish up', C.muted, dsnOk],
+                   ['Contact', C.earth, i => se.earthClr[i] > 0 && dsnOk(i)], [narrow ? 'Pwr + cont.' : 'Power + contact', C.go, i => se.sunClr[i] > 0 && se.earthClr[i] > 0 && dsnOk(i)]];
+    lanes.forEach(([t, col, pred], k) => {
+      const y = sy + k * (ln + lg); g.fillStyle = C.cell; rbar(g, px, y, pw, ln, 3); strip(g, pred, a0, i1, px, y, X(nW) - px, ln, col);
+      g.fillStyle = C.muted; g.textAlign = 'right'; g.textBaseline = 'middle'; labTxt(g, t, px - 8, y + ln / 2 + 1, 12);
+      g.font = FONT(12); g.fillStyle = C.ink; g.textAlign = 'left'; g.fillText(Math.round(shareOf(pred, a0, i1)) + '%', px + pw + 8, y + ln / 2 + 1);
     });
-    timeAxis(g, px, sy + 80, pw, S.anchor, S.span);
+    timeAxis(g, px, yb + 6, pw, S.anchor, S.span);
+    // the clock, with a dot on each curve
     const cx = px + (S.t - S.anchor) / (S.span * DAY) * pw;
-    g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx, top - 2); g.lineTo(cx, sy + 77); g.stroke();
-    g.fillStyle = C.ink; g.beginPath(); g.moveTo(cx - 5, top - 6); g.lineTo(cx + 5, top - 6); g.lineTo(cx, top + 2); g.closePath(); g.fill();
-    const s = statsFor(S.site, S.anchor, S.span);
-    $('tlread').textContent = !s ? 'Computing the window statistics…' : (S.span <= 1 ? fmtDate(S.anchor) : fmtDate(S.anchor) + ' to ' + fmtDate(S.anchor + S.span * DAY)) + ': Sun up ' + s.litPct.toFixed(0) + '% of the time · Earth in view ' + s.linkPct.toFixed(0) + '%' + (s.contactPct !== null && s.contactPct !== undefined ? ' · contact with DSN ' + s.contactPct.toFixed(0) + '%' : '') + ' · longest night ' + fmtH(s.maxDarkD * 24) + ' · longest Earth gap ' + fmtH(s.maxOutD * 24);
+    if (cx >= px - 1 && cx <= px + pw + 1) {
+      clockAt(g, cx, 2, yb, px - 40, px + pw + TLP.r);
+      const c = stateAt(se, S.t); if (c) for (const [v, col] of [[c.earthClr, C.earth], [c.sunClr, C.sun]]) { g.beginPath(); g.arc(cx, Y(v), 4.5, 0, 7); g.fillStyle = col; g.fill(); g.strokeStyle = C.panel; g.lineWidth = 2; g.stroke(); }
+    }
+    // four stat blocks above the chart, each with its dates
+    const s = statsFor(S.site, S.anchor, S.span), win = S.span <= 1 ? 'of the 24 hours' : 'of the ' + S.span + ' days';
+    const blk = (k, v, sub) => '<div class="stat"><span class="lab">' + k + '</span><b>' + v + '</b><span class="cap">' + sub + '</span></div>';
+    $('tlstats').innerHTML = !s ? blk('Sun up', '…', win) + blk('Earth in view', '…', win) + blk('Longest night', '…', '') + blk('Longest Earth gap', '…', '')
+      : blk('Sun up', s.litPct.toFixed(0) + '%', win) + blk('Earth in view', s.linkPct.toFixed(0) + '%', win + (s.contactPct !== null && s.contactPct !== undefined ? ' · contact ' + s.contactPct.toFixed(0) + '%' : ''))
+        + blk('Longest night', durTxt(s.maxDarkD * DAY), rangeTxt(longestRun(i => !(se.sunClr[i] > 0), a0, i1))) + blk('Longest Earth gap', durTxt(s.maxOutD * DAY), rangeTxt(longestRun(i => !(se.earthClr[i] > 0), a0, i1)));
   }
-
   // ---------- compare: the same instant at every site ----------
-  function drawCmpSky() { const rs = rows(), rg = rs.map(skyRange); skyCells($('cmpsky'), rs, 190, null, { yMin: Math.min(...rg.map(r => r.yMin)), yMax: Math.max(...rg.map(r => r.yMax)) }); }
+  function drawCmpSky() { const rs = rows(), rg = rs.map(skyRange); skyCells($('cmpsky'), rs, 210, null, { yMin: Math.min(...rg.map(r => r.yMin)), yMax: Math.max(...rg.map(r => r.yMax)) }); }
+  // a verdict badge drawn on a canvas: outline, icon and word; marginal is hatched
+  function canvasBadge(g, x, y, st, text, cols, ground) {
+    g.font = FONTS(13); const tw = g.measureText(text).width, bw = tw + 38, bh = 26, col = cols[st];
+    g.fillStyle = ground; rbar(g, x, y, bw, bh, 4);
+    if (st === 1) { g.save(); g.beginPath(); g.rect(x, y, bw, bh); g.clip(); g.strokeStyle = col; g.globalAlpha = 0.16; g.lineWidth = 2; for (let k = -bh; k < bw; k += 7) { g.beginPath(); g.moveTo(x + k, y + bh); g.lineTo(x + k + bh, y); g.stroke(); } g.restore(); g.globalAlpha = 1; }
+    g.strokeStyle = col; g.lineWidth = 1; g.beginPath(); g.roundRect ? g.roundRect(x + 0.5, y + 0.5, bw - 1, bh - 1, 4) : g.rect(x, y, bw, bh); g.stroke();
+    const ix = x + 10, iy = y + 6; g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 2; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath();
+    if (st === 2) { g.moveTo(ix + 2.6, iy + 7.4); g.lineTo(ix + 5.4, iy + 10.2); g.lineTo(ix + 11.4, iy + 4.2); g.stroke(); }
+    else if (st === 1) { g.moveTo(ix + 7, iy + 2.2); g.lineTo(ix + 7, iy + 8.3); g.stroke(); g.beginPath(); g.arc(ix + 7, iy + 11.4, 1.2, 0, 7); g.fill(); }
+    else { g.moveTo(ix + 3.5, iy + 3.5); g.lineTo(ix + 10.5, iy + 10.5); g.moveTo(ix + 10.5, iy + 3.5); g.lineTo(ix + 3.5, iy + 10.5); g.stroke(); }
+    g.lineCap = 'butt'; g.fillStyle = col; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(text, x + 28, y + bh / 2 + 0.5);
+    return bw;
+  }
   function skyCells(cv, rs, ch, names, range) {
     if (!shown(cv)) return;
-    const cw0 = cv.clientWidth, cols = Math.min(rs.length, cw0 >= 1100 ? 3 : cw0 >= 860 ? 2 : 1), gap = 10, nr = Math.ceil(rs.length / cols);
-    cv.style.height = (nr * ch + (nr - 1) * gap) + 'px';
-    const { g, w } = prep(cv), cw = (w - (cols - 1) * gap) / cols;
+    const cw0 = cv.clientWidth, cols = Math.min(rs.length, cw0 >= 1100 ? 3 : cw0 >= 760 ? 2 : 1), gap = 8, hh = 40, nr = Math.ceil(rs.length / cols);
+    cv.style.height = (nr * (ch + hh) + (nr - 1) * gap) + 'px';
+    const { g, w } = prep(cv), cw = (w - (cols - 1) * gap) / cols, SV = [C.skyBad, C.skyWarn, C.skyGo];
     rs.forEach((s, k) => {
-      const x = (k % cols) * (cw + gap), y = Math.floor(k / cols) * (ch + gap), c = s === S.site ? S.cur : stateAt(ser(s), S.t);
-      g.save(); g.translate(x, y); g.beginPath(); g.roundRect ? g.roundRect(0, 0, cw, ch, 4) : g.rect(0, 0, cw, ch); g.clip();
-      paintSky(g, cw, ch, s, c, range);
+      const x = (k % cols) * (cw + gap), y = Math.floor(k / cols) * (ch + hh + gap), c = s === S.site ? S.cur : stateAt(ser(s), S.t);
+      g.save(); g.translate(x, y); g.beginPath(); g.roundRect ? g.roundRect(0, 0, cw, ch + hh, 4) : g.rect(0, 0, cw, ch + hh); g.clip();
+      g.fillStyle = C.sky; g.fillRect(0, 0, cw, hh);
+      // the header row: the site's name, then its state as a badge
+      const nm = names ? names[k] : short(s); g.font = FONTS(14); g.fillStyle = C.skyInk; g.textAlign = 'left'; g.textBaseline = 'middle';
+      const nw = Math.min(g.measureText(nm).width, cw - 24); g.fillText(nm, 12, hh / 2 + 2, cw - 24);
       if (c) {
-        const lit = c.sunClr > 0, link = c.earthClr > 0, st = lit && link ? ['POWER AND EARTH LINK', '#3fc78d'] : lit ? ['POWER, NO EARTH LINK', '#e8894a'] : link ? ['EARTH LINK, NO POWER', '#e8894a'] : ['NO POWER, NO EARTH LINK', '#f07462'];
-        g.textBaseline = 'middle'; g.textAlign = 'left'; g.font = FONTC(15); g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.85)';
-        const nm = (names ? names[k] : short(s)).toUpperCase(), nw = g.measureText(nm).width; g.strokeText(nm, 44, 22); g.fillStyle = '#fff'; g.fillText(nm, 44, 22);
-        g.font = FONTC(12); const tw = g.measureText(st[0]).width, fits = 44 + nw + 16 + tw + 14 <= cw, sx = fits ? cw - tw - 14 : 44, sy = fits ? 22 : 40;
-        g.strokeText(st[0], sx, sy); g.fillStyle = st[1]; g.fillText(st[0], sx, sy);
+        const lit = c.sunClr > 0, link = c.earthClr > 0, st = lit && link ? [2, 'Power and Earth link'] : lit ? [1, 'Power, no Earth link'] : link ? [1, 'Earth link, no power'] : [0, 'No power, no Earth link'];
+        g.font = FONTS(13); const bw = g.measureText(st[1]).width + 38, sh = ['None', 'Partial', 'Both'][st[0]], sw = g.measureText(sh).width + 38;
+        if (12 + nw + 12 + bw <= cw - 8) canvasBadge(g, cw - bw - 8, 7, st[0], st[1], SV, C.sky); else if (12 + nw + 12 + sw <= cw - 8) canvasBadge(g, cw - sw - 8, 7, st[0], sh, SV, C.sky);
       }
+      g.translate(0, hh); paintSky(g, cw, ch, s, c, range);
       g.restore();
     });
   }
@@ -654,20 +799,20 @@ import { createTerrain } from './js/terrain.js';
       $('l-facts').textContent = 'Figures cover the 365 days from ' + fmtDate(TAB.t0) + ', measured against the real terrain at each site.';
     }
     const cv = $('tilt'); if (!shown(cv)) return; const { g, w, h } = prep(cv), two = w >= 620, pw = two ? w / 2 : w, ph = two ? h : h / 2;
-    [['Earth', 23.44, '#4f8fe6', '#17325c', 'At midsummer the Sun stands 23.4° above the horizon at the pole.'], ['Moon', 1.54, '#d8d6cc', '#3a3d45', 'The Sun never rises more than about 1.5° above a level horizon at the pole.']].forEach(([name, tilt, lit, dark, note], k) => {
+    [['Earth', 23.44, C.earth, C.cell, 'At midsummer the Sun stands 23.4° above the horizon at the pole.'], ['Moon', 1.54, C.crest, C.cell, 'The Sun never rises more than about 1.5° above a level horizon at the pole.']].forEach(([name, tilt, lit, dark, note], k) => {
       const ox = two ? k * pw : 0, oy = two ? 0 : k * ph, cx = ox + pw * 0.56, cy = oy + ph * 0.46, r = Math.min(pw * 0.2, ph * 0.3), a = tilt * D2R;
       g.strokeStyle = C.sun; g.fillStyle = C.sun; g.lineWidth = 1.5; g.globalAlpha = 0.7;
       for (let i = -2; i <= 2; i++) { const y = cy + i * r * 0.5, x0 = ox + 16, x1 = cx - r - 26; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); g.beginPath(); g.moveTo(x1 + 7, y); g.lineTo(x1, y - 4); g.lineTo(x1, y + 4); g.closePath(); g.fill(); }
-      g.globalAlpha = 1; g.font = FONTC(12, 500); g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText('Sunlight', ox + 16, cy - r * 1.0 - 12);
+      g.globalAlpha = 1; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; labTxt(g, 'Sunlight', ox + 16, cy - r * 1.0 - 12, 12);
       g.fillStyle = dark; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill(); g.fillStyle = lit; g.beginPath(); g.arc(cx, cy, r, Math.PI / 2, 3 * Math.PI / 2); g.closePath(); g.fill();
       const sx = -Math.sin(a), sy = Math.cos(a);
       g.strokeStyle = C.muted; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(cx, cy - r * 1.3); g.lineTo(cx, cy + r * 1.3); g.stroke(); g.setLineDash([]);
       g.strokeStyle = C.ink; g.lineWidth = 1.8; g.beginPath(); g.moveTo(cx - sx * r * 1.3, cy - sy * r * 1.3); g.lineTo(cx + sx * r * 1.3, cy + sy * r * 1.3); g.stroke();
       const px = cx + sx * r, py = cy + sy * r; g.strokeStyle = C.muted; g.lineWidth = 1.5; g.beginPath(); g.moveTo(px - sy * 34, py + sx * 34); g.lineTo(px + sy * 34, py - sx * 34); g.stroke();
       g.fillStyle = C.bad; g.beginPath(); g.arc(px, py, 4.5, 0, 7); g.fill();
-      g.fillStyle = C.ink; g.font = FONTC(17); g.textAlign = 'center'; g.fillText(name + ', axis tilted ' + tilt.toFixed(1) + '°', ox + pw / 2, oy + 20);
-      g.font = FONTC(12, 500); g.fillStyle = C.bad; g.textAlign = 'right'; g.fillText('South pole', px - 12, py + 18);
-      g.font = FONT(13); g.fillStyle = C.muted; g.textAlign = 'center'; g.fillText(note, ox + pw / 2, oy + ph - 10, pw - 20);
+      g.fillStyle = C.ink; g.font = '600 16px "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif'; g.textAlign = 'center'; g.fillText(name + ', axis tilted ' + tilt.toFixed(1) + '°', ox + pw / 2, oy + 20);
+      g.fillStyle = C.bad; g.textAlign = 'right'; labTxt(g, 'South pole', px - 12, py + 18, 12);
+      g.font = FONTS(13, 400); g.fillStyle = C.muted; g.textAlign = 'center'; g.fillText(note, ox + pw / 2, oy + ph - 10, pw - 20);
     });
   }
   // ---------- compare ----------
@@ -676,53 +821,108 @@ import { createTerrain } from './js/terrain.js';
     const q = latest('calendar', key, sig => getJSON('/calendar', body, sig)), j = q.v; if (!j) return null;
     const out = {}; j.sites.forEach((s, k) => { out[siteKey(rs[k])] = s; }); return out;
   }
+  const CMPP = { l: 150, r: 56 };
   function drawCompare() {
     const cv = $('cmp'); if (!shown(cv)) return;
     const rs = rows(), a0 = idx(S.anchor), nW = S.span * 24;
     $('chips').innerHTML = rs.map((s, i) => '<span class="chip' + (i === 0 ? ' pin' : '') + '">' + s.name + (i === 0 ? '' : '<button type="button" data-rm="' + s.id + '" aria-label="Remove ' + s.name + '">×</button>') + '</span>').join('');
     const st = rs.map(s => statsFor(s, S.anchor, S.span)), cal = calNow();
-    const cols = [['Sunlit', 'litPct', 1, v => v.toFixed(0) + '%'], ['Earth in view', 'linkPct', 1, v => v.toFixed(0) + '%'], ['Both', 'bothPct', 1, v => v.toFixed(0) + '%'],
-      ['Longest sunlit run', 'maxLitD', 1, v => v.toFixed(1) + ' d'], ['Longest night', 'maxDarkD', -1, v => v.toFixed(1) + ' d'], ['Longest Earth gap', 'maxOutD', -1, v => v.toFixed(1) + ' d'], ['Contact with DSN', 'contactPct', 1, v => v === null || v === undefined ? '—' : v.toFixed(0) + '%'], ['Mean solar availability', 'pTrack', 1, v => v.toFixed(0) + '%']];
-    let html = '<thead><tr><th>Site</th>' + cols.map(c => '<th>' + c[0] + '</th>').join('') + '<th>Landing days that meet the needs, next 12 months</th><th>Terrain</th></tr></thead><tbody>';
+    // percentage columns get a small bar in the cell; the best value in each column gets a tick as well as bold
+    const pct = v => v === null || v === undefined ? '—' : v.toFixed(0) + '%';
+    const cols = [['Sunlit', 'litPct', 1, pct, true], ['Earth in view', 'linkPct', 1, pct, true], ['Both', 'bothPct', 1, pct, true],
+      ['Longest sunlit run', 'maxLitD', 1, v => v.toFixed(1) + ' d'], ['Longest night', 'maxDarkD', -1, v => v.toFixed(1) + ' d'], ['Longest Earth gap', 'maxOutD', -1, v => v.toFixed(1) + ' d'], ['Contact with DSN', 'contactPct', 1, pct, true], ['Mean solar availability', 'pTrack', 1, pct, true]];
+    const cell = (v, txt, best, bar) => '<td' + (best ? ' class="best"' : '') + '>' + (best ? ICON[2] + ' ' : '') + txt + (bar && v !== null && v !== undefined ? '<span class="cb"><i style="width:' + Math.max(0, Math.min(100, v)).toFixed(0) + '%"></i></span>' : '') + '</td>';
+    let html = '<thead><tr><th>Site</th>' + cols.map(c => '<th>' + c[0] + '</th>').join('') + '<th>Good landing days, next 12 months</th><th>Terrain</th></tr></thead><tbody>';
+    // the best value in a column, only when the sites differ
+    const bestOf = vals => { const ok = vals.filter(v => v > -1e9); return ok.length > 1 && Math.max(...ok) !== Math.min(...ok) ? Math.max(...ok) : null; };
     const good = rs.map(s => cal && cal[siteKey(s)] ? cal[siteKey(s)].good_days : null);
     rs.forEach((s, i) => {
       const m = siteMask(s);
-      html += '<tr><td>' + s.name + '</td>' + cols.map(c => { if (!st[i]) return '<td>…</td>'; const vals = st.map(x => x ? x[c[1]] * c[2] : -1e9), best = Math.max(...vals); return '<td' + (rs.length > 1 && vals[i] === best ? ' class="best"' : '') + '>' + c[3](st[i][c[1]]) + '</td>'; }).join('')
-        + '<td' + (rs.length > 1 && good[i] !== null && good[i] === Math.max(...good) ? ' class="best"' : '') + '>' + (good[i] === null ? '…' : good[i]) + '</td><td>' + (m ? (m.tiers[0] || '').replace('LOLA ', '') : '…') + '</td></tr>';
+      html += '<tr><td>' + s.name + '</td>' + cols.map(c => { if (!st[i]) return '<td>…</td>'; const vals = st.map(x => x && x[c[1]] !== null && x[c[1]] !== undefined ? x[c[1]] * c[2] : -1e9), best = bestOf(vals); return cell(st[i][c[1]], c[3](st[i][c[1]]), best !== null && vals[i] === best, c[4]); }).join('')
+        + (good[i] === null ? '<td>…</td>' : cell(good[i] / 3.66, String(good[i]), bestOf(good.map(v => v === null ? -1e9 : v)) === good[i], true)) + '<td>' + (m ? (m.tiers[0] || '').replace('LOLA ', '') : '…') + '</td></tr>';
     });
     $('cmptbl').innerHTML = html + '</tbody>';
-    const rowH = 52; cv.style.height = (rs.length * rowH + 26) + 'px';
-    const { g, w } = prep(cv), px = 8, pw = w - 16;
+    // the same lanes as the timeline, one group per site
+    const narrow = cv.clientWidth < 600; CMPP.l = narrow ? 92 : 150; CMPP.r = narrow ? 44 : 56;
+    const ln = 14, lg = 8, head = 26, blockH = head + 3 * ln + 2 * lg + 18, top = 30;
+    cv.style.height = (top + rs.length * blockH + 22) + 'px';
+    const { g, w } = prep(cv), px = CMPP.l, pw = w - CMPP.l - CMPP.r, yEnd = top + rs.length * blockH - 12;
+    gridX(g, px, pw, S.anchor, S.span, top, yEnd);
     rs.forEach((s, r) => {
-      const se = ser(s), y = r * rowH;
-      g.font = FONTC(13); g.fillStyle = C.ink; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText(s.name.toUpperCase(), px, y + 14);
-      if (!se) return;
-      [[C.sun, i => se.sunClr[i] > 0], [C.earth, i => se.earthClr[i] > 0], [C.go, i => se.sunClr[i] > 0 && se.earthClr[i] > 0]].forEach(([col, pred], k) => {
-        const yy = y + 20 + k * 9; g.fillStyle = C.cell; g.fillRect(px, yy, pw, 7); strip(g, pred, a0, Math.min(a0 + nW, se.n - 1), px, yy, pw * Math.min(1, (se.n - 1 - a0) / nW), 7, col);
+      const se = ser(s), y = top + r * blockH;
+      g.font = FONTS(14); g.fillStyle = C.ink; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText(s.name, 0, y + 14, w);
+      if (!se) { g.font = FONT(12); g.fillStyle = C.muted; g.fillText('loading…', px, y + head + 10); return; }
+      const i1 = Math.min(a0 + nW, se.n - 1), wf = pw * Math.min(1, (se.n - 1 - a0) / nW);
+      [[narrow ? 'Sun' : 'Sun up', C.sun, i => se.sunClr[i] > 0], [narrow ? 'Earth' : 'Earth in view', C.earth, i => se.earthClr[i] > 0], [narrow ? 'Both' : 'Sun and Earth', C.go, i => se.sunClr[i] > 0 && se.earthClr[i] > 0]].forEach(([t, col, pred], k) => {
+        const yy = y + head + k * (ln + lg); g.fillStyle = C.cell; rbar(g, px, yy, pw, ln, 3); strip(g, pred, a0, i1, px, yy, wf, ln, col);
+        g.fillStyle = C.muted; g.textAlign = 'right'; g.textBaseline = 'middle'; labTxt(g, t, px - 8, yy + ln / 2 + 1, 12);
+        g.font = FONT(12); g.fillStyle = C.ink; g.textAlign = 'left'; g.fillText(Math.round(shareOf(pred, a0, i1)) + '%', px + pw + 8, yy + ln / 2 + 1);
       });
     });
-    const yb = rs.length * rowH; timeAxis(g, px, yb + 2, pw, S.anchor, S.span);
-    const cx = px + (S.t - S.anchor) / (S.span * DAY) * pw; g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx, 0); g.lineTo(cx, yb); g.stroke();
+    timeAxis(g, px, yEnd + 2, pw, S.anchor, S.span);
+    const cx = px + (S.t - S.anchor) / (S.span * DAY) * pw; if (cx >= px - 1 && cx <= px + pw + 1) clockAt(g, cx, 0, yEnd, px - 40, px + pw + CMPP.r);
   }
 
   // ---------- compare: landing-date calendar (server: /calendar) ----------
-  const CALP = { l: 8, r: 8 }; let calHover = null;
+  // One square per landing day. Each column of seven is a week (Monday at the top), grouped by month; months wrap to
+  // more rows when the panel is narrow so a square stays big enough to tap.
+  let calHover = null, CALG = null;
+  function calLayout(w, nSites) {
+    const nd = 366, months = [];
+    for (let d = 0; d < nd; d++) {
+      const t = S.calAnchor + d * DAY, dt = new Date(t), key = dt.getUTCFullYear() * 12 + dt.getUTCMonth();
+      let m = months[months.length - 1]; if (!m || m.key !== key) { const first = Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), 1); m = { key, mon: dt.getUTCMonth(), off: (new Date(first).getUTCDay() + 6) % 7, days: [] }; months.push(m); }
+      m.days.push({ d, dom: dt.getUTCDate() });
+    }
+    months.forEach(m => { const c0 = Math.floor((m.off + m.days[0].dom - 1) / 7), c1 = Math.floor((m.off + m.days[m.days.length - 1].dom - 1) / 7); m.c0 = c0; m.nc = c1 - c0 + 1; });
+    const narrow = w < 640, labW = narrow ? 0 : 150, mgap = 8, avail = w - labW;
+    let perRow = months.length, pitch = 0;
+    for (; perRow >= 1; perRow = Math.ceil(perRow / 2)) {
+      let worst = 0; for (let i = 0; i < months.length; i += perRow) { const ms = months.slice(i, i + perRow); worst = Math.max(worst, ms.reduce((a, m) => a + m.nc, 0) + (ms.length - 1) * mgap / 11); }
+      pitch = Math.min(18, Math.floor(avail / worst)); if (pitch >= 10 || perRow === 1) break;
+    }
+    const rowsM = []; for (let i = 0; i < months.length; i += perRow) rowsM.push(months.slice(i, i + perRow));
+    const sq = Math.max(4, pitch - 2), monH = 18, gridH = 7 * pitch, headH = narrow ? 24 : 0;
+    const blockH = headH + rowsM.length * (monH + gridH + 8) + 14;
+    const cells = new Array(nd);
+    rowsM.forEach((ms, ri) => { let x = labW; ms.forEach(m => { m.x = x; m.row = ri; m.days.forEach(({ d, dom }) => { const k = m.off + dom - 1; cells[d] = { x: x + (Math.floor(k / 7) - m.c0) * pitch, y: headH + ri * (monH + gridH + 8) + monH + (k % 7) * pitch }; }); x += m.nc * pitch + mgap; }); });
+    return { nd, months, rowsM, pitch, sq, labW, narrow, blockH, cells, monH, gridH, headH, h: nSites * blockH };
+  }
   function drawCalendar() {
     const cv = $('cal'); if (!shown(cv)) return;
-    const rs = rows(), rowH = 44, cal = calNow(); cv.style.height = (rs.length * rowH + 26) + 'px';
-    const { g, w } = prep(cv), px = CALP.l, pw = w - CALP.l - CALP.r, nd = 366, cw = pw / nd;
+    const rs = rows(), cal = calNow(), L = calLayout(cv.clientWidth, rs.length); cv.style.height = L.h + 'px';
+    const { g } = prep(cv); CALG = L;
+    const sel = Math.floor((S.t - S.calAnchor) / DAY);
     rs.forEach((s, r) => {
-      const c = cal && cal[siteKey(s)], y = r * rowH;
-      g.font = FONTC(13); g.fillStyle = C.ink; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText(s.name.toUpperCase() + (c ? '' : ' · computing…'), px, y + 14);
-      g.fillStyle = C.cell; g.fillRect(px, y + 20, pw, 18);
-      if (c) for (let d = 0; d < nd; d++) { if (!c.state[d]) continue; g.fillStyle = c.state[d] === 2 ? C.go : C.warn; g.fillRect(px + d * cw, y + 20, cw + 0.4, 18); }
+      const c = cal && cal[siteKey(s)], y0 = r * L.blockH;
+      const pass = c ? c.state.filter(v => v === 2).length : null, marg = c ? c.state.filter(v => v === 1).length : null;
+      g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+      if (L.narrow) {
+        g.font = FONTS(14); g.fillStyle = C.ink; g.fillText(short(s), 0, y0 + 15); let x = g.measureText(short(s)).width + 12; g.font = FONT(12);
+        if (c) { const a = pass + ' pass', b = marg + ' marginal'; g.fillStyle = C.go; g.fillText(a, x, y0 + 15); x += g.measureText(a).width + 10; g.fillStyle = C.warn; g.fillText(b, x, y0 + 15); } else { g.fillStyle = C.muted; g.fillText('computing…', x, y0 + 15); }
+      } else {
+        const ty = y0 + L.monH + 12; g.font = FONTS(14); g.fillStyle = C.ink; g.fillText(short(s), 0, ty, L.labW - 12); g.font = FONT(12);
+        if (c) { g.fillStyle = C.go; g.fillText(pass + ' days pass', 0, ty + 22); g.fillStyle = C.warn; g.fillText(marg + ' marginal', 0, ty + 40); } else { g.fillStyle = C.muted; g.fillText('computing…', 0, ty + 22); }
+      }
+      // month names over each row of months
+      g.font = FONT(12); g.fillStyle = C.muted; L.months.forEach(m => g.fillText(MON[m.mon], m.x, y0 + L.headH + m.row * (L.monH + L.gridH + 8) + 12));
+      for (let d = 0; d < L.nd; d++) {
+        const p = L.cells[d], v = c ? c.state[d] : 0; g.fillStyle = !c ? C.cell : v === 2 ? C.go : v === 1 ? hatch(g, C.cell) : C.cell;
+        if (!c) g.globalAlpha = 0.5; rbar(g, p.x, y0 + p.y, L.sq, L.sq, 2); g.globalAlpha = 1;
+      }
+      for (const [d, col, lw] of [[calHover, C.muted, 1.5], [sel, C.ink, 2]]) { if (d === null || d < 0 || d >= L.nd) continue; const p = L.cells[d]; g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); g.roundRect ? g.roundRect(p.x - 1.5, y0 + p.y - 1.5, L.sq + 3, L.sq + 3, 3) : g.rect(p.x - 1.5, y0 + p.y - 1.5, L.sq + 3, L.sq + 3); g.stroke(); }
     });
-    const yb = rs.length * rowH; timeAxis(g, px, yb + 2, pw, S.calAnchor, nd);
-    const x = px + (S.t - S.calAnchor) / (nd * DAY) * pw; if (x >= px && x <= px + pw) { g.strokeStyle = C.ink; g.lineWidth = 2; g.beginPath(); g.moveTo(x, 16); g.lineTo(x, yb - 2); g.stroke(); }
-    const d = calHover != null ? calHover : Math.floor((S.t - S.calAnchor) / DAY);
-    if (cal && d >= 0 && d < nd) $('calread').textContent = 'Land on ' + fmtDate(S.calAnchor + d * DAY) + ' for ' + S.cfg.days + ' days: ' + rs.map(s => { const c = cal[siteKey(s)]; if (!c) return short(s) + ' …'; const v = c.state[d]; return short(s) + ' ' + (v === 2 ? 'passes' : v === 1 ? 'is marginal' : 'fails, ' + c.cause[d]); }).join(' · ') + '.';
+    const d = calHover != null ? calHover : sel;
+    if (cal && d >= 0 && d < L.nd) $('calread').innerHTML = 'Land on <b>' + fmtDate(S.calAnchor + d * DAY) + '</b> for ' + S.cfg.days + ' days: ' + rs.map(s => { const c = cal[siteKey(s)]; if (!c) return short(s) + ' …'; const v = c.state[d]; return short(s) + ' ' + (v === 2 ? 'passes' : v === 1 ? 'is marginal' : 'fails (' + c.cause[d] + ')'); }).join(', ') + '.';
+    else $('calread').textContent = cal ? '' : 'Checking every landing day for each site…';
   }
-
+  // which day square is under the pointer, or null
+  function calDayAt(e) {
+    if (!CALG) return null; const r = $('cal').getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, L = CALG;
+    const yIn = ((y % L.blockH) + L.blockH) % L.blockH, tol = (L.pitch - L.sq) / 2 + 1;
+    for (let d = 0; d < L.nd; d++) { const p = L.cells[d]; if (x >= p.x - tol && x <= p.x + L.sq + tol && yIn >= p.y - tol && yIn <= p.y + L.sq + tol) return d; }
+    return null;
+  }
   const TER = createTerrain({ api, need, qs });
 
   // ---------- maps ----------
@@ -814,9 +1014,9 @@ import { createTerrain } from './js/terrain.js';
     const can = riskOk() && TER.ready() && TER.rings && siteMask(S.site) && S.now && S.cur;
     cv.style.height = (riskOk() ? Math.round(Math.max(220, Math.min(560, cv.clientWidth * (cv.clientWidth < 520 ? 0.66 : 0.42)))) : 96) + 'px';
     const { g, w, h } = prep(cv); if (!(w > 0 && h > 0)) return;   // mid-resize or not laid out yet
-    g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
-    if (!riskOk()) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('The surface view needs the polar terrain, which covers 80°S to the south pole.', w / 2, h / 2); $('surfcap').textContent = 'Pick a south-pole site to stand on the surface. The sky chart shows the horizon for any site.'; return; }
-    if (!can) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the terrain around the site…', w / 2, h / 2); return; }
+    g.fillStyle = C.sky; g.fillRect(0, 0, w, h);
+    if (!riskOk()) { g.fillStyle = C.skyMuted; g.font = FONT(13); g.textAlign = 'center'; g.fillText('The surface view needs the polar terrain, which covers 80°S to the south pole.', w / 2, h / 2); $('surfcap').textContent = 'Pick a south-pole site to stand on the surface. The sky chart shows the horizon for any site.'; return; }
+    if (!can) { g.fillStyle = C.skyMuted; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the terrain around the site…', w / 2, h / 2); return; }
     const c = S.cur, m = siteMask(S.site), mask = m.mask, dpr = Math.min(window.devicePixelRatio || 1, 2);
     if (VW.az === null) { const sepA = wrap180(c.earthAz - c.sunAz); VW.az = Math.abs(sepA) <= 0.86 * VW.fov ? c.sunAz + sepA / 2 : c.sunAz + VW.fov * 0.24; }
     const live = S.playing || S.scrubbing || VW.drag, fovH = VW.fov, fovV = fovH * h / w, elC = -0.02 * fovV;
@@ -927,12 +1127,12 @@ import { createTerrain } from './js/terrain.js';
     g.font = FONTC(13); g.textBaseline = 'middle';
     const tag = (t, x, y, col, hidden, r) => {
       if (x < -20 || x > w + 20) return; if (hidden) { g.setLineDash([3, 3]); g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, Math.max(6, r), 0, 7); g.stroke(); g.setLineDash([]); }
-      const tw = g.measureText(t).width, lx = x + r + 8 + tw > w - 4 ? x - r - 8 - tw : x + r + 8, ly = Math.max(10, Math.min(h - 26, y - r - 6)); g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.85)'; g.strokeText(t, lx, ly); g.fillStyle = col; g.fillText(t, lx, ly);
+      const tw = g.measureText(t).width, lx = x + r + 8 + tw > w - 4 ? x - r - 8 - tw : x + r + 8, ly = Math.max(10, Math.min(h - 26, y - r - 6)); g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = C.sky; g.strokeText(t, lx, ly); g.fillStyle = col; g.fillText(t, lx, ly);
     };
-    tag(c.earthClr > 0 ? 'Earth' : 'Earth, behind the terrain', exs, eys, '#b9d6ff', c.earthClr <= 0, re);
-    tag(c.sunClr > 0 ? 'Sun' : 'Sun, behind the terrain', sxs, sys, '#ffd98a', c.sunClr <= 0, rs);
-    if (VW.job) { g.font = FONT(11); g.textAlign = 'right'; g.fillStyle = 'rgba(255,255,255,0.6)'; g.fillText('Sharpening…', w - 10, 14); }
-    g.font = FONT(10); g.fillStyle = 'rgba(255,255,255,0.75)'; g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    tag(c.earthClr > 0 ? 'Earth' : 'Earth, behind the terrain', exs, eys, C.skyEarth, c.earthClr <= 0, re);
+    tag(c.sunClr > 0 ? 'Sun' : 'Sun, behind the terrain', sxs, sys, C.skySun, c.sunClr <= 0, rs);
+    if (VW.job) { g.font = FONT(11); g.textAlign = 'right'; g.fillStyle = C.skyMuted; g.fillText('Sharpening…', w - 10, 14); }
+    g.font = FONT(10); g.fillStyle = C.skyMuted; g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
     const stepA = fovH > 70 ? 15 : fovH > 40 ? 10 : 5;
     for (let a = Math.ceil((VW.az - fovH / 2) / stepA) * stepA; a <= VW.az + fovH / 2; a += stepA) { const x = (a - VW.az) / fovH * w + w / 2, aa = ((a % 360) + 360) % 360; g.beginPath(); g.moveTo(x, h - 4); g.lineTo(x, h - 9); g.stroke(); g.fillText(aa % 90 === 0 ? ['N', 'E', 'S', 'W'][aa / 90] : aa + '°', Math.max(12, Math.min(w - 12, x)), h - 12); }
     g.textAlign = 'left'; g.textBaseline = 'middle'; const stepE = fovV > 30 ? 5 : fovV > 12 ? 2 : 1;
@@ -943,8 +1143,8 @@ import { createTerrain } from './js/terrain.js';
   function polarXY(lat, lon, R, cx, cy) { const rho = 2 * RM * Math.tan((90 + lat) / 2 * D2R) / RHO * R; return [cx + rho * Math.sin(lon * D2R), cy - rho * Math.cos(lon * D2R)]; }
   let mapGeom = null;
   function glyph(g, x, y, kind) {
-    if (kind === 'sun') { g.fillStyle = '#ffe2a0'; g.strokeStyle = '#f0b03a'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 6, 0, 7); g.fill(); g.stroke(); for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; g.beginPath(); g.moveTo(x + Math.cos(a) * 9, y + Math.sin(a) * 9); g.lineTo(x + Math.cos(a) * 12, y + Math.sin(a) * 12); g.stroke(); } }
-    else { g.fillStyle = '#3f7fd8'; g.strokeStyle = '#b9d6ff'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill(); g.stroke(); g.beginPath(); g.moveTo(x - 7, y); g.lineTo(x + 7, y); g.moveTo(x, y - 7); g.lineTo(x, y + 7); g.lineWidth = 1; g.stroke(); }
+    if (kind === 'sun') { g.fillStyle = '#ffe2a0'; g.strokeStyle = C.skySun; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 6, 0, 7); g.fill(); g.stroke(); for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; g.beginPath(); g.moveTo(x + Math.cos(a) * 9, y + Math.sin(a) * 9); g.lineTo(x + Math.cos(a) * 12, y + Math.sin(a) * 12); g.stroke(); } }
+    else { g.fillStyle = '#3f7fd8'; g.strokeStyle = C.skyEarth; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill(); g.stroke(); g.beginPath(); g.moveTo(x - 7, y); g.lineTo(x + 7, y); g.moveTo(x, y - 7); g.lineTo(x, y + 7); g.lineWidth = 1; g.stroke(); }
   }
   function markers(g, proj, filt) {
     const rs = rows().map(s => s.id), hits = [];
@@ -952,8 +1152,8 @@ import { createTerrain } from './js/terrain.js';
     list.forEach(s => {
       const [x, y] = proj(s.lat, s.lon), sel = s.id === S.site.id, cmp = rs.includes(s.id);
       hits.push({ x, y, s });
-      g.beginPath(); g.arc(x, y, sel ? 5 : 3, 0, 7); g.fillStyle = sel ? '#fff' : cmp ? '#3fc78d' : 'rgba(255,255,255,0.75)'; g.fill(); g.strokeStyle = 'rgba(0,0,0,0.8)'; g.lineWidth = 1; g.stroke();
-      if (sel) { g.beginPath(); g.arc(x, y, 10, 0, 7); g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke(); }
+      g.beginPath(); g.arc(x, y, sel ? 5 : 3, 0, 7); g.fillStyle = sel ? C.skyInk : cmp ? C.skyGo : C.skyMuted; g.fill(); g.strokeStyle = C.sky; g.lineWidth = 1; g.stroke();
+      if (sel) { g.beginPath(); g.arc(x, y, 10, 0, 7); g.strokeStyle = C.skyInk; g.lineWidth = 1.5; g.stroke(); }
     });
     g.font = FONTC(13); g.textBaseline = 'middle';
     const boxes = [];
@@ -966,7 +1166,7 @@ import { createTerrain } from './js/terrain.js';
         if (!boxes.some(b => bx < b[0] + b[2] + 4 && bx + tw + 4 > b[0] && Math.abs(by - b[1]) < 14)) break;
       }
       boxes.push([bx, by, tw]);
-      g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.85)'; g.strokeText(t, bx, by); g.fillStyle = '#fff'; g.fillText(t, bx, by);
+      g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = C.sky; g.strokeText(t, bx, by); g.fillStyle = C.skyInk; g.fillText(t, bx, by);
     });
     return hits;
   }
@@ -1007,20 +1207,20 @@ import { createTerrain } from './js/terrain.js';
     og.putImageData(im, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(off, cx - Rp, cy - Rp, 2 * Rp, 2 * Rp);
     const proj = v => { const z = v[0] * F[0] + v[1] * F[1] + v[2] * F[2]; return { x: cx + (v[0] * Rt[0] + v[1] * Rt[1]) * Rp, y: cy - (v[0] * U[0] + v[1] * U[1] + v[2] * U[2]) * Rp, z }; };
     const a1 = unit(Math.abs(eu[2]) < 0.9 ? [-eu[1], eu[0], 0] : [0, -eu[2], eu[1]]), a2 = [eu[1] * a1[2] - eu[2] * a1[1], eu[2] * a1[0] - eu[0] * a1[2], eu[0] * a1[1] - eu[1] * a1[0]];
-    g.strokeStyle = '#62a0f2'; g.lineWidth = 1.6; g.setLineDash([5, 4]); g.beginPath(); let pen = false;
+    g.strokeStyle = C.skyEarth; g.lineWidth = 1.6; g.setLineDash([5, 4]); g.beginPath(); let pen = false;
     for (let b = 0; b <= 360; b += 2) { const cb = Math.cos(b * D2R), sb = Math.sin(b * D2R), q = proj([a1[0] * cb + a2[0] * sb, a1[1] * cb + a2[1] * sb, a1[2] * cb + a2[2] * sb]); if (q.z < 0) { pen = false; continue; } pen ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y); pen = true; }
     g.stroke(); g.setLineDash([]);
     g.font = FONTC(12, 500); g.textBaseline = 'middle'; g.textAlign = 'center';
-    [['N', [0, 0, 1]], ['S', [0, 0, -1]]].forEach(([t, v]) => { const q = proj(v); if (q.z < 0) return; g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 1; g.beginPath(); g.moveTo(q.x - 4, q.y); g.lineTo(q.x + 4, q.y); g.moveTo(q.x, q.y - 4); g.lineTo(q.x, q.y + 4); g.stroke(); g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.8)'; g.strokeText(t, q.x + 10, q.y - 8); g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillText(t, q.x + 10, q.y - 8); });
+    [['N', [0, 0, 1]], ['S', [0, 0, -1]]].forEach(([t, v]) => { const q = proj(v); if (q.z < 0) return; g.strokeStyle = C.skyInk; g.lineWidth = 1; g.beginPath(); g.moveTo(q.x - 4, q.y); g.lineTo(q.x + 4, q.y); g.moveTo(q.x, q.y - 4); g.lineTo(q.x, q.y + 4); g.stroke(); g.lineWidth = 3; g.strokeStyle = C.sky; g.strokeText(t, q.x + 10, q.y - 8); g.fillStyle = C.skyInk; g.fillText(t, q.x + 10, q.y - 8); });
     mapGeom = { globe: true, cx, cy, R: Rp, w, h, hits: [] };
     const front = s => proj(llVec(s.lat, s.lon)).z > 0.02;
     mapGeom.hits = markers(g, (la, lo) => { const q = proj(llVec(la, lo)); return [q.x, q.y]; }, front);
-    [['sun', su, 'Sun', '#ffd98a'], ['earth', eu, 'Earth', '#b9d6ff']].forEach(([kind, v, name, col]) => {
+    [['sun', su, 'Sun', C.skySun], ['earth', eu, 'Earth', C.skyEarth]].forEach(([kind, v, name, col]) => {
       const q = proj(v), dx = q.x - cx, dy = q.y - cy, L = Math.hypot(dx, dy), on = q.z > 0 && L < Rp * 0.9;
       const x = on ? q.x : cx + dx / (L || 1) * (Rp + 14), y = on ? q.y : cy + dy / (L || 1) * (Rp + 14);
       glyph(g, x, y, kind);
       const t = on ? name + ' overhead' : 'To ' + (kind === 'sun' ? 'the Sun' : 'Earth'); g.font = FONTC(12, 500); const twd = g.measureText(t).width, lx = Math.max(4, Math.min(w - twd - 4, x - twd / 2)), ly = y > cy ? Math.min(h - 8, y + 20) : Math.max(8, y - 20);
-      g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.85)'; g.strokeText(t, lx, ly); g.fillStyle = col; g.fillText(t, lx, ly);
+      g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineWidth = 3; g.strokeStyle = C.sky; g.strokeText(t, lx, ly); g.fillStyle = col; g.fillText(t, lx, ly);
     });
     $('mapcap').textContent = 'The whole Moon, lit from the true direction of the Sun, so the edge of the bright side is the real day and night line. Outside the dashed blue line Earth is below a level horizon. Drag to turn the globe; tap anywhere to evaluate that point.';
   }
@@ -1032,15 +1232,15 @@ import { createTerrain } from './js/terrain.js';
   function drawMap() {
     const cv = $('map'); if (!shown(cv)) return; const polar = S.mapTab === 'pole';
     const cw = cv.clientWidth; cv.style.height = (polar ? cw : Math.round(cw / 2)) + 'px';
-    const { g, w, h } = prep(cv); g.fillStyle = '#0a0c11'; g.fillRect(0, 0, w, h);
+    const { g, w, h } = prep(cv); g.fillStyle = C.sky; g.fillRect(0, 0, w, h);
     $('m-pole').classList.toggle('on', polar); $('m-globe').classList.toggle('on', S.mapTab === 'globe'); $('m-flat').classList.toggle('on', S.mapTab === 'flat'); $('layerseg').hidden = !polar;
     cv.style.cursor = S.mapTab === 'globe' ? 'grab' : 'crosshair'; cv.style.touchAction = S.mapTab === 'globe' ? 'none' : '';
-    if (!S.now) { g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the ephemeris…', w / 2, h / 2); return; }
-    if (S.mapTab === 'globe') { cv.style.height = cw + 'px'; const p = prep(cv); p.g.fillStyle = '#0a0c11'; p.g.fillRect(0, 0, p.w, p.h); drawGlobe(p.g, p.w, p.h); return; }
+    if (!S.now) { g.fillStyle = C.skyMuted; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the ephemeris…', w / 2, h / 2); return; }
+    if (S.mapTab === 'globe') { $('maplegend').innerHTML = '<li><i class="key dash" style="border-color:var(--earth)"></i>Edge of Earth\'s view</li><li><i style="width:12px;height:12px;border:2px solid var(--ink);border-radius:50%;background:transparent"></i>Selected site</li>'; cv.style.height = cw + 'px'; const p = prep(cv); p.g.fillStyle = C.sky; p.g.fillRect(0, 0, p.w, p.h); drawGlobe(p.g, p.w, p.h); return; }
     $('l-sun').classList.toggle('on', S.layer === 'sun'); $('l-earth').classList.toggle('on', S.layer === 'earth');
     const ss = subPoint(S.now.sun), sE = subPoint(S.now.earth);
     if (polar) {
-      if (!polarBuilt) { g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the polar terrain…', w / 2, h / 2); return; }
+      if (!polarBuilt) { g.fillStyle = C.skyMuted; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the polar terrain…', w / 2, h / 2); return; }
       const earth = S.layer === 'earth';
       if (earth) castPolar(S.now.earth, true, 0.95, pFrac, pInc); else sunRaster();
       const fr = earth ? pFrac : sunF, inc = earth ? pInc : sunI, dd = img.data;
@@ -1054,15 +1254,20 @@ import { createTerrain } from './js/terrain.js';
       offg.putImageData(img, 0, 0);
       const cx = w / 2, cy = h / 2, R = w / 2 - 20;
       g.save(); g.beginPath(); g.arc(cx, cy, R, 0, 7); g.clip(); g.imageSmoothingEnabled = true; g.drawImage(off, cx - R, cy - R, 2 * R, 2 * R); g.restore();
-      g.strokeStyle = 'rgba(255,255,255,0.16)'; g.lineWidth = 1; g.font = FONT(10); g.fillStyle = 'rgba(255,255,255,0.6)'; g.textAlign = 'left'; g.textBaseline = 'middle';
-      for (const la of [-88, -86, -84, -82, -80]) { const rr = 2 * RM * Math.tan((90 + la) / 2 * D2R) / RHO * R; g.beginPath(); g.arc(cx, cy, rr, 0, 7); g.stroke(); if (la > -88 && la < -80) { g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.7)'; g.strokeText(Math.abs(la) + '°S', cx + 3, cy + rr - 7); g.fillText(Math.abs(la) + '°S', cx + 3, cy + rr - 7); g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,0.16)'; } }
+      g.strokeStyle = 'rgba(255,255,255,0.16)'; g.lineWidth = 1; g.font = FONT(10); g.fillStyle = C.skyMuted; g.textAlign = 'left'; g.textBaseline = 'middle';
+      for (const la of [-88, -86, -84, -82, -80]) { const rr = 2 * RM * Math.tan((90 + la) / 2 * D2R) / RHO * R; g.beginPath(); g.arc(cx, cy, rr, 0, 7); g.stroke(); if (la > -88 && la < -80) { g.lineWidth = 3; g.strokeStyle = C.sky; g.strokeText(Math.abs(la) + '°S', cx + 3, cy + rr - 7); g.fillText(Math.abs(la) + '°S', cx + 3, cy + rr - 7); g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,0.16)'; } }
       for (let lo = 0; lo < 360; lo += 45) { g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + R * Math.sin(lo * D2R), cy - R * Math.cos(lo * D2R)); g.stroke(); }
-      g.textAlign = 'center'; g.fillStyle = 'rgba(255,255,255,0.7)'; g.font = FONTC(12, 500);
+      g.textAlign = 'center'; g.fillStyle = C.skyMuted; g.font = FONTC(12, 500);
       [['0° · NEAR SIDE', 0], ['90°E', 90], ['180° · FAR SIDE', 180], ['90°W', 270]].forEach(([t, lo]) => { const rr = R + 10; let x = cx + rr * Math.sin(lo * D2R), y = cy - rr * Math.cos(lo * D2R); if (lo === 90 || lo === 270) { g.save(); g.translate(x, y); g.rotate(lo === 90 ? Math.PI / 2 : -Math.PI / 2); g.fillText(t, 0, 0); g.restore(); } else g.fillText(t, x, y); });
       mapGeom = { polar: true, cx, cy, R, w, h, hits: [] };
       mapGeom.hits = markers(g, (la, lo) => polarXY(la, lo, R, cx, cy), s => s.lat <= CAP);
       glyph(g, cx + (R - 12) * Math.sin(ss.lon * D2R), cy - (R - 12) * Math.cos(ss.lon * D2R), 'sun');
       glyph(g, cx + (R - 12) * Math.sin(sE.lon * D2R), cy - (R - 12) * Math.cos(sE.lon * D2R), 'earth');
+      // scale bar: 50 km, bottom left
+      const kmPx = R / RHO, sb = 50 * kmPx; g.strokeStyle = C.skyInk; g.lineWidth = 2; g.beginPath(); g.moveTo(12, h - 14); g.lineTo(12 + sb, h - 14); g.moveTo(12, h - 18); g.lineTo(12, h - 10); g.moveTo(12 + sb, h - 18); g.lineTo(12 + sb, h - 10); g.stroke();
+      g.font = FONT(12); g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.lineWidth = 4; g.strokeStyle = C.sky; g.strokeText('50 km', 12, h - 24); g.fillStyle = C.skyInk; g.fillText('50 km', 12, h - 24);
+      $('maplegend').innerHTML = earth ? '<li><i style="background:rgb(60,135,235)"></i>Earth in view now</li><li><i style="background:rgb(30,32,42)"></i>Earth hidden by terrain</li><li><i style="width:12px;height:12px;border:2px solid var(--ink);border-radius:50%;background:transparent"></i>Selected site</li>'
+        : '<li><i style="background:rgb(255,236,200)"></i>Sunlit now</li><li><i style="background:rgb(30,32,42)"></i>In shadow</li><li><i style="width:12px;height:12px;border:2px solid var(--ink);border-radius:50%;background:transparent"></i>Selected site</li>';
       $('mapcap').textContent = (earth ? 'Blue ground has line of sight to Earth right now. ' : 'Bright ground is in sunlight right now; shadows are cast from the LOLA terrain. ') + 'The Sun and Earth symbols on the rim show their directions. Coverage is 80°S to the pole. Tap anywhere to evaluate that point.';
     } else {
       if (texImg && texImg.complete) g.drawImage(texImg, 0, 0, w, h);
@@ -1073,9 +1278,10 @@ import { createTerrain } from './js/terrain.js';
       const proj = (la, lo) => { const l = ((lo + 180) % 360 + 360) % 360 - 180; return [(l + 180) / 360 * w, (90 - la) / 180 * h]; };
       g.strokeStyle = 'rgba(255,255,255,0.12)'; g.lineWidth = 1; for (let lo = -150; lo < 180; lo += 30) { const x = (lo + 180) / 360 * w; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); } for (let la = -60; la < 90; la += 30) { const y = (90 - la) / 180 * h; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
       const circle = (c, col, dash) => { g.strokeStyle = col; g.lineWidth = 1.6; g.setLineDash(dash); g.beginPath(); let px = null; const la0 = c.lat * D2R, lo0 = c.lon * D2R; for (let b = 0; b <= 360; b += 2) { const la = Math.asin(Math.cos(la0) * Math.cos(b * D2R)), lo = lo0 + Math.atan2(Math.sin(b * D2R) * Math.cos(la0), -Math.sin(la0) * Math.sin(la)); const [x, y] = proj(la * R2D, lo * R2D); if (px !== null && Math.abs(x - px) < w / 2) g.lineTo(x, y); else g.moveTo(x, y); px = x; } g.stroke(); g.setLineDash([]); };
-      circle(ss, '#f0b03a', []); circle(sE, '#62a0f2', [5, 4]);
+      circle(ss, C.skySun, []); circle(sE, C.skyEarth, [5, 4]);
       mapGeom = { polar: false, w, h, hits: [] }; mapGeom.hits = markers(g, proj, () => true);
       const a = proj(ss.lat, ss.lon), b = proj(sE.lat, sE.lon); glyph(g, a[0], a[1], 'sun'); glyph(g, b[0], b[1], 'earth');
+      $('maplegend').innerHTML = '<li><i class="key" style="border-color:var(--sun)"></i>Day and night line</li><li><i class="key dash" style="border-color:var(--earth)"></i>Edge of Earth\'s view</li><li><i style="width:12px;height:12px;border:2px solid var(--ink);border-radius:50%;background:transparent"></i>Selected site</li>';
       $('mapcap').textContent = 'The Sun symbol marks where it is overhead; the amber line is the day and night boundary. The Earth symbol marks where Earth is overhead; outside the dashed blue line Earth is below the horizon. Tap anywhere to evaluate that point.';
     }
   }
@@ -1323,11 +1529,10 @@ import { createTerrain } from './js/terrain.js';
   }
   $('play').addEventListener('click', () => { S.playing = !S.playing; $('play').textContent = S.playing ? 'Pause' : 'Play'; last = 0; if (S.playing) requestAnimationFrame(tick); else setTime(Math.round(S.t / 60000) * 60000, false); });
   const scrubTo = t => { S.t = Math.round(t / 60000) * 60000; syncInputs(); renderSoon(); };
-  scrub($('tl'), TLP.l, TLP.r, scrubTo); scrub($('cmp'), 8, 8, scrubTo);
-  const calDay = e => { const r = $('cal').getBoundingClientRect(); return Math.max(0, Math.min(365, Math.floor((e.clientX - r.left - CALP.l) / (r.width - CALP.l - CALP.r) * 366))); };
-  $('cal').addEventListener('pointermove', e => { calHover = calDay(e); drawCalendar(); });
+  scrub($('tl'), TLP, scrubTo); scrub($('cmp'), CMPP, scrubTo);
+  $('cal').addEventListener('pointermove', e => { const d = calDayAt(e); if (d !== calHover) { calHover = d; drawCalendar(); } });
   $('cal').addEventListener('pointerleave', () => { calHover = null; drawCalendar(); });
-  $('cal').addEventListener('click', e => { const d = calDay(e); calHover = null; S.t = S.calAnchor + d * DAY; S.anchor = floorDay(S.t); syncInputs(); render(); });
+  $('cal').addEventListener('click', e => { const d = calDayAt(e); if (d === null) return; calHover = null; S.t = S.calAnchor + d * DAY; S.anchor = floorDay(S.t); syncInputs(); render(); });
   $('chips').addEventListener('click', e => { const id = e.target.dataset && e.target.dataset.rm; if (id) { S.cmp = S.cmp.filter(x => x !== id); fillSelects(); render(); } });
   $('addcmp').addEventListener('change', e => { const id = e.target.value; if (id && !S.cmp.includes(id)) { S.cmp.push(id); if (S.cmp.length > 4) S.cmp.shift(); } fillSelects(); render(); });
   $('m-pole').addEventListener('click', () => { S.mapTab = 'pole'; drawMap(); }); $('m-globe').addEventListener('click', () => { S.mapTab = 'globe'; GL.lat = Math.max(-62, Math.min(62, S.site.lat)); GL.lon = S.site.lon; drawMap(); }); $('m-flat').addEventListener('click', () => { S.mapTab = 'flat'; drawMap(); });
