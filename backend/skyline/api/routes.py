@@ -60,7 +60,7 @@ def _cite(tiers: list[str], eph: dict) -> list[str]:
                 keys.add(k)
     for m in eph.values():
         keys.update(m.values())
-    return [CITATIONS[k] for k in sorted(keys) if k in CITATIONS]
+    return list(dict.fromkeys(CITATIONS[k] for k in sorted(keys) if k in CITATIONS))
 
 
 def meta(part_meta: dict | None = None, lander: dict | None = None, defaults: list[str] | None = None, **extra) -> dict:
