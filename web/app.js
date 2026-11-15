@@ -4,7 +4,7 @@
 (async function () {
   const $ = id => document.getElementById(id);
   const DAY = 86400e3, HOUR = 3600e3, D2R = Math.PI / 180, R2D = 180 / Math.PI, RM = 1737.4;
-  const SYNODIC = 29.530589, TAB_DAYS = 428, VIEWS = ['plan', 'explore', 'compare', 'learn'];
+  const SYNODIC = 29.530589, TAB_DAYS = 428, VIEWS = ['plan', 'explore', 'compare', 'learn', 'method'];
   // Where the Lunar Skyline API runs: ?api=... in the address wins, then web/config.js, then the page's own server.
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const API = (new URLSearchParams(location.search).get('api') || window.LUNAR_SKYLINE_API || '').replace(/\/$/, '');
@@ -97,8 +97,8 @@
     const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
     C = { ink: v('--ink'), muted: v('--muted'), line: v('--line'), sun: v('--sun'), earth: v('--earth'), go: v('--go'), warn: v('--warn'), bad: v('--bad'), cell: v('--cell'), panel: v('--panel'), bg: v('--bg') };
   }
-  const FONT = (px, w) => (w || 500) + ' ' + px + 'px Barlow, "Helvetica Neue", Arial, sans-serif';
-  const FONTC = (px, w) => (w || 600) + ' ' + px + 'px "Barlow Condensed", "Arial Narrow", Arial, sans-serif';
+  const FONT = (px, w) => (w || 500) + ' ' + px + 'px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+  const FONTC = (px, w) => (w || 600) + ' ' + Math.round(px * 0.92) + 'px "Space Grotesk", Inter, system-ui, sans-serif';
   const shown = el => el.offsetParent !== null;
   function prep(cv) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2), w = cv.clientWidth, h = cv.clientHeight;
@@ -422,6 +422,13 @@
     $('t-eset-k').textContent = link ? 'Earthset in' : 'Earthrise in';
     $('t-eset').textContent = !S.ev ? '…' : ee ? fmtDur(ee.t - S.t) : (link ? 'Never sets' : 'Never rises'); $('t-eset-s').textContent = !S.ev ? '' : ee ? fmtDT(ee.t) : 'Within the next ' + look + ' days';
     const flat = c.sunFrac * Math.max(0, Math.sin(c.sunEl * D2R)), w = S.cfg.peakW * c.irr * (S.cfg.tracking ? c.sunFrac : flat);
+    const gP = $('g-power').parentElement, gL = $('g-link').parentElement;
+    $('g-power').textContent = Math.round(w) + ' W'; $('g-power-s').textContent = Math.round(c.sunFrac * 100) + '% of the Sun visible · ' + S.cfg.peakW + ' W ' + (S.cfg.tracking ? 'tracking' : 'flat') + ' array';
+    gP.classList.toggle('ok', w > 1); gP.classList.toggle('no', !(w > 1));
+    const dsnUp = (S.dsn || []).filter(d => d.elevation_deg > 10).map(d => d.name);
+    $('g-link').textContent = link ? (S.dsn && !dsnUp.length ? 'Earth up, no station' : 'Available') : 'Blocked';
+    $('g-link-s').textContent = link ? (S.dsn ? (dsnUp.length ? 'Ground stations in view: ' + dsnUp.join(', ') : 'No Deep Space Network station sees the Moon now') : 'Earth is ' + c.earthClr.toFixed(2) + '° clear of the terrain') : (c.earthEl < -c.earthRad ? 'Earth is below the horizon' : 'Earth is hidden behind terrain');
+    gL.classList.toggle('ok', link && !(S.dsn && !dsnUp.length)); gL.classList.toggle('no', !link);
     $('kv-power').textContent = 'Idealized index: sun-tracking array ' + Math.round(c.sunFrac * 100) + '%, horizontal array ' + Math.round(flat * 100) + '%. Your array would give about ' + Math.round(w) + ' W.';
     $('kv-los').textContent = link ? 'Yes, Earth\'s centre clears the terrain by ' + c.earthClr.toFixed(2) + '°.' : 'No.';
     const dsn = (S.dsn || []).filter(d => d.elevation_deg > 10).sort((a, b) => b.elevation_deg - a.elevation_deg);
@@ -495,8 +502,14 @@
       }
       const mini = w < 520, lab = (kind === 'sun' ? 'Sun ' : 'Earth ') + Math.abs(clr).toFixed(1) + '° ' + (clr > 0 ? 'above' : 'below') + (mini ? '' : ' terrain'); g.font = FONTC(13); const tw = g.measureText(lab).width;
       const lx = x + 11 + tw > w - padR ? x - 11 - tw : x + 11; g.textAlign = 'left'; g.fillStyle = kind === 'sun' ? '#ffd98a' : '#b9d6ff';
-      g.fillText(lab, lx, mini && kind === 'sun' ? Math.min(padT + ph - 8, y + 15) : Math.max(padT + 12, y - 9));
+      let ly = mini && kind === 'sun' ? Math.min(padT + ph - 8, y + 15) : Math.max(padT + 12, y - 9);
+      // keep the two labels apart: if this one would overlap the label drawn first, put it below its body instead
+      const o = labels[0];
+      if (o && lx < o.x + o.w + 6 && lx + tw + 6 > o.x && Math.abs(ly - o.y) < 15) ly = Math.min(padT + ph - 6, Math.max(y + 17, o.y + 16));
+      labels.push({ x: lx, y: ly, w: tw });
+      g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.75)'; g.strokeText(lab, lx, ly); g.fillText(lab, lx, ly);
     }
+    const labels = [];
     const M = a => maskAt(m, a);
     const gr = g.createLinearGradient(0, Y(Math.min(yMax, 6)), 0, padT + ph); gr.addColorStop(0, 'rgba(126,121,113,0.96)'); gr.addColorStop(1, 'rgba(58,56,53,0.96)');
     g.fillStyle = gr; g.beginPath(); g.moveTo(X(0), padT + ph + 2);
@@ -1112,6 +1125,7 @@
     document.querySelectorAll('[data-span]').forEach(b => b.classList.toggle('on', +b.dataset.span === S.span));
     document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === S.view));
     document.querySelectorAll('[data-v]').forEach(s => { s.hidden = s.dataset.v !== S.view; });
+    document.body.dataset.view = S.view;
   }
   function setTime(t, jump) {
     S.t = t;
@@ -1195,8 +1209,9 @@
       if (S.ev && S.evAt !== S.t) { const keep = ev => ev && ev.t > S.t ? ev : null; S.ev = { sun: keep(S.ev.sun), earth: keep(S.ev.earth) }; }
     }
     drawSiteInfo();
+    if (S.cur) drawStatus();
     if (S.view === 'plan') { drawMission(); drawLab(); drawRescue(); drawRisk(); }
-    else if (S.view === 'explore') { if (S.cur) { drawSurface(); drawStatus(); drawSky(); } else { waiting($('surf'), 'Loading the sky…'); waiting($('sky'), 'Loading the sky…'); } drawTimeline(); drawMap(); }
+    else if (S.view === 'explore') { if (S.cur) { drawSurface(); drawSky(); } else { waiting($('surf'), 'Loading the sky…'); waiting($('sky'), 'Loading the sky…'); } drawTimeline(); drawMap(); }
     else if (S.view === 'learn') drawLearn();
     else { drawCmpSky(); drawCompare(); drawCalendar(); }
     if (lastErr && !$('srverr')) { const p = document.createElement('p'); p.id = 'srverr'; p.className = 'tag'; p.style.color = 'var(--bad)'; p.textContent = 'Some data could not be loaded from the server: ' + lastErr.message + '.'; $('siteinfo').after(p); }
@@ -1310,6 +1325,8 @@
     const el = document.querySelector(st.sel); if (el) { try { el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); } catch (_) { el.scrollIntoView(); } el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); }
   }
   $('tour-go').addEventListener('click', () => tourShow(0));
+  try { const th = localStorage.getItem('ls-theme'); if (th) document.documentElement.dataset.theme = th; } catch (_) {}
+  $('theme').addEventListener('click', () => { const th = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; document.documentElement.dataset.theme = th; try { localStorage.setItem('ls-theme', th); } catch (_) {} });
   $('tour-x').addEventListener('click', () => tourShow(tourI + 1));
   $('tour-b').addEventListener('click', () => tourShow(tourI - 1));
   $('tour-c').addEventListener('click', () => tourShow(-1));
@@ -1325,7 +1342,7 @@
     const sj = await getJSON('/sites');
     SITES = sj.sites.map(s => ({ id: s.id, g: s.group, name: s.name, lat: s.lat, lon: s.lon, note: s.note }));
     S.site = SITES[0];
-    $('boot').textContent = 'Loading the polar terrain and the ephemeris from the server…';
+    $('boot').querySelector('p').textContent = 'Loading the polar terrain and the ephemeris from the server…';
     texImg = new Image(); texImg.onload = () => { try { const c = document.createElement('canvas'); c.width = texImg.naturalWidth; c.height = texImg.naturalHeight; const cg = c.getContext('2d'); cg.drawImage(texImg, 0, 0); const d = cg.getImageData(0, 0, c.width, c.height).data, a = new Uint8Array(c.width * c.height); for (let i = 0; i < a.length; i++) a[i] = d[i * 4]; GL.tex = a; GL.tw = c.width; GL.th = c.height; } catch (_) {} if (ready && S.mapTab !== 'pole') drawMap(); };
     texImg.src = API + '/terrain/moon.jpg';
     TER.loadPolar().then(() => { buildPolar(); renderSoon(); }, err => { lastErr = err; renderSoon(); });
@@ -1345,7 +1362,7 @@
     render();
     window.__ready = true;
   } catch (err) {
-    $('boot').innerHTML = 'The Lunar Skyline API could not be reached at <code>' + (API || location.origin) + '</code> (' + (err && err.message ? err.message : err) + '). Start it with <code>python run.py</code> in the <code>backend</code> folder, or set its address in <code>web/config.js</code>, then reload.';
+    $('boot').innerHTML = '<p>The Lunar Skyline API could not be reached at <code>' + (API || location.origin) + '</code> (' + (err && err.message ? err.message : err) + '). Start it with <code>python run.py</code> in the <code>backend</code> folder, or set its address in <code>web/config.js</code>, then reload.</p>';
     throw err;
   }
 })();
