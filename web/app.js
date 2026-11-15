@@ -8,7 +8,7 @@ import { createTerrain } from './js/terrain.js';
 
 (async function () {
   const $ = id => document.getElementById(id);
-  const VIEWS = ['plan', 'explore', 'compare', 'learn', 'method'];
+  const VIEWS = ['plan', 'explore', 'compare', 'learn', 'method', 'about'];
   // Where the Mons Carlo API runs: ?api=... in the address wins, then web/config.js, then the page's own server.
   const DEBUG = new URLSearchParams(location.search).has('debug');
   if (DEBUG) { window.__dbg = []; const cl = console.log.bind(console); console.log = (...a) => { window.__dbg.push(a.join(' ')); cl(...a); }; }
@@ -35,8 +35,8 @@ import { createTerrain } from './js/terrain.js';
     const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
     C = { ink: v('--ink'), muted: v('--muted'), line: v('--line'), sun: v('--sun'), earth: v('--earth'), go: v('--go'), warn: v('--warn'), bad: v('--bad'), cell: v('--cell'), panel: v('--panel'), bg: v('--bg') };
   }
-  const FONT = (px, w) => (w || 500) + ' ' + px + 'px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
-  const FONTC = (px, w) => (w || 600) + ' ' + Math.round(px * 0.92) + 'px "Space Grotesk", Inter, system-ui, sans-serif';
+  const FONT = (px, w) => (w || 500) + ' ' + px + 'px "IBM Plex Sans", system-ui, -apple-system, sans-serif';
+  const FONTC = (px, w) => (w || 600) + ' ' + Math.round(px * 0.92) + 'px "IBM Plex Sans", system-ui, -apple-system, sans-serif';
   const shown = el => el.offsetParent !== null;
   function prep(cv) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2), w = cv.clientWidth, h = cv.clientHeight;
@@ -633,9 +633,9 @@ import { createTerrain } from './js/terrain.js';
     const a = statsFor(eq, TAB.t0, 365), b = statsFor(po, TAB.t0, 365);
     if (a && b) {
       const tile = (k, va, vb, note) => '<div class="tile"><div class="k">' + k + '</div><div class="duo"><div><span>Apollo 11</span><b>' + va + '</b></div><div><span>Shackleton rim</span><b>' + vb + '</b></div></div><div class="s">' + note + '</div></div>';
-      $('l-tiles').innerHTML = tile('Highest the Sun climbs', a.maxSunEl.toFixed(0) + '°', b.maxSunEl.toFixed(1) + '°', 'Near the pole sunlight arrives almost sideways, so a single hill can block it.')
-        + tile('Longest night', a.maxDarkD.toFixed(1) + ' d', b.maxDarkD.toFixed(1) + ' d', 'A high polar ridge has short nights. A crater floor beside it may never see the Sun at all.')
-        + tile('Time with Earth in view', a.linkPct.toFixed(0) + '%', b.linkPct.toFixed(0) + '%', 'From the near side Earth never sets. At the pole it bobs above and below the terrain about every 27 days.');
+      $('l-tiles').innerHTML = tile('Highest the Sun climbs', a.maxSunEl.toFixed(0) + '°', b.maxSunEl.toFixed(1) + '°', 'With the Sun this low, a hill several kilometres away can put the site in shadow.')
+        + tile('Longest night', a.maxDarkD.toFixed(1) + ' d', b.maxDarkD.toFixed(1) + ' d', 'Rims and ridges near the pole get short nights. Some crater floors nearby never get sunlight at all.')
+        + tile('Time with Earth in view', a.linkPct.toFixed(0) + '%', b.linkPct.toFixed(0) + '%', 'On the near side Earth never sets. At the pole, libration lifts it above the terrain and drops it behind again roughly every 27 days.');
       $('l-facts').textContent = 'Figures cover the 365 days from ' + fmtDate(TAB.t0) + ', measured against the real terrain at each site.';
     }
     const cv = $('tilt'); if (!shown(cv)) return; const { g, w, h } = prep(cv), two = w >= 620, pw = two ? w / 2 : w, ph = two ? h : h / 2;
@@ -643,15 +643,15 @@ import { createTerrain } from './js/terrain.js';
       const ox = two ? k * pw : 0, oy = two ? 0 : k * ph, cx = ox + pw * 0.56, cy = oy + ph * 0.46, r = Math.min(pw * 0.2, ph * 0.3), a = tilt * D2R;
       g.strokeStyle = C.sun; g.fillStyle = C.sun; g.lineWidth = 1.5; g.globalAlpha = 0.7;
       for (let i = -2; i <= 2; i++) { const y = cy + i * r * 0.5, x0 = ox + 16, x1 = cx - r - 26; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); g.beginPath(); g.moveTo(x1 + 7, y); g.lineTo(x1, y - 4); g.lineTo(x1, y + 4); g.closePath(); g.fill(); }
-      g.globalAlpha = 1; g.font = FONTC(12, 500); g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText('SUNLIGHT', ox + 16, cy - r * 1.0 - 12);
+      g.globalAlpha = 1; g.font = FONTC(12, 500); g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText('Sunlight', ox + 16, cy - r * 1.0 - 12);
       g.fillStyle = dark; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill(); g.fillStyle = lit; g.beginPath(); g.arc(cx, cy, r, Math.PI / 2, 3 * Math.PI / 2); g.closePath(); g.fill();
       const sx = -Math.sin(a), sy = Math.cos(a);
       g.strokeStyle = C.muted; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(cx, cy - r * 1.3); g.lineTo(cx, cy + r * 1.3); g.stroke(); g.setLineDash([]);
       g.strokeStyle = C.ink; g.lineWidth = 1.8; g.beginPath(); g.moveTo(cx - sx * r * 1.3, cy - sy * r * 1.3); g.lineTo(cx + sx * r * 1.3, cy + sy * r * 1.3); g.stroke();
       const px = cx + sx * r, py = cy + sy * r; g.strokeStyle = C.muted; g.lineWidth = 1.5; g.beginPath(); g.moveTo(px - sy * 34, py + sx * 34); g.lineTo(px + sy * 34, py - sx * 34); g.stroke();
       g.fillStyle = C.bad; g.beginPath(); g.arc(px, py, 4.5, 0, 7); g.fill();
-      g.fillStyle = C.ink; g.font = FONTC(17); g.textAlign = 'center'; g.fillText(name.toUpperCase() + ' · AXIS TILT ' + tilt.toFixed(1) + '°', ox + pw / 2, oy + 20);
-      g.font = FONTC(12, 500); g.fillStyle = C.bad; g.textAlign = 'right'; g.fillText('SOUTH POLE', px - 12, py + 18);
+      g.fillStyle = C.ink; g.font = FONTC(17); g.textAlign = 'center'; g.fillText(name + ', axis tilted ' + tilt.toFixed(1) + '°', ox + pw / 2, oy + 20);
+      g.font = FONTC(12, 500); g.fillStyle = C.bad; g.textAlign = 'right'; g.fillText('South pole', px - 12, py + 18);
       g.font = FONT(13); g.fillStyle = C.muted; g.textAlign = 'center'; g.fillText(note, ox + pw / 2, oy + ph - 10, pw - 20);
     });
   }
@@ -798,7 +798,8 @@ import { createTerrain } from './js/terrain.js';
     const cv = $('surf'); if (!shown(cv)) return;
     const can = riskOk() && TER.ready() && TER.rings && siteMask(S.site) && S.now && S.cur;
     cv.style.height = (riskOk() ? Math.round(Math.max(220, Math.min(560, cv.clientWidth * (cv.clientWidth < 520 ? 0.66 : 0.42)))) : 96) + 'px';
-    const { g, w, h } = prep(cv); g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+    const { g, w, h } = prep(cv); if (!(w > 0 && h > 0)) return;   // mid-resize or not laid out yet
+    g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
     if (!riskOk()) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('The surface view needs the polar terrain, which covers 80°S to the south pole.', w / 2, h / 2); $('surfcap').textContent = 'Pick a south-pole site to stand on the surface. The sky chart shows the horizon for any site.'; return; }
     if (!can) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the terrain around the site…', w / 2, h / 2); return; }
     const c = S.cur, m = siteMask(S.site), mask = m.mask, dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1247,7 +1248,7 @@ import { createTerrain } from './js/terrain.js';
     if (S.view === 'plan') { drawMission(); drawLab(); drawRescue(); drawRisk(); }
     else if (S.view === 'explore') { $('surf').closest('section').hidden = !riskOk(); if (S.cur) { drawSurface(); drawSky(); } else { waiting($('surf'), 'Loading the sky…'); waiting($('sky'), 'Loading the sky…'); } drawTimeline(); drawMap(); }
     else if (S.view === 'learn') drawLearn();
-    else { drawCmpSky(); drawCompare(); drawCalendar(); }
+    else if (S.view === 'compare') { drawCmpSky(); drawCompare(); drawCalendar(); }
     if (srv.lastErr && !$('srverr')) { const p = document.createElement('p'); p.id = 'srverr'; p.className = 'tag'; p.style.color = 'var(--bad)'; p.textContent = 'Some data could not be loaded from the server: ' + srv.lastErr.message + '.'; $('siteinfo').after(p); }
   }
   function renderSoon() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
@@ -1379,6 +1380,17 @@ import { createTerrain } from './js/terrain.js';
   $('tour-x').addEventListener('click', () => tourShow(tourI + 1));
   $('tour-b').addEventListener('click', () => tourShow(tourI - 1));
   $('tour-c').addEventListener('click', () => tourShow(-1));
+
+  // ---------- sticky header heights (the plan sub-navigation and anchor jumps sit below them) ----------
+  {
+    const hdr = document.querySelector('.appbar'), bar = $('ctlbar'), root = document.documentElement.style;
+    const measure = () => {
+      const hh = getComputedStyle(hdr).position === 'sticky' ? hdr.offsetHeight : 0;
+      root.setProperty('--hdr-h', hh + 'px'); root.setProperty('--stick-h', (hh + bar.offsetHeight) + 'px');
+    };
+    if (window.ResizeObserver) { const ro = new ResizeObserver(measure); ro.observe(hdr); ro.observe(bar); }
+    window.addEventListener('resize', measure); measure();
+  }
   const reTheme = () => { readTheme(); if (ready) render(); };
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', reTheme); } catch (_) {}
   new MutationObserver(reTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });

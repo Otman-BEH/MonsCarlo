@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mons Carlo · landing site navigator</title>
 <meta name="description" content="Compare lunar landing sites and dates: the Sun and Earth against the real terrain horizon, power and radio windows, and whether a lander survives.">
-<meta name="theme-color" content="#07090d">
+<meta name="theme-color" content="#0f0f10">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23d8d6cc'/%3E%3Ccircle cx='21' cy='12' r='14' fill='%2307090d'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- The web fonts load in the background: the page paints at once in the system font and swaps when they arrive. -->
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"></noscript>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap"></noscript>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -26,19 +26,52 @@
     <button id="v-compare" type="button" data-view="compare">Compare</button>
     <button id="v-learn" type="button" data-view="learn">Why the pole?</button>
     <button id="v-method" type="button" data-view="method">Method</button>
+    <button id="v-about" type="button" data-view="about">About</button>
   </nav>
   <div class="actions">
-    <button id="tour-go" type="button" class="primary">Tour</button>
+    <button id="tour-go" type="button">Tour</button>
     <button id="share" type="button" title="Copy a link to this exact scenario">Share</button>
     <button id="theme" type="button" class="icon" aria-label="Switch light or dark theme" title="Light or dark">◐</button>
   </div>
 </header>
 
+<div class="ctlbar" id="ctlbar" role="region" aria-label="Site and time">
+  <div class="ctl-in">
+    <div class="ctl-site">
+      <label class="il" for="site">Site</label>
+      <select id="site"></select>
+      <details class="coords"><summary>Custom point</summary>
+        <div class="coords-in">
+          <label class="fl" for="lat">Lat °N<input id="lat" type="number" step="0.01" min="-90" max="90"></label>
+          <label class="fl" for="lon">Lon °E<input id="lon" type="number" step="0.01" min="-180" max="360"></label>
+          <button id="usecoord" type="button">Go</button>
+          <p class="hint">Or tap any point on the map.</p>
+        </div>
+      </details>
+      <label class="il" for="eye" title="Height of the antenna and solar panels above the ground. A taller mast can see over nearby hills.">Mast, m</label>
+      <input id="eye" class="mast" type="number" step="0.5" min="0" max="100" value="2" title="Height of the antenna and solar panels above the ground">
+    </div>
+    <div class="ctl-time">
+      <label class="il" for="when">UTC</label>
+      <input id="when" type="datetime-local">
+      <div class="steps">
+        <button id="bnow" type="button">Now</button>
+        <button data-step="-24" type="button" aria-label="Back one day">−1 d</button>
+        <button data-step="-1" type="button" aria-label="Back one hour">−1 h</button>
+        <button data-step="1" type="button" aria-label="Forward one hour">+1 h</button>
+        <button data-step="24" type="button" aria-label="Forward one day">+1 d</button>
+        <button data-step="708" type="button" aria-label="Forward one lunar day">+1 lunar day</button>
+        <button id="play" type="button" class="primary play">Play</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <section class="intro" id="intro" aria-label="Welcome" hidden>
   <div class="intro-text">
     <button type="button" id="intro-x" class="icon close" aria-label="Hide this introduction" title="Hide">×</button>
     <h1>Where are the Sun and Earth, and will the lander make it?</h1>
-    <p>Pick a landing site and a date. Mons Carlo shows the Sun and Earth against the real terrain horizon, when power and radio windows open and close, and whether a lander survives its mission. Every number is computed from NASA's LOLA terrain and JPL Horizons positions.</p>
+    <p>Pick a spot on the Moon and a date. You'll see where the Sun and Earth sit against the real hills on the horizon, when a lander would have power and a radio link, and whether it gets through its mission. The terrain comes from NASA's LOLA maps and the Sun and Earth positions from JPL Horizons.</p>
   </div>
   <div class="intro-actions">
     <button type="button" class="primary" data-intro="tour">Take the 60-second tour</button>
@@ -47,31 +80,7 @@
   </div>
 </section>
 
-<section class="ctxbar" aria-label="Site and time">
-  <div class="ctx-site">
-    <label class="fl" for="site">Landing site<select id="site"></select></label>
-    <details class="coords"><summary>Custom point</summary>
-      <div class="coords-in">
-        <label class="fl" for="lat">Lat °N<input id="lat" type="number" step="0.01" min="-90" max="90"></label>
-        <label class="fl" for="lon">Lon °E<input id="lon" type="number" step="0.01" min="-180" max="360"></label>
-        <button id="usecoord" type="button">Go</button>
-        <p class="hint">Or tap any point on the map.</p>
-      </div>
-    </details>
-    <label class="fl mast" for="eye" title="How high the antenna and solar panels sit above the ground. A taller mast can see over nearby hills.">Mast, m <span class="fh">(antenna and panel height)</span><input id="eye" type="number" step="0.5" min="0" max="100" value="2"></label>
-  </div>
-  <div class="ctx-time">
-    <label class="fl" for="when">Date and time (UTC)<input id="when" type="datetime-local"></label>
-    <div class="steps">
-      <button id="bnow" type="button">Now</button>
-      <button data-step="-24" type="button" aria-label="Back one day">−1 d</button>
-      <button data-step="-1" type="button" aria-label="Back one hour">−1 h</button>
-      <button data-step="1" type="button" aria-label="Forward one hour">+1 h</button>
-      <button data-step="24" type="button" aria-label="Forward one day">+1 d</button>
-      <button data-step="708" type="button" aria-label="Forward one lunar day">+1 lunar day</button>
-      <button id="play" type="button" class="primary play">Play</button>
-    </div>
-  </div>
+<section class="ctxbar" aria-label="About this site">
   <p class="siteinfo" id="siteinfo"></p>
   <p class="readout" id="sharemsg" aria-live="polite"></p>
 </section>
@@ -139,7 +148,7 @@
   <!-- PLAN -->
   <nav class="panel span2 subnav" data-v="plan" aria-label="Plan sections">
     <a href="#sec-verdict">Verdict</a><a href="#sec-cont">Contingencies</a><a href="#sec-design">Mission design</a><a href="#sec-risk">Landing risk</a><a href="#sec-rescue">Launch slip</a>
-    <span class="hint">Simulated hour by hour on the server for the lander below.</span>
+    <span class="hint">Each result is simulated hour by hour for your lander.</span>
   </nav>
   <section class="panel" data-v="plan" aria-label="Mission needs">
       <div class="phead"><h2>Lander and mission</h2></div>
@@ -311,10 +320,10 @@
 
   <!-- LEARN -->
   <section class="panel span2" data-v="learn" aria-label="Equator and pole compared">
-      <div class="phead"><h2>The same moment, two very different skies</h2>
+      <div class="phead"><h2>Apollo 11 and Shackleton rim at the same moment</h2>
         <div class="steps"><button id="l-play" type="button" class="primary">Play a lunar month</button></div>
       </div>
-      <p class="cap">Each picture is a full turn of the horizon at <span id="l-when"></span>, with the real terrain along the bottom. At Apollo 11's site the Sun arcs high overhead and Earth hangs high in the sky. On the rim of Shackleton crater both sit on the horizon, among the hills.</p>
+      <p class="cap">Both strips show a full 360° turn of the horizon at <span id="l-when"></span>, with the measured terrain along the bottom. At the Apollo 11 site, close to the equator, the Sun climbs high during the lunar day and Earth stays about 66° up, barely moving. On Shackleton's rim, 7 km from the south pole, the Sun and Earth both stay within a few degrees of the horizon, in among the hills.</p>
       <canvas id="learnsky" role="img" aria-label="Horizon panoramas with the Sun and Earth at Apollo 11 and at Shackleton rim for the selected time"></canvas>
       <ul class="legend"><li><i style="background:var(--sun)"></i>Sun and its path over the next lunar day</li><li><i style="background:var(--earth)"></i>Earth and its path</li><li><i style="background:#6f6b64"></i>Terrain</li></ul>
       <div class="tiles t3" id="l-tiles"></div>
@@ -322,17 +331,17 @@
     </section>
 
   <section class="panel span2" data-v="learn" aria-label="Why the pole is different">
-      <div class="phead"><h2>Why the Sun never climbs at the Moon's pole</h2></div>
+      <div class="phead"><h2>Why the Sun stays low at the pole</h2></div>
       <canvas id="tilt" role="img" aria-label="Earth's axis is tilted 23.4 degrees and the Moon's only 1.5 degrees, so sunlight reaches the Moon's poles almost exactly sideways"></canvas>
       <div class="cols">
-        <div><h3>Sunlight comes in sideways</h3>
-          <p>Earth leans 23.4°, which gives its poles a summer Sun well above the horizon. The Moon leans only 1.5°. At its poles the Sun circles the horizon all month and never climbs, so shadows are kilometres long and a single ridge decides whether a lander has power.</p></div>
-        <div><h3>Earth hangs low and wobbles</h3>
-          <p>The Moon always shows Earth the same face, so from any one place Earth stays in nearly the same part of the sky. At the pole that part of the sky is the horizon. A slow nodding of the Moon lifts Earth a few degrees above the horizon and then drops it below, about every 27 days. When it drops, a lander without a relay satellite loses its radio link.</p></div>
-        <div><h3>Why go anyway</h3>
-          <p>Crater floors near the pole have not seen the Sun for billions of years. They are among the coldest places measured in the solar system, cold enough to hold water ice. A few ridges beside them are sunlit most of the time. Missions want both within reach: ice to study and use, and light for power. Finding where and when that works is what this tool is for.</p></div>
+        <div><h3>The Moon barely tilts</h3>
+          <p>Earth's axis is tilted 23.4°, and that is why its poles get a summer with the Sun well up in the sky. The Moon's axis is tilted about 1.5°. At the lunar south pole the Sun goes all the way round the horizon once a month but never gets more than about 1.5° above a level horizon. Shadows stretch for kilometres, and whether a lander gets power often comes down to one ridge.</p></div>
+        <div><h3>Earth sits on the horizon</h3>
+          <p>The Moon keeps the same side facing Earth, so from a fixed spot Earth stays in roughly the same part of the sky. From the south pole, that part of the sky is right on the horizon. Libration, a slow rocking of the Moon as we see it, moves Earth up and down by a few degrees over about 27 days. When Earth drops behind the terrain, a lander that talks to Earth directly is out of contact until it comes back up, unless it has a relay satellite.</p></div>
+        <div><h3>Why land there anyway</h3>
+          <p>Some crater floors near the pole haven't had direct sunlight in billions of years. NASA's Lunar Reconnaissance Orbiter has measured temperatures below −230 °C in places, cold enough for water ice to last. Some rims and ridges a few kilometres away are sunlit most of the time. A lander wants both: ice within reach and enough light to keep its battery charged. The rest of this tool is about finding where and when you get both.</p></div>
       </div>
-      <div class="row"><button id="l-stand" type="button" class="primary">Stand on the rim of Shackleton</button><button id="l-compare" type="button">Compare the two sites in detail</button></div>
+      <div class="row"><button id="l-stand" type="button" class="primary">Go to Shackleton rim</button><button id="l-compare" type="button">Compare the two sites</button></div>
     </section>
 
   <!-- METHOD -->
@@ -348,31 +357,97 @@
           <tr><td>Monte Carlo random numbers, mission design results</td><td>the original in-browser engine</td><td>bit for bit / identical</td></tr>
           <tr><td>What the 5 m maps change</td><td>80 m terrain, 12 months, 2 m mast</td><td>Shackleton rim sunlit 86% → 82%; at the pole Earth in view 29% → 18%</td></tr>
         </tbody></table></div>
-      <div class="cols">
+      <div class="cols c2">
         <div><h3>Positions</h3>
           <p>Sun and Earth positions come from NASA's JPL Horizons service, fetched by the Mons Carlo server one month at a time and cached (JPL's SPICE DE440 kernels stand in if Horizons cannot be reached). They are Moon-fixed vectors, so lunar libration and the parallax between the Moon's centre and the site are included. Checked against JPL's DE421 ephemeris through SPICE (3,166 epochs at six sites): the largest difference is 0.00002°. Rise and set times are refined to a few seconds after an hourly search.</p></div>
         <div><h3>Terrain</h3>
           <p>Tiers, named beside every site. The server ray-casts every horizon (720 directions, out to 330 km) from NASA's LOLA elevation models: the 5 m site maps where they exist (Shackleton rim, the connecting ridge, de Gerlache rim, the Chang'e 7 target and the pole), the 80 m south-pole model from 80°S, the 240 m model from 60°S, and a 1/8° to 1/4° LOLA grid elsewhere. The same terrain draws the surface view and the shadow map.</p></div>
-        <div><h3>Limits</h3>
+      </div>
+      <h3 class="subh">Limits</h3>
+      <p class="cap">What the model leaves out, grouped by topic. Read these before trusting a close result.</p>
+      <div class="limits">
+        <section><h4>Power and heat</h4>
           <ul>
             <li>Power is geometry: array output in full Sun times the visible fraction of the solar disc, scaled for Sun distance. Temperature, dust, array pointing limits and degradation are not modelled.</li>
-            <li>Earth contact means line of sight to Earth's centre and, with the DSN option on, the Moon at least 10° above the horizon at Goldstone, Madrid or Canberra (positions from SPICE). Dish scheduling, link margin and weather are not modelled.</li>
-            <li>"Stricter physics" under Mission needs tightens three of these rules: the link then needs the whole Earth disc (0.95° above the terrain), a fixed panel loses the light its cover glass reflects at a slant (Fresnel, refractive index 1.5), and the battery returns 95% of what it holds. It also dims the Sun toward its edge (limb darkening 0.6), which changes the energy by less than 0.1%.</li>
-            <li>"Heat model" under Mission needs adds a one-node heat balance: the body is warmed by the power it uses and the sunlight it absorbs, loses heat by radiation (an insulated body that leaks 68 W at −20 °C, 60 kJ/K of thermal mass), and heaters hold it at −20 °C. Their power is added to the load. A radiator is assumed to shed excess heat above 40 °C, so overheating is not a failure here. It is a first estimate, not a thermal design.</li>
+            <li>"Stricter physics" under Contingency planning tightens three of these rules: the link then needs the whole Earth disc (0.95° above the terrain), a fixed panel loses the light its cover glass reflects at a slant (Fresnel, refractive index 1.5), and the battery returns 95% of what it holds. It also dims the Sun toward its edge (limb darkening 0.6), which changes the energy by less than 0.1%.</li>
+            <li>"Heat model" under Contingency planning adds a one-node heat balance: the body is warmed by the power it uses and the sunlight it absorbs, loses heat by radiation (an insulated body that leaks 68 W at −20 °C, 60 kJ/K of thermal mass), and heaters hold it at −20 °C. Their power is added to the load. A radiator is assumed to shed excess heat above 40 °C, so overheating is not a failure here. It is a first estimate, not a thermal design.</li>
             <li>When Earth passes in front of the Sun (a lunar eclipse seen from the Moon), sunlight is reduced by the share of the solar disc Earth covers. At the south pole this happens once in the planning window, on 17 August 2027, when about 45% of the sunlight is lost for three hours.</li>
-            <li>With safe mode on, survival is not always helped by more hardware: shedding load early can let a smaller array or battery pass where a larger one fails. Mission design then shows a passing size that may not be the smallest.</li>
+          </ul></section>
+        <section><h4>Communications</h4>
+          <ul>
+            <li>Earth contact means line of sight to Earth's centre and, with the DSN option on, the Moon at least 10° above the horizon at Goldstone, Madrid or Canberra (positions from SPICE). Dish scheduling, link margin and weather are not modelled.</li>
             <li>Hourly sampling can miss a visibility window shorter than an hour.</li>
-            <li>The chance of success comes with a 95% interval that reflects the finite number of simulated missions only. It is not a mission reliability guarantee: the spreads fed in are assumptions you can change under "Change the assumptions". Slope is measured over about 160 m, so boulders and small craters are not seen.</li>
-            <li>Mission design sizes solar output and battery only. It does not estimate mass, cost or volume.</li>
-            <li>Contingency planning applies one scenario at a time (a custom scenario can combine several effects), and safe mode is a simple rule. Neither models how real flight software behaves.</li>
-            <li>The landing-risk analysis ray-casts each touchdown cell on the server from the finest terrain there (5 m where a site map exists, else 80 m), sampled every 30 m near the cell. Hazards smaller than that are not seen.</li>
+          </ul></section>
+        <section><h4>Terrain and landing</h4>
+          <ul>
             <li>At 400 m and coarser, features smaller than the grid are smoothed. Use the terrain margin to see how sensitive a result is.</li>
+            <li>The landing-risk analysis ray-casts each touchdown cell on the server from the finest terrain there (5 m where a site map exists, else 80 m), sampled every 30 m near the cell. Hazards smaller than that are not seen.</li>
+            <li>Slope is measured over about 160 m, so boulders and small craters are not seen.</li>
+          </ul></section>
+        <section><h4>Simulation results</h4>
+          <ul>
+            <li>The chance of success comes with a 95% interval that reflects the finite number of simulated missions only. It is not a mission reliability guarantee: the spreads fed in are assumptions you can change under "Fine-tune the uncertainties".</li>
+            <li>Mission design sizes solar output and battery only. It does not estimate mass, cost or volume.</li>
+            <li>With safe mode on, survival is not always helped by more hardware: shedding load early can let a smaller array or battery pass where a larger one fails. Mission design then shows a passing size that may not be the smallest.</li>
+            <li>Contingency planning applies one scenario at a time (a custom scenario can combine several effects), and safe mode is a simple rule. Neither models how real flight software behaves.</li>
+          </ul></section>
+        <section><h4>Input data</h4>
+          <ul>
             <li>Coordinates of planned missions are published targets and may change.</li>
             <li>Lander presets use published figures where they exist. Anything marked (assumed) is an estimate. Side-mounted panels are modelled; top-deck panels are left out.</li>
-          </ul></div>
+          </ul></section>
       </div>
       <p>Data: NASA GSFC PGDA LOLA elevation models (Barker et al., products 78 and 90), LOLA global grid and Moon mosaic from the LLNL <code>ssa-data-lunar</code> package; ephemeris from <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a> and JPL NAIF SPICE kernels. Every number on this page comes from the Mons Carlo server; its API is documented at <a href="docs">/docs</a>. Reference tools: <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a>, <a href="https://quickmap.lroc.asu.edu/">LROC Quickmap</a>, <a href="https://trek.nasa.gov/moon/">Moon Trek</a>.</p>
     </section>
+
+  <!-- ABOUT -->
+  <section class="panel span2 team" data-v="about" aria-label="About the team">
+    <div class="team-head">
+      <h2>About us</h2>
+      <p>We're three friends who studied together at the University of Bath. We built Mons Carlo for the NASA Space Apps Challenge 2026 to answer a question we kept running into: at the Moon's south pole, where and when can a lander actually get sunlight and talk to Earth?</p>
+    </div>
+    <div class="people">
+      <figure class="person">
+        <div class="avatar">
+          <span class="initials" aria-hidden="true">OB</span>
+          <img class="photo" src="about/otman.jpg" alt="Otman Boumnina El Harrak" onerror="this.remove()">
+          <img class="badge left" src="about/bath.svg" alt="University of Bath" title="University of Bath">
+          <img class="badge right" src="about/rfa.webp" alt="Rocket Factory Augsburg" title="Rocket Factory Augsburg">
+        </div>
+        <figcaption>
+          <b>Otman Boumnina El Harrak</b>
+          <span>Test Engineer Intern at Rocket Factory Augsburg</span>
+          <span class="ed">MEng Aerospace Engineering, University of Bath</span>
+        </figcaption>
+      </figure>
+      <figure class="person">
+        <div class="avatar">
+          <span class="initials" aria-hidden="true">AC</span>
+          <img class="photo" src="about/aryan.jpg" alt="Aryan Chegini" onerror="this.remove()">
+          <img class="badge left" src="about/bath.svg" alt="University of Bath" title="University of Bath">
+          <img class="badge right" src="about/finbourne.png" alt="FINBOURNE Technology" title="FINBOURNE Technology">
+        </div>
+        <figcaption>
+          <b>Aryan Chegini</b>
+          <span>Forward Deployed Engineer at FINBOURNE</span>
+          <span class="ed">University of Bath</span>
+        </figcaption>
+      </figure>
+      <figure class="person">
+        <div class="avatar">
+          <span class="initials" aria-hidden="true">RN</span>
+          <img class="photo" src="about/raphael.jpg" alt="Raphael Neville" onerror="this.remove()">
+          <img class="badge left" src="about/bath.svg" alt="University of Bath" title="University of Bath">
+          <img class="badge right" src="about/ucl.svg" alt="UCL" title="University College London">
+        </div>
+        <figcaption>
+          <b>Raphael Neville</b>
+          <span>MSc Machine Learning at UCL</span>
+          <span class="ed">University of Bath</span>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
 </main>
 
 <footer class="foot">Team Mons Carlo · NASA Space Apps Challenge 2026 · Data: NASA LOLA (PGDA), JPL Horizons, JPL NAIF SPICE · <a href="docs">API documentation</a></footer>
