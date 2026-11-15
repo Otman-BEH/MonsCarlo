@@ -196,6 +196,7 @@
         <label class="fl" for="c-out">No Earth contact for, h<input id="c-out" type="number" min="0" max="1000" step="1" value="12"></label>
       </div>
       <label class="chk" for="m-safe"><input id="m-safe" type="checkbox"> Safe mode: when the battery falls below 40%, cut power use to the dark-time level until it is back above 70%</label>
+      <label class="chk" for="m-strict"><input id="m-strict" type="checkbox"> Stricter physics: the radio link needs the whole Earth disc above the terrain, a fixed panel loses the light its glass reflects at a low Sun, and 5% of the battery's energy is lost on the way out</label>
       <p class="readout" id="mv-fault"></p>
     </section>
 
@@ -353,6 +354,7 @@
           <ul>
             <li>Power is geometry: array output in full Sun times the visible fraction of the solar disc, scaled for Sun distance. Temperature, dust, array pointing limits and degradation are not modelled.</li>
             <li>Earth contact means line of sight to Earth's centre and, with the DSN option on, the Moon at least 10° above the horizon at Goldstone, Madrid or Canberra (positions from SPICE). Dish scheduling, link margin and weather are not modelled.</li>
+            <li>"Stricter physics" under Mission needs tightens three of these rules: the link then needs the whole Earth disc (0.95° above the terrain), a fixed panel loses the light its cover glass reflects at a slant (Fresnel, refractive index 1.5), and the battery returns 95% of what it holds. It also dims the Sun toward its edge (limb darkening 0.6), which changes the energy by less than 0.1%.</li>
             <li>Hourly sampling can miss a visibility window shorter than an hour.</li>
             <li>The chance of success comes with a 95% interval that reflects the finite number of simulated missions only. It is not a mission reliability guarantee: the spreads fed in are assumptions you can change under "Change the assumptions". Slope is measured over about 160 m, so boulders and small craters are not seen.</li>
             <li>Mission design sizes solar output and battery only. It does not estimate mass, cost or volume.</li>

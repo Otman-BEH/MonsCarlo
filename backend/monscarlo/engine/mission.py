@@ -60,6 +60,8 @@ class MissionSpec(BaseModel):
     max_gap_h: float = Field(default=12, ge=0, le=10000)
     autonomy_h: float = Field(default=6, ge=0, le=1000, description="blackout rule: at its lowest charge the battery must still carry the dark load this long")
     terrain_margin_deg: float = Field(default=0.3, ge=0, le=10)
+    link_min_clearance_deg: float = Field(default=0, ge=0, le=10, description="the radio link counts only while Earth's centre is this far above the terrain; 0.95 keeps the whole Earth disc clear")
+    limb_darkening: float = Field(default=0, ge=0, le=1, description="linear limb-darkening coefficient of the Sun for a partly hidden disc; 0 treats the disc as evenly bright, 0.6 is the Sun in visible light")
     fault: Fault = Fault()
 
 
@@ -94,32 +96,46 @@ def make_cfg(lander: dict, spec: MissionSpec | dict) -> dict:
         "capWh": p["battery"]["capacity_wh"], "minSoc": p["battery"]["min_soc"], "chargeEff": p["battery"]["charge_eff"],
         "tracking": arr["type"] == "tracking", "array": arr, "needEarth": m.needs_earth, "useDsn": m.use_dsn, "maxGapH": m.max_gap_h,
         "margin": m.terrain_margin_deg, "fault": m.fault.model_dump(), "safe": p["safe_mode"], "autonomyH": m.autonomy_h,
+        "linkMin": m.link_min_clearance_deg, "limb": m.limb_darkening, "dischargeEff": p["battery"].get("discharge_eff", 1.0),
     }
 
 
 def power_shape(se: dict, cfg: dict) -> np.ndarray:
     """Per-hour array output per watt of peak, before irradiance and disc fraction."""
     arr = cfg.get("array") or {"type": "tracking" if cfg.get("tracking", True) else "horizontal", "peak_w": cfg["peakW"]}
-    if arr["type"] == "horizontal":
+    if arr["type"] == "horizontal" and not arr.get("incidence_loss"):
         # exactly main's expression: Math.max(0, Math.sin(sunEl * PI / 180)) on the float32 series value
         return np.maximum(0.0, np.sin(se["sunEl"] * math.pi / 180))
     return power.shape(arr, se["sunEl"], se["sunAz"])
 
 
-def frac_at(se: dict, i, margin):
-    d = (se["sunClr"][i] - margin) / (se["sunRad"][i] if "sunRad" in se else SUNR)
+def lit_share(d, u: float = 0.0):
+    """Share of the Sun's light that arrives when a straight horizon cuts the disc, d = height of the disc centre above
+    the horizon in solar radii. u = 0: the share of the disc's area (main's rule). u > 0: the disc is brighter in the
+    middle than at the edge, I(mu) = 1 - u (1 - mu), so a thin sliver of limb carries less light than its area suggests:
+        share = ((1 - u) * area_share + (u / 2) * (2/3 + d - d^3 / 3)) / (1 - u / 3)."""
+    d = np.asarray(d, dtype=np.float64)
     dc = np.clip(d, -1, 1)
     f = 1 - (np.arccos(dc) - dc * np.sqrt(1 - dc * dc)) / math.pi
+    if u:
+        f = ((1 - u) * f + 0.5 * u * (2 / 3 + dc - dc ** 3 / 3)) / (1 - u / 3)
     return np.where(d >= 1, 1.0, np.where(d <= -1, 0.0, f))
 
 
-def _frac1(se, i, margin) -> float:
+def frac_at(se: dict, i, margin, u: float = 0.0):
+    return lit_share((se["sunClr"][i] - margin) / (se["sunRad"][i] if "sunRad" in se else SUNR), u)
+
+
+def _frac1(se, i, margin, u: float = 0.0) -> float:
     d = (float(se["sunClr"][i]) - margin) / (float(se["sunRad"][i]) if "sunRad" in se else SUNR)
     if d >= 1:
         return 1.0
     if d <= -1:
         return 0.0
-    return 1 - (math.acos(d) - d * math.sqrt(1 - d * d)) / math.pi
+    f = 1 - (math.acos(d) - d * math.sqrt(1 - d * d)) / math.pi
+    if u:
+        f = ((1 - u) * f + 0.5 * u * (2 / 3 + d - d ** 3 / 3)) / (1 - u / 3)
+    return f
 
 
 # ---------------------------------------------------------------- the simulation
@@ -152,9 +168,11 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
         soc[0] = 1
     peak, lsun, ldark, eff = cfg["peakW"], cfg["loadSun"], cfg["loadDark"], cfg["chargeEff"]
     need_e = cfg["needEarth"]
+    # optional refinements, all off by default: see MissionSpec, landers.Battery and power.glass_transmission
+    limb, link_min, dis = cfg.get("limb") or 0.0, cfg.get("linkMin") or 0.0, cfg.get("dischargeEff") or 1.0
     for k in range(n):
         i = i0 + k
-        f = _frac1(se, i, margin)
+        f = _frac1(se, i, margin, limb)
         on = k >= fk
         p = peak * float(irr[i]) * f * float(shp[i]) * (aMul if on else 1)
         if on and bMul < 1 and capNow == cap:
@@ -173,7 +191,7 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
         if on and xLoad:
             load += xLoad
         net = p - load
-        dE = net * eff if net > 0 else net
+        dE = net * eff if net > 0 else net / dis
         E = min(capNow, E + dE)
         if E < minE:
             minE = E
@@ -183,7 +201,7 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
         draw = min(0.0, draw + dE)
         if -draw > maxDraw:
             maxDraw = -draw
-        L = (float(eclr[i]) - margin > 0) and not (on and outH > 0 and k < fk + outH)
+        L = (float(eclr[i]) - margin > link_min) and not (on and outH > 0 and k < fk + outH)
         if L:
             linkH += 1
             gap = 0
@@ -206,17 +224,17 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
     fails = []
     if n < want:
         fails.append("the ephemeris window ends before the mission does")
-    if n > 0 and _frac1(se, i0, margin) <= 0.5:
+    if n > 0 and _frac1(se, i0, margin, limb) <= 0.5:
         fails.append("the Sun is not up at landing")
-    if need_e and n > 0 and not (float(eclr[i0]) - margin > 0):
+    if need_e and n > 0 and not (float(eclr[i0]) - margin > link_min):
         fails.append("no Earth contact at landing (Earth hidden or no ground station in view)" if cfg.get("useDsn") else "no Earth line of sight at landing")
     if not math.isfinite(E) or not math.isfinite(minE):
         fails.append("the mission inputs are not valid numbers")
     if minE < floor:
         fails.append(f"battery falls to {max(0, js_round(100 * minE / cap))}% on day {js_fixed(kMin / 24, 1)}")
-    autoWh = (cfg.get("autonomyH") or 0) * ldark
+    autoWh = (cfg.get("autonomyH") or 0) * ldark / dis
     if autoWh > 0 and minE >= floor and minE - floor < autoWh:
-        fails.append(f"battery cannot ride out a {js_num(cfg['autonomyH'])} h blackout (its lowest charge covers {js_fixed((minE - floor) / max(1e-9, ldark), 1)} h)")
+        fails.append(f"battery cannot ride out a {js_num(cfg['autonomyH'])} h blackout (its lowest charge covers {js_fixed((minE - floor) * dis / max(1e-9, ldark), 1)} h)")
     if need_e and maxGap > cfg["maxGapH"]:
         g = js_fixed(maxGap / 24, 1) + " d" if maxGap >= 48 else f"{maxGap} h"
         fails.append(f"no Earth contact for {g} (limit {js_num(cfg['maxGapH'])} h)" if cfg.get("useDsn")

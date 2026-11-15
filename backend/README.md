@@ -73,6 +73,12 @@ One call answers the challenge question, and the rest give you every number behi
 | `GET /dsn` | Moon elevation at the three Deep Space Network complexes (SPICE). |
 | `GET /terrain/rings`, `GET /terrain/polar400`, `GET /terrain/moon.jpg` | Binary height grids around a site (10 m within 1.5 km, 40 m within 6 km, 160 m within 30 km, from the 5 m maps where they exist), the 400 m south-pole raster (both row-delta coded), and the Moon mosaic. These feed the surface view, the shadow map and the globe. |
 
+Optional physics refinements, all off by default so results match the original engine: `lander.power.array.incidence_loss`
+(fixed panels lose the light the cover glass reflects at a slant: Fresnel, n = 1.5), `lander.power.battery.discharge_eff`,
+`mission.link_min_clearance_deg` (the link counts only while Earth's centre is this far above the terrain; 0.95 keeps the
+whole disc clear) and `mission.limb_darkening` (0.6 for the Sun in visible light). The page's "Stricter physics" switch
+turns all four on. `tests/test_physics_options.py` covers them.
+
 Common inputs: the location as `site=<id>` or `lat=&lon=` (east positive); `time=` or `start=`/`end=` (ISO 8601 UTC,
 defaulting to now and 30 days); `lander=<id>` plus overrides; `dem=best|80m`. Every response carries `meta` with the
 ephemeris source for each month, the terrain tiers and citations, `lander_resolved` (the exact lander used) and
