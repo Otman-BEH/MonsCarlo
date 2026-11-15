@@ -742,7 +742,7 @@ import { createTerrain } from './js/terrain.js';
     if (!can) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the terrain around the site…', w / 2, h / 2); return; }
     const c = S.cur, m = siteMask(S.site), mask = m.mask, dpr = Math.min(window.devicePixelRatio || 1, 2);
     if (VW.az === null) { const sepA = wrap180(c.earthAz - c.sunAz); VW.az = Math.abs(sepA) <= 0.86 * VW.fov ? c.sunAz + sepA / 2 : c.sunAz + VW.fov * 0.24; }
-    const live = S.playing || VW.drag, fovH = VW.fov, fovV = fovH * h / w, elC = -0.02 * fovV;
+    const live = S.playing || S.scrubbing || VW.drag, fovH = VW.fov, fovV = fovH * h / w, elC = -0.02 * fovV;
     const lam = S.site.lon * D2R, nx = Math.sin(lam), ny = Math.cos(lam), ex = Math.cos(lam), ey = -Math.sin(lam);
     const rho0 = 2 * RM * Math.tan((90 + Math.max(-89.999, S.site.lat)) / 2 * D2R), x0 = rho0 * nx, y0 = rho0 * ny, hEye = m.h0 + S.eye;
     const sa = c.sunAz * D2R, ux = nx * Math.cos(sa) + ex * Math.sin(sa), uy = ny * Math.cos(sa) + ey * Math.sin(sa), E = TER.elevXYsmooth;
@@ -754,12 +754,15 @@ import { createTerrain } from './js/terrain.js';
     // shadows: fine near the site, coarser farther out, then the polar shadow map.
     // The draft's shadows are recomputed every 30 minutes of mission time instead of every frame.
     const lit = sharp => {
+      // turning the view does not move the shadows: the draft reuses the sharp ones when they are for this exact time
+      if (!sharp && VW.lit.sharp && VW.lit.sharp.key === [S.site.lat, S.site.lon, S.t].join('|')) return VW.lit.sharp;
       const slot = sharp ? 'sharp' : 'draft', key = [S.site.lat, S.site.lon, sharp ? S.t : Math.round(S.t / 1800e3)].join('|');
       let L = VW.lit[slot];
       if (!L || L.key !== key) {
         sunRaster();
         L = VW.lit[slot] = { key,
-          fine: sharp ? litGrid(x0, y0, ux, uy, c.sunEl, 0.01, 300, 12) : null,
+          // the ground next to the lander needs 10 m shadows in the draft too: coarse cells put a rim site in shadow
+          fine: litGrid(x0, y0, ux, uy, c.sunEl, 0.01, sharp ? 300 : 150, 12),
           near: litGrid(x0, y0, ux, uy, c.sunEl, sharp ? 0.04 : 0.12, sharp ? 300 : 100, 40),
           far: litGrid(x0, y0, ux, uy, c.sunEl, sharp ? 0.2 : 0.6, sharp ? 300 : 100, 160) };
       }
