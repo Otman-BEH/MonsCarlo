@@ -375,13 +375,18 @@ class Terrain:
         out = np.full(lat.shape, np.nan)
         x, y = ll_to_xy(lat, lon)
         if mode == "best":
+            polar = lat < -80
             for t in self.tiles.values():
-                todo = np.isnan(out) & (lat < -80)
+                h, w = t.shape
+                todo = polar & np.isnan(out) & (x >= t.x0) & (x <= t.x0 + w * t.px) & (y <= t.y0) & (y >= t.y0 - h * t.px)
                 if todo.any():
                     out[todo] = t.sample(x[todo], y[todo])
             for r in (self.r80, self.r240):
-                todo = np.isnan(out)
-                if r is not None and todo.any():
+                if r is None:
+                    continue
+                h, w = r.shape
+                todo = np.isnan(out) & (np.abs(x - (r.x0 + w * r.px / 2)) <= w * r.px / 2) & (np.abs(y - (r.y0 - h * r.px / 2)) <= h * r.px / 2)
+                if todo.any():
                     out[todo] = r.sample(x[todo], y[todo])
         else:
             P = self.polar()

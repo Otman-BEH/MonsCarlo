@@ -189,10 +189,17 @@ def draws(R: Rng, K: int, sig: dict) -> dict:
 
 
 def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak: np.ndarray, lsun: np.ndarray,
-                  ldark: np.ndarray, cap: np.ndarray, shape: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+                  ldark: np.ndarray, cap: np.ndarray, shape: np.ndarray, row: np.ndarray | None = None,
+                  shape_per_trial: bool = False) -> tuple[np.ndarray, np.ndarray]:
     """Vectorised Ana.mission for T trials. Returns (ok (T,), first-fail cause index (T,), -1 when ok).
-    shape: (H,) shared or (T, H) per trial."""
+
+    One series: se arrays (H,), shape (H,) or (T, H) per trial.
+    Many cells at once: se arrays (C, H), row (T,) = each trial's cell, shape (C, H) or (T, H) per trial."""
     T = len(i0)
+    if row is None:
+        g = lambda a, i: a[i]
+    else:
+        g = lambda a, i: a[row, i]
     nser = se["n"]
     want = M.js_round(cfg["days"] * 24)
     n = np.maximum(0, np.minimum(want, nser - i0))
@@ -208,18 +215,23 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
     safe = np.zeros(T, bool)
     eff = cfg["chargeEff"]
     sunClr, sunRad, irr, eclr = se["sunClr"], se.get("sunRad"), se["irr"], se["earthClr"]
-    per_trial_shape = shape.ndim == 2
+    per_trial_shape = (shape.ndim == 2) if row is None else shape_per_trial
     rows = np.arange(T)
+    if row is not None and shape.ndim == 2 and not per_trial_shape:
+        gs = lambda i: shape[row, i]
+    elif per_trial_shape:
+        gs = lambda i: shape[rows, i]
+    else:
+        gs = lambda i: shape[i]
     with np.errstate(invalid="ignore", divide="ignore"):
         for k in range(int(n.max(initial=0))):
             act = k < n
             i = np.minimum(i0 + k, nser - 1)
-            d = (sunClr[i] - margin) / (sunRad[i] if sunRad is not None else M.SUNR)
+            d = (g(sunClr, i) - margin) / (g(sunRad, i) if sunRad is not None else M.SUNR)
             dc = np.clip(d, -1, 1)
             f = np.where(d >= 1, 1.0, np.where(d <= -1, 0.0, 1 - (np.arccos(dc) - dc * np.sqrt(1 - dc * dc)) / math.pi))
             on = k >= fk
-            shp = shape[rows, i] if per_trial_shape else shape[i]
-            p = peak * irr[i] * f * shp * (0.7 if (on and fkind == "array") else 1)
+            p = peak * g(irr, i) * f * gs(i) * (0.7 if (on and fkind == "array") else 1)
             if on and fkind == "battery" and k == fk:
                 capNow = np.where(act, cap * 0.75, capNow)
                 E = np.where(act & (E > capNow), capNow, E)
@@ -239,7 +251,7 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
             dn = np.minimum(0.0, draw + dE)
             draw = np.where(act, dn, draw)
             maxDraw = np.where(act & (-draw > maxDraw), -draw, maxDraw)
-            L = (eclr[i] - margin > 0) & (not (on and fkind == "antenna" and k < fk + 24))
+            L = (g(eclr, i) - margin > 0) & (not (on and fkind == "antenna" and k < fk + 24))
             gap = np.where(act, np.where(L, 0, gap + 1), gap)
             maxGap = np.maximum(maxGap, gap)
         # failure checks in main's order; cause of the first one
@@ -250,12 +262,12 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
             cause = np.where((cause < 0) & mask, c, cause)
         first(n < want, 5)
         i0c = np.minimum(i0, nser - 1)
-        d0 = (sunClr[i0c] - margin) / (sunRad[i0c] if sunRad is not None else M.SUNR)
+        d0 = (g(sunClr, i0c) - margin) / (g(sunRad, i0c) if sunRad is not None else M.SUNR)
         dc0 = np.clip(d0, -1, 1)
         f0 = np.where(d0 >= 1, 1.0, np.where(d0 <= -1, 0.0, 1 - (np.arccos(dc0) - dc0 * np.sqrt(1 - dc0 * dc0)) / math.pi))
         first((n > 0) & (f0 <= 0.5), 0)
         if cfg["needEarth"]:
-            first((n > 0) & ~(eclr[i0c] - margin > 0), 1)
+            first((n > 0) & ~(g(eclr, i0c) - margin > 0), 1)
         first(~np.isfinite(E) | ~np.isfinite(minE), 5)
         first(minE < floor, 2)
         autoWh = (cfg.get("autonomyH") or 0) * ldark
@@ -309,13 +321,26 @@ def window_hours(unc: Uncertainty, days: float) -> tuple[int, int]:
     return J, J + M.js_round(days * 24) + 1
 
 
+def _trial_params(d: dict, sig: dict, cfg: dict, i0: int, n_ser: int) -> dict:
+    """Turn the raw normal draws into trial inputs exactly as main's cellTrials does."""
+    l = np.maximum(0.0, 1 + sig["load"] * d["z"])
+    zc = d["zc"]                       # draws() already set zc = -z when the cold-case link is on
+    lo_i = n_ser - M.js_round(cfg["days"] * 24)
+    return {"peak": cfg["peakW"] * np.maximum(0.0, 1 + sig["power"] * d["zp"]), "lsun": cfg["loadSun"] * l, "ldark": cfg["loadDark"] * l,
+            "cap": cfg["capWh"] * np.maximum(0.1, 1 + sig["cap"] * zc),
+            "i": np.maximum(0, np.minimum(lo_i, i0 + np.floor(sig["timeH"] * d["zt"] + 0.5).astype(np.int64))),
+            "margin": sig["terrainDeg"] * d["zm"]}
+
+
 def run_risk(terrain: Terrain, table: np.ndarray, i0: int, lat: float, lon: float, lander: dict, cfg: dict,
-             unc: Uncertainty, mode: str = "best", naz: int = 180) -> dict:
-    """Port of runRisk. table: hourly (n, 6) window; i0: landing index in it."""
+             unc: Uncertainty, mode: str = "best", naz: int = 180, workers: int = 8) -> dict:
+    """Port of main's runRisk. table: hourly (n, 6) window; i0: landing index in it.
+
+    Every cell's skyline is cast (in parallel threads), then all trials of all cells run as one vectorised simulation.
+    Each cell keeps main's two random streams mix(seed, k, 0) and mix(seed, k, 1), so draws are identical to main's."""
+    from concurrent.futures import ThreadPoolExecutor
     n = unc.grid_n
-    K = unc.trials_per_cell
-    if K % 2:
-        K += 1
+    K = unc.trials_per_cell + (unc.trials_per_cell % 2)
     half = K // 2
     acc = unc.accuracy_m_3sigma or lander["landing"]["accuracy_m_3sigma"]
     max_slope = unc.max_slope_deg or lander["landing"]["max_slope_deg"]
@@ -327,38 +352,71 @@ def run_risk(terrain: Terrain, table: np.ndarray, i0: int, lat: float, lon: floa
            "load": unc.load_sigma_pct / 100, "cap": unc.capacity_sigma_pct / 100, "corr": unc.cold_case_link}
     seed = unc.seed
     arr = lander["power"]["array"]
-    ah, eh = arr["height_m"], lander["comms"]["antenna_height_m"]
+    ah, eh = float(arr["height_m"]), float(lander["comms"]["antenna_height_m"])
+    heading_random = unc.heading_random and arr["type"] == "vertical"
     x0, y0 = (float(v) for v in ll_to_xy(max(-89.999, lat), lon))
     c = (n - 1) / 2
+    ci = int(c)
     ix, iy = np.meshgrid(np.arange(n), np.arange(n))
     X = x0 + (ix - c) * sp
     Y = y0 + (c - iy) * sp
     LAT, LON = xy_to_ll(X, Y)
     LAT = np.maximum(-89.999, LAT)
-    slope = terrain.slope_xy(X.ravel(), Y.ravel(), mode).reshape(n, n)
-    PA = np.zeros(n * n); PB = np.zeros(n * n); det = np.zeros(n * n, np.int8)
-    cause = np.zeros((n * n, 6))
-    sers: dict[int, tuple] = {}
-    heights = sorted({float(ah), float(eh)})
-    for k in range(n * n):
-        yy, xx = divmod(k, n)
-        if slope[yy, xx] > max_slope:
-            cause[k, 4] = K
-            continue
-        hm = terrain.horizon(float(LAT[yy, xx]), float(LON[yy, xx]), heights, naz, mode, use_cache=False, fast=True)
-        v = V.View(lat=float(LAT[yy, xx]), lon=float(LON[yy, xx]), ground_m=hm.ground_m, sun_mask=hm.at_height(ah),
+    slope = terrain.slope_xy(X.ravel(), Y.ravel(), mode)
+    cells = [k for k in range(n * n) if not slope[k] > max_slope]
+    heights = sorted({ah, eh})
+
+    def cast(k):
+        hm = terrain.horizon(float(LAT.flat[k]), float(LON.flat[k]), heights, naz, mode, use_cache=False, fast=True)
+        v = V.View(lat=float(LAT.flat[k]), lon=float(LON.flat[k]), ground_m=hm.ground_m, sun_mask=hm.at_height(ah),
                    earth_mask=hm.at_height(eh), array_h=ah, antenna_h=eh)
-        se = V.series(v, table)
-        shp = M.power_shape(se, cfg)
-        hs = (arr, Rng(mix(seed, k, 7))) if (unc.heading_random and arr["type"] == "vertical") else None
-        PA[k] = cell_trials(se, i0, cfg, sig, Rng(mix(seed, k, 0)), half, cause[k], shp, hs)
-        hs = (arr, Rng(mix(seed, k, 8))) if (unc.heading_random and arr["type"] == "vertical") else None
-        PB[k] = cell_trials(se, i0, cfg, sig, Rng(mix(seed, k, 1)), half, cause[k], shp, hs)
-        det[k] = M.verdict(se, i0, cfg, shp)["state"]
-        if math.hypot(xx - c, yy - c) * sp <= Rm + 1e-9:
-            sers[k] = (se, shp)
+        return V.series(v, table)
+    with ThreadPoolExecutor(max(1, workers)) as ex:
+        sers = list(ex.map(cast, cells))
+    C = len(cells)
+    det = np.zeros(n * n, np.int8)
+    PA = np.zeros(n * n); PB = np.zeros(n * n)
+    cause = np.zeros((n * n, 6))
+    cause[[k for k in range(n * n) if slope[k] > max_slope], 4] = K          # too steep: every trial fails there
+    if C:
+        stack = {key: np.stack([s[key] for s in sers]) for key in ("sunClr", "sunRad", "irr", "earthClr", "sunEl", "sunAz")}
+        stack["n"] = table.shape[0]
+        shapes = np.stack([M.power_shape(s, cfg) for s in sers])
+        for j, k in enumerate(cells):
+            det[k] = M.verdict(sers[j], i0, cfg, shapes[j])["state"]
+        # draws: cell j, half h -> trials [ (2j + h) * half, (2j + h + 1) * half )
+        D = {key: np.empty(2 * C * half) for key in ("z", "zc", "zp", "zt", "zm")}
+        hd = np.empty(2 * C * half) if heading_random else None
+        for j, k in enumerate(cells):
+            for h in (0, 1):
+                d = draws(Rng(mix(seed, k, h)), half, sig)      # same order as main, including the skipped draw when linked
+                sl = slice((2 * j + h) * half, (2 * j + h + 1) * half)
+                for key in D:
+                    D[key][sl] = d[key]
+                if heading_random:
+                    hR = Rng(mix(seed, k, 7 + h))
+                    hd[sl] = [hR.u() * 360.0 for _ in range(half)]
+        row = np.repeat(np.arange(C), 2 * half)
+        is_b = np.tile(np.repeat([False, True], half), C)
+        if heading_random:
+            tshape = PW.shape(arr, stack["sunEl"][row], stack["sunAz"][row], hd[:, None])
+        else:
+            tshape = shapes
+
+        def simulate(s: dict, mask: np.ndarray | None = None):
+            p = _trial_params(D, s, cfg, i0, stack["n"])
+            sel = slice(None) if mask is None else mask
+            ok, cz = mission_batch(stack, p["i"][sel], cfg, p["margin"][sel], p["peak"][sel], p["lsun"][sel], p["ldark"][sel],
+                                   p["cap"][sel], tshape[sel] if heading_random else tshape, row=row[sel], shape_per_trial=heading_random)
+            return ok, cz
+        ok, cz = simulate(sig)
+        okf = ok.astype(np.float64)
+        for j, k in enumerate(cells):
+            a = slice(2 * j * half, (2 * j + 1) * half)
+            b = slice((2 * j + 1) * half, (2 * j + 2) * half)
+            PA[k], PB[k] = okf[a].mean(), okf[b].mean()
+            cause[k] += np.bincount(cz[2 * j * half:(2 * j + 2) * half][cz[2 * j * half:(2 * j + 2) * half] >= 0], minlength=6)[:6]
     P = (PA + PB) / 2
-    ci = int(c)
     cur = aim_stats(P, n, sp, ci, ci, sigma, K)
     wts = []
     cw = np.zeros(6)
@@ -373,7 +431,6 @@ def run_risk(terrain: Terrain, table: np.ndarray, i0: int, lat: float, lon: floa
             wts.append((k, w))
             sw += w
             cw += w * cause[k] / K
-    # best aim point: chosen on half A, judged on half B
     pick = {"p": aim_stats(PA, n, sp, ci, ci, sigma, half)["p"], "ix": ci, "iy": ci}
     for yy in range(n):
         for xx in range(n):
@@ -393,34 +450,32 @@ def run_risk(terrain: Terrain, table: np.ndarray, i0: int, lat: float, lon: floa
             "clear": bool((pick["ix"] != ci or pick["iy"] != ci) and diff >= 0.03 and diff - 1.96 * se2 > 0),
             "distance_m": math.hypot(dx, dy), "bearing_deg": (math.atan2(dx * co - dy * so, dx * so + dy * co) * R2D + 360) % 360,
             "lat": float(LAT[pick["iy"], pick["ix"]]), "lon": float(LON[pick["iy"], pick["ix"]])}
-    # drivers: the same draws with one source of error switched off (common random numbers)
-    dump = np.zeros(6)
+    # drivers: the same draws with one source of error switched off (common random numbers), over the cells inside 3 sigma
+    pos = {k: j for j, k in enumerate(cells)}
+    inner = [(pos[k], w) for k, w in wts if k in pos]
 
     def without(z: dict) -> float:
-        s2 = dict(sig, **z)
-        acc_p = 0.0
-        for k, w in wts:
-            if k not in sers:
-                continue
-            se, shp = sers[k]
-            hA = (arr, Rng(mix(seed, k, 7))) if (unc.heading_random and arr["type"] == "vertical") else None
-            hB = (arr, Rng(mix(seed, k, 8))) if (unc.heading_random and arr["type"] == "vertical") else None
-            acc_p += w * (cell_trials(se, i0, cfg, s2, Rng(mix(seed, k, 0)), half, dump, shp, hA)
-                          + cell_trials(se, i0, cfg, s2, Rng(mix(seed, k, 1)), half, dump, shp, hB)) / 2
-        return acc_p / sw
+        if not inner:
+            return 0.0
+        mask = np.isin(row, [j for j, _ in inner]) if C else None
+        ok2, _ = simulate(dict(sig, **z), mask)
+        rr = row[mask]
+        okf2 = ok2.astype(np.float64)
+        per = np.bincount(rr, weights=okf2, minlength=C) / np.maximum(1, np.bincount(rr, minlength=C))
+        return sum(w * per[j] for j, w in inner) / sw
     centre = ci * n + ci
     drivers = [("An exact touchdown", float(P[centre])), ("An exact landing time", without({"timeH": 0})),
                ("Perfect terrain data", without({"terrainDeg": 0})), ("Hardware exactly as specified", without({"power": 0, "load": 0, "cap": 0}))]
-    steep = sum(w for k, w in wts if slope.ravel()[k] > max_slope) / sw
+    steep = sum(w for k, w in wts if slope[k] > max_slope) / sw
     return {
         "success_p": cur["p"], "ci95": [cur["lo"], cur["hi"]],
-        "deterministic_verdict_at_aim": M.VERDICTS[0 if slope[ci, ci] > max_slope else int(det[centre])],
-        "slope_at_aim_deg": float(slope[ci, ci]),
+        "deterministic_verdict_at_aim": M.VERDICTS[0 if slope[centre] > max_slope else int(det[centre])],
+        "slope_at_aim_deg": float(slope[centre]),
         "causes": {M.CAUSE_KEYS[j]: float(cw[j] / sw) for j in range(6)},
-        "drivers": [{"if": name, "success_p": p, "gain_points": 100 * (p - cur["p"])} for name, p in drivers],
-        "best_aim": best, "steep_share": steep,
+        "drivers": [{"if": name, "success_p": float(p), "gain_points": float(100 * (p - cur["p"]))} for name, p in drivers],
+        "best_aim": best, "steep_share": float(steep),
         "grid": {"n": n, "spacing_m": sp, "half_width_m": W, "lat": LAT.ravel().tolist(), "lon": LON.ravel().tolist(),
-                 "success": P.tolist(), "slope_deg": slope.ravel().tolist(), "deterministic": det.tolist()},
+                 "success": P.tolist(), "slope_deg": slope.tolist(), "deterministic": det.tolist()},
         "total_missions": n * n * K, "seed": seed, "trials_per_cell": K,
         "settings": {"accuracy_m_3sigma": acc, "max_slope_deg": max_slope, **unc.model_dump()},
     }
