@@ -437,6 +437,64 @@
       }
     },
     {
+      "id": "peregrine",
+      "name": "Astrobotic Peregrine",
+      "operator": "Astrobotic, USA",
+      "status": "Peregrine Mission One launched in January 2024. A propellant leak stopped it reaching the Moon and it re-entered over the Pacific.",
+      "source": "Astrobotic payload user guide: 1.9 m tall, 2.5 m across, 1,283 kg fuelled, 28 V bus, one panel of triple-junction cells and a lithium-ion battery. Astrobotic said it could run about six hours on battery alone. Panel output, battery size and loads are not published, so those are estimates (a battery that lasts about six hours at the night load).",
+      "illustrative": false,
+      "facts": [
+        "Height 1.9 m, diameter 2.5 m",
+        "1,283 kg fuelled",
+        "Single solar panel on one side",
+        "About 6 h on battery alone (Astrobotic)"
+      ],
+      "assumed": [
+        "power.array.faces",
+        "power.battery.capacity_wh",
+        "power.loads.sunlit_w",
+        "power.loads.dark_w",
+        "comms.antenna_height_m",
+        "landing.accuracy_m_3sigma",
+        "landing.max_slope_deg"
+      ],
+      "power": {
+        "array": {
+          "type": "vertical",
+          "peak_w": null,
+          "faces": [
+            {
+              "azimuth_deg": 0,
+              "peak_w": 300
+            }
+          ],
+          "heading_deg": 0,
+          "height_m": 1.5
+        },
+        "battery": {
+          "capacity_wh": 900,
+          "min_soc": 0.2,
+          "charge_eff": 0.9
+        },
+        "loads": {
+          "sunlit_w": 150,
+          "dark_w": 120
+        },
+        "safe_mode": false
+      },
+      "comms": {
+        "antenna_height_m": 1.9
+      },
+      "landing": {
+        "accuracy_m_3sigma": 1000,
+        "max_slope_deg": 10
+      },
+      "mass": {
+        "array_w_per_kg": null,
+        "battery_wh_per_kg": null
+      }
+    },
+    {
       "id": "blue-moon-mk1",
       "name": "Blue Origin Blue Moon MK1",
       "operator": "Blue Origin, USA",
@@ -498,6 +556,57 @@
       "landing": {
         "accuracy_m_3sigma": 100,
         "max_slope_deg": 10
+      },
+      "mass": {
+        "array_w_per_kg": null,
+        "battery_wh_per_kg": null
+      }
+    },
+    {
+      "id": "apollo-lm",
+      "name": "Apollo 11 Lunar Module (Eagle)",
+      "operator": "NASA / Grumman, USA",
+      "status": "Landed at Tranquility Base on 20 July 1969 and stayed 21.5 hours. Tracked from Earth by the DSN and the Manned Space Flight Network.",
+      "source": "Grumman LM systems handbook: no solar panels; four 415 Ah silver-zinc descent batteries on a 28 V bus (about 46 kWh), plus two 296 Ah ascent batteries kept for lift-off and left out here. About 7 m tall. Landing ellipse 18.5 x 4.8 km. The average surface load, mast height and safe slope are estimates.",
+      "illustrative": false,
+      "facts": [
+        "Height about 7 m, width about 9.4 m with legs",
+        "Battery only: 4 x 415 Ah descent batteries (28 V)",
+        "Surface stay 21.5 h",
+        "Landing ellipse 18.5 x 4.8 km; Eagle came down about 6 km long"
+      ],
+      "assumed": [
+        "power.loads.sunlit_w",
+        "power.loads.dark_w",
+        "comms.antenna_height_m",
+        "landing.accuracy_m_3sigma",
+        "landing.max_slope_deg"
+      ],
+      "power": {
+        "array": {
+          "type": "tracking",
+          "peak_w": 0,
+          "faces": null,
+          "heading_deg": 0,
+          "height_m": 5.0
+        },
+        "battery": {
+          "capacity_wh": 46480,
+          "min_soc": 0.2,
+          "charge_eff": 0.9
+        },
+        "loads": {
+          "sunlit_w": 1200,
+          "dark_w": 1200
+        },
+        "safe_mode": false
+      },
+      "comms": {
+        "antenna_height_m": 5.5
+      },
+      "landing": {
+        "accuracy_m_3sigma": 5000,
+        "max_slope_deg": 12
       },
       "mass": {
         "array_w_per_kg": null,
