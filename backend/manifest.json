@@ -1,0 +1,194 @@
+{
+  "about": "Every external raw file the backend needs. bytes and sha256 are checked on startup. Optional files are fetched only with --all.",
+  "files": [
+    {
+      "name": "LDEM_80S_80MPP_ADJ.TIF",
+      "save": "raw/dem_regional/LDEM_80S_80MPP_ADJ.TIF",
+      "url": "https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_80MPP_ADJ.TIF",
+      "bytes": 189158392,
+      "sha256": "82030dcbdd7c4bb0c7d858e9b4b293b9f2cda5a543ba31ec0f42784bd6beee5a",
+      "source": "Barker et al. 2021, LOLA south polar DEMs, PGDA product 90, https://pgda.gsfc.nasa.gov/products/90"
+    },
+    {
+      "name": "LDEM_60S_240MPP_ADJ.TIF",
+      "save": "raw/dem_regional/LDEM_60S_240MPP_ADJ.TIF",
+      "url": "https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_60S_240MPP_ADJ.TIF",
+      "bytes": 218961039,
+      "sha256": "3f9663257b63022f2b0d5a623482ff3cadddceb91594a4e4ca14a94d8cec8b34",
+      "source": "Barker et al. 2021, LOLA south polar DEMs, PGDA product 90, https://pgda.gsfc.nasa.gov/products/90"
+    },
+    {
+      "name": "LDEM_80S_80MPP_ADJ_HILL.TIF",
+      "save": "raw/dem_regional/LDEM_80S_80MPP_ADJ_HILL.TIF",
+      "url": "https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_80MPP_ADJ_HILL.TIF",
+      "bytes": 88474342,
+      "sha256": "",
+      "source": "Barker et al. 2021, LOLA south polar DEMs, PGDA product 90, https://pgda.gsfc.nasa.gov/products/90",
+      "optional": true,
+      "note": "hillshade, visual only"
+    },
+    {
+      "name": "Site01_final_adj_5mpp_surf.tif",
+      "save": "raw/dem_sites/Site01_final_adj_5mpp_surf.tif",
+      "url": "https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/Site01/Site01_final_adj_5mpp_surf.tif",
+      "bytes": 40980810,
+      "sha256": "3ba7b97cb00a2bcf21189c3aeb535f65afc21207154ab9f0d43c5bdc1f7e747e",
+      "source": "Barker et al. 2021, PSS 203, 105119, LOLA 5 m/px site DEMs, PGDA product 78, https://pgda.gsfc.nasa.gov/products/78"
+    },
+    {
+      "name": "Site04_final_adj_5mpp_surf.tif",
+      "save": "raw/dem_sites/Site04_final_adj_5mpp_surf.tif",
+      "url": "https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/Site04/Site04_final_adj_5mpp_surf.tif",
+      "bytes": 40980806,
+      "sha256": "38ff70dbdf2f066c2cfa94a646c3a59d653ce7f6b4528b15fc1b43ee397ce758",
+      "source": "Barker et al. 2021, PSS 203, 105119, LOLA 5 m/px site DEMs, PGDA product 78, https://pgda.gsfc.nasa.gov/products/78"
+    },
+    {
+      "name": "Site07_final_adj_5mpp_surf.tif",
+      "save": "raw/dem_sites/Site07_final_adj_5mpp_surf.tif",
+      "url": "https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/Site07/Site07_final_adj_5mpp_surf.tif",
+      "bytes": 40980808,
+      "sha256": "38aaee10bb4da4d63e7427aa1ca25c79bdbc649d212079a04990e135462091f8",
+      "source": "Barker et al. 2021, PSS 203, 105119, LOLA 5 m/px site DEMs, PGDA product 78, https://pgda.gsfc.nasa.gov/products/78"
+    },
+    {
+      "name": "Site11_final_adj_5mpp_surf.tif",
+      "save": "raw/dem_sites/Site11_final_adj_5mpp_surf.tif",
+      "url": "https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/Site11/Site11_final_adj_5mpp_surf.tif",
+      "bytes": 40980806,
+      "sha256": "58f3372c35bbd6baf38ffd5633c1c96b59bd89dbd252150581d12893a43136e5",
+      "source": "Barker et al. 2021, PSS 203, 105119, LOLA 5 m/px site DEMs, PGDA product 78, https://pgda.gsfc.nasa.gov/products/78"
+    },
+    {
+      "name": "LM4_final_adj_5mpp_surf.tif",
+      "save": "raw/dem_sites/LM4_final_adj_5mpp_surf.tif",
+      "url": "https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/LM4/LM4_final_adj_5mpp_surf.tif",
+      "bytes": 64033675,
+      "sha256": "",
+      "source": "Barker et al. 2021, PSS 203, 105119, LOLA 5 m/px site DEMs, PGDA product 78, https://pgda.gsfc.nasa.gov/products/78",
+      "optional": true,
+      "note": "covers no listed site"
+    },
+    {
+      "name": "LM6_final_adj_5mpp_surf.tif",
+      "save": "raw/dem_sites/LM6_final_adj_5mpp_surf.tif",
+      "url": "https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/LM6/LM6_final_adj_5mpp_surf.tif",
+      "bytes": 64033677,
+      "sha256": "",
+      "source": "Barker et al. 2021, PSS 203, 105119, LOLA 5 m/px site DEMs, PGDA product 78, https://pgda.gsfc.nasa.gov/products/78",
+      "optional": true,
+      "note": "covers no listed site"
+    },
+    {
+      "name": "Haworth_final_adj_5mpp_surf.tif",
+      "save": "raw/dem_sites/Haworth_final_adj_5mpp_surf.tif",
+      "url": "https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/Haworth/Haworth_final_adj_5mpp_surf.tif",
+      "bytes": 142123767,
+      "sha256": "",
+      "source": "Barker et al. 2021, PSS 203, 105119, LOLA 5 m/px site DEMs, PGDA product 78, https://pgda.gsfc.nasa.gov/products/78",
+      "optional": true,
+      "note": "covers no listed site"
+    },
+    {
+      "name": "Site23_final_adj_5mpp_surf.tif",
+      "save": "raw/dem_sites/Site23_final_adj_5mpp_surf.tif",
+      "url": "https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/Site23/Site23_final_adj_5mpp_surf.tif",
+      "bytes": 70586804,
+      "sha256": "",
+      "source": "Barker et al. 2021, PSS 203, 105119, LOLA 5 m/px site DEMs, PGDA product 78, https://pgda.gsfc.nasa.gov/products/78",
+      "optional": true,
+      "note": "Malapert massif; not in the laptop data set, gives mala a 5 m tier when present"
+    },
+    {
+      "name": "AVGVISIB_85S_060M_201608.TIF",
+      "save": "raw/illumination/AVGVISIB_85S_060M_201608.TIF",
+      "url": "https://pgda.gsfc.nasa.gov/data/MoonIllumination/AVGVISIB_85S_060M_201608.TIF",
+      "bytes": 33994464,
+      "sha256": "",
+      "source": "Mazarico et al. 2011, Icarus 211, 1066, LOLA polar illumination maps, PGDA product 69, https://pgda.gsfc.nasa.gov/products/69",
+      "optional": true,
+      "note": "cross-check and map layer"
+    },
+    {
+      "name": "AVGVISIB_85S_060M_201608_EARTH.TIF",
+      "save": "raw/illumination/AVGVISIB_85S_060M_201608_EARTH.TIF",
+      "url": "https://pgda.gsfc.nasa.gov/data/MoonIllumination/AVGVISIB_85S_060M_201608_EARTH.TIF",
+      "bytes": 24862958,
+      "sha256": "",
+      "source": "Mazarico et al. 2011, Icarus 211, 1066, LOLA polar illumination maps, PGDA product 69, https://pgda.gsfc.nasa.gov/products/69",
+      "optional": true,
+      "note": "cross-check and map layer"
+    },
+    {
+      "name": "AVGVISIB_75S_120M_201608.TIF",
+      "save": "raw/illumination/AVGVISIB_75S_120M_201608.TIF",
+      "url": "https://pgda.gsfc.nasa.gov/data/MoonIllumination/AVGVISIB_75S_120M_201608.TIF",
+      "bytes": 83052039,
+      "sha256": "",
+      "source": "Mazarico et al. 2011, Icarus 211, 1066, LOLA polar illumination maps, PGDA product 69, https://pgda.gsfc.nasa.gov/products/69",
+      "optional": true,
+      "note": "cross-check and map layer"
+    },
+    {
+      "name": "AVGVISIB_75S_120M_201608_EARTH.TIF",
+      "save": "raw/illumination/AVGVISIB_75S_120M_201608_EARTH.TIF",
+      "url": "https://pgda.gsfc.nasa.gov/data/MoonIllumination/AVGVISIB_75S_120M_201608_EARTH.TIF",
+      "bytes": 43148153,
+      "sha256": "",
+      "source": "Mazarico et al. 2011, Icarus 211, 1066, LOLA polar illumination maps, PGDA product 69, https://pgda.gsfc.nasa.gov/products/69",
+      "optional": true,
+      "note": "cross-check and map layer"
+    },
+    {
+      "name": "LPSR_85S_060M_201608.TIF",
+      "save": "raw/illumination/LPSR_85S_060M_201608.TIF",
+      "url": "https://pgda.gsfc.nasa.gov/data/MoonIllumination/LPSR_85S_060M_201608.TIF",
+      "bytes": 656183,
+      "sha256": "",
+      "source": "Mazarico et al. 2011, Icarus 211, 1066, LOLA polar illumination maps, PGDA product 69, https://pgda.gsfc.nasa.gov/products/69",
+      "optional": true,
+      "note": "cross-check and map layer"
+    },
+    {
+      "name": "de440s.bsp",
+      "save": "raw/kernels/de440s.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp",
+      "bytes": 32726016,
+      "sha256": "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2",
+      "source": "JPL NAIF generic kernels, https://naif.jpl.nasa.gov/pub/naif/generic_kernels/"
+    },
+    {
+      "name": "moon_pa_de440_200625.bpc",
+      "save": "raw/kernels/moon_pa_de440_200625.bpc",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/moon_pa_de440_200625.bpc",
+      "bytes": 12863488,
+      "sha256": "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f",
+      "source": "JPL NAIF generic kernels, https://naif.jpl.nasa.gov/pub/naif/generic_kernels/"
+    },
+    {
+      "name": "moon_de440_220930.tf",
+      "save": "raw/kernels/moon_de440_220930.tf",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/fk/satellites/a_old_versions/moon_de440_220930.tf",
+      "bytes": 19571,
+      "sha256": "73eb6b216c06a27c3419c4cfeaded7ffce46a714e3d4f9f5142dda51c0710f76",
+      "source": "JPL NAIF generic kernels, https://naif.jpl.nasa.gov/pub/naif/generic_kernels/",
+      "note": "NAIF moved this to a_old_versions/; moon_de440_250416.tf is the current version"
+    },
+    {
+      "name": "naif0012.tls",
+      "save": "raw/kernels/naif0012.tls",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls",
+      "bytes": 5257,
+      "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b",
+      "source": "JPL NAIF generic kernels, https://naif.jpl.nasa.gov/pub/naif/generic_kernels/"
+    },
+    {
+      "name": "pck00011.tpc",
+      "save": "raw/kernels/pck00011.tpc",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc",
+      "bytes": 131226,
+      "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1",
+      "source": "JPL NAIF generic kernels, https://naif.jpl.nasa.gov/pub/naif/generic_kernels/"
+    }
+  ]
+}
