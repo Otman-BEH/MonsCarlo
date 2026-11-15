@@ -151,4 +151,28 @@ def lab(se, i0: int, cfg: dict, mass_of=(80.0, 160.0), atlas_first: int | None =
         out["why_none"] = r["fails"][0] if r["fails"] else "the needs cannot be met"
     if atlas_first is not None:
         out["atlas"] = atlas(se, atlas_first, cfg, mass_of, 120, 12, shape)
+        out.update(atlas_fixed_array(se, atlas_first, cfg, 120, 12, shape))
     return out
+
+
+def atlas_fixed_array(se, i_first: int, cfg: dict, n: int = 120, step_h: int = 12, shape=None) -> dict:
+    """For landings every step_h hours: the smallest battery that passes (with the terrain margin) using the lander's
+    own solar array, and the verdict for the lander as it is. No mass model involved."""
+    shape = M.power_shape(se, cfg) if shape is None else shape
+    need = cfg["days"] * 24
+    idx = [i_first + j * step_h for j in range(n)]
+    valid = [j for j, i in enumerate(idx) if not (i + need > se["n"])]
+    batt = [None] * n
+    state = [None] * n
+    if valid:
+        i0s = np.array([idx[j] for j in valid], dtype=np.int64)
+        J = len(valid)
+        peak = np.full(J, float(cfg["peakW"]))
+        cb = bisect_up(lambda c: _ok(se, i0s, cfg, cfg["margin"], peak, c, shape), np.full(J, 10.0), np.full(J, C1), 14)
+        cap = np.full(J, float(cfg["capWh"]))
+        nom = _ok(se, i0s, cfg, 0.0, peak, cap, shape)
+        rob = _ok(se, i0s, cfg, cfg["margin"], peak, cap, shape)
+        for q, j in enumerate(valid):
+            batt[j] = None if np.isnan(cb[q]) else float(math.ceil(cb[q] / 10) * 10)
+            state[j] = 2 if rob[q] else (1 if nom[q] else 0)
+    return {"atlas_battery_wh": batt, "atlas_state": state}
