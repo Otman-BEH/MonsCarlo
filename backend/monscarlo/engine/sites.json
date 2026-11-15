@@ -1,5 +1,5 @@
 {
-  "about": "Site catalogue copied from main src/app.js SITES. snapped = the highest ground within 600 m of the nominal point on the 80 m DEM (as the original in-browser app placed them).",
+  "about": "Landing sites. Planned targets are written as 'Place (mission target)'. snapped = the highest ground within 600 m of the nominal point on the 80 m DEM.",
   "sites": [
     {
       "id": "shack",
@@ -7,7 +7,7 @@
       "group": "South pole",
       "lat": -89.78,
       "lon": -155.73,
-      "note": "High-illumination point on the crater rim (LOLA Site 04).",
+      "note": "One of the most sunlit points near the pole, on the crater rim (LOLA Site 04).",
       "snapped": {
         "lat": -89.77967,
         "lon": -156.35098,
@@ -17,11 +17,11 @@
     },
     {
       "id": "ridge",
-      "name": "Connecting ridge",
+      "name": "Connecting ridge (Blue Moon MK1 target)",
       "group": "South pole",
       "lat": -89.45,
       "lon": -137.31,
-      "note": "Ridge between Shackleton and de Gerlache (LOLA Site 01).",
+      "note": "Ridge between Shackleton and de Gerlache (LOLA Site 01). Blue Origin's MK1 pathfinder is aimed here; launch slipped to 2027.",
       "snapped": {
         "lat": -89.43998,
         "lon": -137.0999,
@@ -31,11 +31,11 @@
     },
     {
       "id": "gerl",
-      "name": "de Gerlache rim",
+      "name": "de Gerlache rim (Artemis III candidate)",
       "group": "South pole",
       "lat": -88.71,
       "lon": -68.1,
-      "note": "Rim of de Gerlache crater (LOLA Site 11).",
+      "note": "Rim of de Gerlache crater (LOLA Site 11), inside one of NASA's Artemis III candidate regions.",
       "snapped": {
         "lat": -88.70155,
         "lon": -68.36072,
@@ -45,11 +45,11 @@
     },
     {
       "id": "ce7",
-      "name": "Chang'e 7 target, Shackleton rim",
+      "name": "Shackleton rim (Chang'e 7 target)",
       "group": "South pole",
       "lat": -88.8,
       "lon": 123.4,
-      "note": "Published target for China's Chang'e 7 lander.",
+      "note": "Published target for China's Chang'e 7 lander. The August 2026 launch was called off; now expected in 2027.",
       "snapped": {
         "lat": -88.8,
         "lon": 123.4,
@@ -58,11 +58,11 @@
     },
     {
       "id": "mala",
-      "name": "Malapert Massif",
+      "name": "Malapert Massif (Artemis III candidate)",
       "group": "South pole",
       "lat": -86,
       "lon": 2.7,
-      "note": "Artemis candidate region (LOLA Site 23).",
+      "note": "One of NASA's Artemis III candidate regions (LOLA Site 23).",
       "snapped": {
         "lat": -85.99066,
         "lon": 2.80877,
@@ -72,11 +72,11 @@
     },
     {
       "id": "viper",
-      "name": "Mons Mouton, VIPER site",
+      "name": "Mons Mouton (VIPER target)",
       "group": "South pole",
       "lat": -85.42,
       "lon": 31.62,
-      "note": "Planned landing area for NASA's VIPER rover.",
+      "note": "Planned area for NASA's VIPER rover, now set to ride on Blue Origin's second MK1 lander.",
       "snapped": {
         "lat": -85.42,
         "lon": 31.62,
@@ -85,11 +85,11 @@
     },
     {
       "id": "im2",
-      "name": "IM-2 Athena, Mons Mouton",
+      "name": "Mons Mouton (IM-2 landing, 2025)",
       "group": "South pole",
       "lat": -84.7906,
       "lon": 29.1957,
-      "note": "Intuitive Machines IM-2 landed here on 6 March 2025.",
+      "note": "Intuitive Machines' Athena landed here on 6 March 2025 and tipped over.",
       "snapped": {
         "lat": -84.7906,
         "lon": 29.1957,
@@ -98,11 +98,11 @@
     },
     {
       "id": "im1",
-      "name": "IM-1 Odysseus, Malapert A",
+      "name": "Malapert A (IM-1 landing, 2024)",
       "group": "South pole",
       "lat": -80.13,
       "lon": 1.44,
-      "note": "Intuitive Machines IM-1 landed here on 22 February 2024.",
+      "note": "Intuitive Machines' Odysseus landed here on 22 February 2024.",
       "snapped": {
         "lat": -80.13,
         "lon": 1.44,
@@ -123,140 +123,60 @@
       }
     },
     {
+      "id": "im3",
+      "name": "Reiner Gamma (IM-3 target)",
+      "group": "Planned missions",
+      "lat": 7.585,
+      "lon": -58.725,
+      "note": "Intuitive Machines IM-3, planned for early 2027. Coordinates approximate."
+    },
+    {
+      "id": "bg2",
+      "name": "Far side (Blue Ghost Mission 2 target)",
+      "group": "Planned missions",
+      "lat": -23.8,
+      "lon": -177.7,
+      "note": "Firefly lists Nassau crater on the far side; planned for 2027. Coordinates approximate."
+    },
+    {
+      "id": "bg3",
+      "name": "Gruithuisen Domes (Blue Ghost Mission 3 target)",
+      "group": "Planned missions",
+      "lat": 36.3,
+      "lon": -40.2,
+      "note": "Firefly CLPS task order. Coordinates approximate."
+    },
+    {
+      "id": "schr",
+      "name": "Schrödinger basin (ispace Mission 3 target)",
+      "group": "Planned missions",
+      "lat": -75,
+      "lon": 132.4,
+      "note": "ispace-U.S. APEX 1.0 lander, NASA CLPS delivery to the far side. Basin centre shown."
+    },
+    {
       "id": "a11",
       "name": "Apollo 11, Tranquility Base",
       "group": "Past landings",
       "lat": 0.6741,
       "lon": 23.473,
-      "note": "First crewed landing, July 1969."
-    },
-    {
-      "id": "a12",
-      "name": "Apollo 12",
-      "group": "Past landings",
-      "lat": -3.0124,
-      "lon": -23.4216,
-      "note": "Oceanus Procellarum, November 1969."
-    },
-    {
-      "id": "a14",
-      "name": "Apollo 14",
-      "group": "Past landings",
-      "lat": -3.6453,
-      "lon": -17.4714,
-      "note": "Fra Mauro, February 1971."
-    },
-    {
-      "id": "a15",
-      "name": "Apollo 15",
-      "group": "Past landings",
-      "lat": 26.1322,
-      "lon": 3.6339,
-      "note": "Hadley Rille, July 1971."
-    },
-    {
-      "id": "a16",
-      "name": "Apollo 16",
-      "group": "Past landings",
-      "lat": -8.973,
-      "lon": 15.5002,
-      "note": "Descartes Highlands, April 1972."
-    },
-    {
-      "id": "a17",
-      "name": "Apollo 17",
-      "group": "Past landings",
-      "lat": 20.1908,
-      "lon": 30.7717,
-      "note": "Taurus-Littrow, December 1972."
-    },
-    {
-      "id": "ce3",
-      "name": "Chang'e 3",
-      "group": "Past landings",
-      "lat": 44.1214,
-      "lon": -19.5116,
-      "note": "Mare Imbrium, December 2013."
+      "note": "First crewed landing, July 1969. Kept as a near-equator comparison."
     },
     {
       "id": "ce4",
-      "name": "Chang'e 4, far side",
+      "name": "Von Kármán crater (Chang'e 4)",
       "group": "Past landings",
       "lat": -45.4446,
       "lon": 177.5991,
-      "note": "Von Kármán crater, first far-side landing, January 2019."
-    },
-    {
-      "id": "ce5",
-      "name": "Chang'e 5",
-      "group": "Past landings",
-      "lat": 43.0576,
-      "lon": -51.9161,
-      "note": "Mons Rümker region, sample return, December 2020."
-    },
-    {
-      "id": "ce6",
-      "name": "Chang'e 6, far side",
-      "group": "Past landings",
-      "lat": -41.6385,
-      "lon": -153.9852,
-      "note": "Apollo basin, far-side sample return, June 2024."
+      "note": "First landing on the far side, January 2019."
     },
     {
       "id": "c3",
-      "name": "Chandrayaan-3",
+      "name": "Shiv Shakti point (Chandrayaan-3)",
       "group": "Past landings",
       "lat": -69.3733,
       "lon": 32.3191,
-      "note": "Shiv Shakti point, August 2023."
-    },
-    {
-      "id": "slim",
-      "name": "SLIM",
-      "group": "Past landings",
-      "lat": -13.316,
-      "lon": 25.251,
-      "note": "Near Shioli crater, January 2024."
-    },
-    {
-      "id": "bg1",
-      "name": "Blue Ghost Mission 1",
-      "group": "Past landings",
-      "lat": 18.5623,
-      "lon": 61.8103,
-      "note": "Mare Crisium, March 2025."
-    },
-    {
-      "id": "im3",
-      "name": "IM-3, Reiner Gamma",
-      "group": "Announced targets",
-      "lat": 7.585,
-      "lon": -58.725,
-      "note": "CLPS target at the Reiner Gamma swirl; approximate."
-    },
-    {
-      "id": "bg2",
-      "name": "Blue Ghost Mission 2, far side",
-      "group": "Announced targets",
-      "lat": -23.8,
-      "lon": -177.7,
-      "note": "CLPS far-side target; approximate."
-    },
-    {
-      "id": "bg3",
-      "name": "Blue Ghost Mission 3, Gruithuisen Domes",
-      "group": "Announced targets",
-      "lat": 36.3,
-      "lon": -40.2,
-      "note": "CLPS target; approximate."
-    },
-    {
-      "id": "schr",
-      "name": "Schrödinger basin",
-      "group": "Announced targets",
-      "lat": -75,
-      "lon": 132.4,
-      "note": "CLPS far-side target region; basin centre."
+      "note": "ISRO's Vikram, August 2023. The furthest south anyone had landed at the time."
     }
   ]
 }

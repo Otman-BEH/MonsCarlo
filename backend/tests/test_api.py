@@ -36,7 +36,7 @@ def test_root_and_health(c):
 
 def test_sites(c):
     s = c.get("/sites").json()["sites"]
-    assert len(s) == 26
+    assert len(s) == 16
     shack = next(x for x in s if x["id"] == "shack")
     assert shack["snapped"] and shack["lat"] != shack["nominal"]["lat"]
     assert len(c.get("/sites", params={"group": "South pole"}).json()["sites"]) == 9
