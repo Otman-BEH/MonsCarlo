@@ -51,8 +51,7 @@ A Python backend (FastAPI, NumPy) does every calculation. The web page asks it f
 same numbers are available to anyone through the API (`/docs` on a running server; `/report?site=shack` answers the
 challenge question in one call).
 
-More detail: [backend/README.md](backend/README.md) (endpoints, data, validation) and
-[docs/Mons_Carlo_Technical_Review.md](docs/Mons_Carlo_Technical_Review.md) (literature, method, existing tools).
+More detail: [backend/README.md](backend/README.md) (endpoints, data, validation).
 
 ## Run it
 
@@ -126,7 +125,6 @@ project.
 ```
 backend/   the API: prep/ (downloads, precompute, ephemeris), engine/ (analysis), api/ (routes), tests/
 web/       the page: index.html, app.js, style.css, js/
-docs/      technical review: literature, method, existing tools
 ```
 
 ## License
