@@ -1,0 +1,262 @@
+{
+  "about": "Site catalogue copied from main src/app.js SITES. snapped = coordinates main uses for its precomputed 80 m skylines (build/data.json hz.sites).",
+  "sites": [
+    {
+      "id": "shack",
+      "name": "Shackleton rim",
+      "group": "South pole",
+      "lat": -89.78,
+      "lon": -155.73,
+      "note": "High-illumination point on the crater rim (LOLA Site 04).",
+      "snapped": {
+        "lat": -89.77967,
+        "lon": -156.35098,
+        "h0_80m": 1736.8
+      },
+      "snap_note": "Placed on the highest ground within 600 m on the 80 m DEM (main build/hires.py)."
+    },
+    {
+      "id": "ridge",
+      "name": "Connecting ridge",
+      "group": "South pole",
+      "lat": -89.45,
+      "lon": -137.31,
+      "note": "Ridge between Shackleton and de Gerlache (LOLA Site 01).",
+      "snapped": {
+        "lat": -89.43998,
+        "lon": -137.0999,
+        "h0_80m": 1958.1
+      },
+      "snap_note": "Placed on the highest ground within 600 m on the 80 m DEM (main build/hires.py)."
+    },
+    {
+      "id": "gerl",
+      "name": "de Gerlache rim",
+      "group": "South pole",
+      "lat": -88.71,
+      "lon": -68.1,
+      "note": "Rim of de Gerlache crater (LOLA Site 11).",
+      "snapped": {
+        "lat": -88.70155,
+        "lon": -68.36072,
+        "h0_80m": 1780.2
+      },
+      "snap_note": "Placed on the highest ground within 600 m on the 80 m DEM (main build/hires.py)."
+    },
+    {
+      "id": "ce7",
+      "name": "Chang'e 7 target, Shackleton rim",
+      "group": "South pole",
+      "lat": -88.8,
+      "lon": 123.4,
+      "note": "Published target for China's Chang'e 7 lander.",
+      "snapped": {
+        "lat": -88.8,
+        "lon": 123.4,
+        "h0_80m": 1632.2
+      }
+    },
+    {
+      "id": "mala",
+      "name": "Malapert Massif",
+      "group": "South pole",
+      "lat": -86,
+      "lon": 2.7,
+      "note": "Artemis candidate region (LOLA Site 23).",
+      "snapped": {
+        "lat": -85.99066,
+        "lon": 2.80877,
+        "h0_80m": 5149.9
+      },
+      "snap_note": "Placed on the highest ground within 600 m on the 80 m DEM (main build/hires.py)."
+    },
+    {
+      "id": "viper",
+      "name": "Mons Mouton, VIPER site",
+      "group": "South pole",
+      "lat": -85.42,
+      "lon": 31.62,
+      "note": "Planned landing area for NASA's VIPER rover.",
+      "snapped": {
+        "lat": -85.42,
+        "lon": 31.62,
+        "h0_80m": 6418.6
+      }
+    },
+    {
+      "id": "im2",
+      "name": "IM-2 Athena, Mons Mouton",
+      "group": "South pole",
+      "lat": -84.7906,
+      "lon": 29.1957,
+      "note": "Intuitive Machines IM-2 landed here on 6 March 2025.",
+      "snapped": {
+        "lat": -84.7906,
+        "lon": 29.1957,
+        "h0_80m": 5321.5
+      }
+    },
+    {
+      "id": "im1",
+      "name": "IM-1 Odysseus, Malapert A",
+      "group": "South pole",
+      "lat": -80.13,
+      "lon": 1.44,
+      "note": "Intuitive Machines IM-1 landed here on 22 February 2024.",
+      "snapped": {
+        "lat": -80.13,
+        "lon": 1.44,
+        "h0_80m": 2591.9
+      }
+    },
+    {
+      "id": "pole",
+      "name": "South pole",
+      "group": "South pole",
+      "lat": -90,
+      "lon": 0,
+      "note": "The geographic pole, on the wall of Shackleton crater.",
+      "snapped": {
+        "lat": -90,
+        "lon": 0,
+        "h0_80m": 1290.8
+      }
+    },
+    {
+      "id": "a11",
+      "name": "Apollo 11, Tranquility Base",
+      "group": "Past landings",
+      "lat": 0.6741,
+      "lon": 23.473,
+      "note": "First crewed landing, July 1969."
+    },
+    {
+      "id": "a12",
+      "name": "Apollo 12",
+      "group": "Past landings",
+      "lat": -3.0124,
+      "lon": -23.4216,
+      "note": "Oceanus Procellarum, November 1969."
+    },
+    {
+      "id": "a14",
+      "name": "Apollo 14",
+      "group": "Past landings",
+      "lat": -3.6453,
+      "lon": -17.4714,
+      "note": "Fra Mauro, February 1971."
+    },
+    {
+      "id": "a15",
+      "name": "Apollo 15",
+      "group": "Past landings",
+      "lat": 26.1322,
+      "lon": 3.6339,
+      "note": "Hadley Rille, July 1971."
+    },
+    {
+      "id": "a16",
+      "name": "Apollo 16",
+      "group": "Past landings",
+      "lat": -8.973,
+      "lon": 15.5002,
+      "note": "Descartes Highlands, April 1972."
+    },
+    {
+      "id": "a17",
+      "name": "Apollo 17",
+      "group": "Past landings",
+      "lat": 20.1908,
+      "lon": 30.7717,
+      "note": "Taurus-Littrow, December 1972."
+    },
+    {
+      "id": "ce3",
+      "name": "Chang'e 3",
+      "group": "Past landings",
+      "lat": 44.1214,
+      "lon": -19.5116,
+      "note": "Mare Imbrium, December 2013."
+    },
+    {
+      "id": "ce4",
+      "name": "Chang'e 4, far side",
+      "group": "Past landings",
+      "lat": -45.4446,
+      "lon": 177.5991,
+      "note": "Von Kármán crater, first far-side landing, January 2019."
+    },
+    {
+      "id": "ce5",
+      "name": "Chang'e 5",
+      "group": "Past landings",
+      "lat": 43.0576,
+      "lon": -51.9161,
+      "note": "Mons Rümker region, sample return, December 2020."
+    },
+    {
+      "id": "ce6",
+      "name": "Chang'e 6, far side",
+      "group": "Past landings",
+      "lat": -41.6385,
+      "lon": -153.9852,
+      "note": "Apollo basin, far-side sample return, June 2024."
+    },
+    {
+      "id": "c3",
+      "name": "Chandrayaan-3",
+      "group": "Past landings",
+      "lat": -69.3733,
+      "lon": 32.3191,
+      "note": "Shiv Shakti point, August 2023."
+    },
+    {
+      "id": "slim",
+      "name": "SLIM",
+      "group": "Past landings",
+      "lat": -13.316,
+      "lon": 25.251,
+      "note": "Near Shioli crater, January 2024."
+    },
+    {
+      "id": "bg1",
+      "name": "Blue Ghost Mission 1",
+      "group": "Past landings",
+      "lat": 18.5623,
+      "lon": 61.8103,
+      "note": "Mare Crisium, March 2025."
+    },
+    {
+      "id": "im3",
+      "name": "IM-3, Reiner Gamma",
+      "group": "Announced targets",
+      "lat": 7.585,
+      "lon": -58.725,
+      "note": "CLPS target at the Reiner Gamma swirl; approximate."
+    },
+    {
+      "id": "bg2",
+      "name": "Blue Ghost Mission 2, far side",
+      "group": "Announced targets",
+      "lat": -23.8,
+      "lon": -177.7,
+      "note": "CLPS far-side target; approximate."
+    },
+    {
+      "id": "bg3",
+      "name": "Blue Ghost Mission 3, Gruithuisen Domes",
+      "group": "Announced targets",
+      "lat": 36.3,
+      "lon": -40.2,
+      "note": "CLPS target; approximate."
+    },
+    {
+      "id": "schr",
+      "name": "Schrödinger basin",
+      "group": "Announced targets",
+      "lat": -75,
+      "lon": 132.4,
+      "note": "CLPS far-side target region; basin centre."
+    }
+  ]
+}
