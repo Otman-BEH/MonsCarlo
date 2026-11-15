@@ -11,6 +11,7 @@ import { createTerrain } from './js/terrain.js';
   const VIEWS = ['plan', 'explore', 'compare', 'learn', 'method'];
   // Where the Lunar Skyline API runs: ?api=... in the address wins, then web/config.js, then the page's own server.
   const DEBUG = new URLSearchParams(location.search).has('debug');
+  if (DEBUG) { window.__dbg = []; const cl = console.log.bind(console); console.log = (...a) => { window.__dbg.push(a.join(' ')); cl(...a); }; }
   const API = (new URLSearchParams(location.search).get('api') || window.LUNAR_SKYLINE_API || '').replace(/\/$/, '');
   const srv = createServer({ base: API, onData: () => renderSoon(), isBusy: () => S.playing || S.scrubbing });
   const { api, getJSON, qs, iso, cache, need, failed, latest } = srv;
