@@ -112,8 +112,8 @@ there, and two live JPL Horizons checks only run with `-m live`).
 - **Server software:** FastAPI, Uvicorn, Pydantic, NumPy, SciPy, pandas, Requests, tifffile and imagecodecs (reading the
   LOLA GeoTIFFs), SpiceyPy with NAIF's CSPICE toolkit, and pytest with HTTPX for the tests. Exact versions are in
   `backend/requirements.txt`.
-- **Web page:** plain JavaScript, HTML and CSS with no framework. The typeface is IBM Plex Sans (SIL Open Font
-  Licence), loaded from Google Fonts.
+- **Web page:** plain JavaScript, HTML and CSS with no framework. The typefaces are IBM Plex Sans, IBM Plex
+  Mono and Space Grotesk (all SIL Open Font Licence), served with the page from `web/fonts/`.
 - **About page:** the team photos are our own. University and company logos belong to their owners and are shown only
   to say where each of us studies or works.
 
