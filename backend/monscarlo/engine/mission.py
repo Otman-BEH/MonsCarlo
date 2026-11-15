@@ -97,7 +97,36 @@ def make_cfg(lander: dict, spec: MissionSpec | dict) -> dict:
         "tracking": arr["type"] == "tracking", "array": arr, "needEarth": m.needs_earth, "useDsn": m.use_dsn, "maxGapH": m.max_gap_h,
         "margin": m.terrain_margin_deg, "fault": m.fault.model_dump(), "safe": p["safe_mode"], "autonomyH": m.autonomy_h,
         "linkMin": m.link_min_clearance_deg, "limb": m.limb_darkening, "dischargeEff": p["battery"].get("discharge_eff", 1.0),
+        "initSoc": p["battery"].get("initial_soc", 1.0), "thermal": thermal_consts(lander.get("thermal")),
     }
+
+
+SIGMA = 5.670374419e-8      # Stefan-Boltzmann, W m-2 K-4
+SOLAR_W_M2 = 1361.0         # solar constant at 1 AU
+
+
+def thermal_consts(th: dict | None) -> dict | None:
+    """Thermal block of a lander as the constants the simulation uses (kelvin, W/K4), or None when not modelled."""
+    if not th:
+        return None
+    return {"g": SIGMA * th["radiating_area_m2"], "sun": SOLAR_W_M2 * th["sun_area_m2"], "C": th["heat_capacity_j_per_k"],
+            "lo": th["keep_above_c"] + 273.15, "hi": th["keep_below_c"] + 273.15, "Ts4": th["surroundings_k"] ** 4,
+            "T0": min(max(th["start_c"], th["keep_above_c"]), th["keep_below_c"]) + 273.15}
+
+
+def thermal_step(T, q_in, c: dict):
+    """One hour of the body's heat balance. T (K) and q_in (W: electrical load plus absorbed sunlight) may be arrays.
+    Returns (new T, heater W). The body relaxes toward Teq, the temperature at which it radiates q_in. The radiated
+    power g (T^4 - Teq^4) equals g (T^2 + Teq^2)(T + Teq) (T - Teq) exactly, so with that factor held for the hour the
+    step is an exponential approach: right at the start of the hour and stable for any insulation. If it would end
+    below the heater set point the heaters make up the shortfall for the hour; a radiator caps the upper limit."""
+    T = np.asarray(T, dtype=np.float64)
+    q_in = np.asarray(q_in, dtype=np.float64)
+    Teq = (q_in / c["g"] + c["Ts4"]) ** 0.25
+    Tn = Teq + (T - Teq) * np.exp(-c["g"] * (T * T + Teq * Teq) * (T + Teq) / c["C"] * 3600.0)
+    cold = Tn < c["lo"]
+    heater = np.where(cold, np.maximum(0.0, c["g"] * (c["lo"] ** 4 - c["Ts4"]) - q_in), 0.0)
+    return np.where(cold, c["lo"], np.minimum(Tn, c["hi"])), heater
 
 
 def power_shape(se: dict, cfg: dict) -> np.ndarray:
@@ -146,9 +175,14 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
     n = max(0, min(want, n_ser - i0))
     cap = cfg["capWh"]
     floor = cfg["minSoc"] * cap
-    E = cap
-    minE = cap
+    E = cap * (cfg.get("initSoc") or 1.0)
+    minE = E
     kMin = 0
+    TH = cfg.get("thermal")
+    Tb = TH["T0"] if TH else 0.0
+    heatWh = 0.0
+    heatH = 0
+    minT = maxT = Tb
     gap = maxGap = dark = maxDark = linkH = litH = 0
     draw = maxDraw = 0.0
     kFail = -1
@@ -165,7 +199,7 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
     link = np.zeros(n, dtype=np.uint8) if keep else None
     safe_arr = np.zeros(n, dtype=np.uint8) if keep else None
     if keep:
-        soc[0] = 1
+        soc[0] = E / cap
     peak, lsun, ldark, eff = cfg["peakW"], cfg["loadSun"], cfg["loadDark"], cfg["chargeEff"]
     need_e = cfg["needEarth"]
     # optional refinements, all off by default: see MissionSpec, landers.Battery and power.glass_transmission
@@ -190,6 +224,14 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
                 safeH += 1
         if on and xLoad:
             load += xLoad
+        if TH:      # heat balance: the load and the absorbed sunlight warm the body, heaters hold it at the set point
+            Tn, hw = thermal_step(Tb, load + TH["sun"] * float(irr[i]) * f, TH)
+            Tb, hw = float(Tn), float(hw)
+            if hw > 0:
+                load += hw
+                heatWh += hw
+                heatH += 1
+            minT, maxT = min(minT, Tb), max(maxT, Tb)
         net = p - load
         dE = net * eff if net > 0 else net / dis
         E = min(capNow, E + dE)
@@ -243,7 +285,8 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
     return {"ok": len(fails) == 0, "fails": fails, "minSoc": max(0.0, minE / cap), "kMin": kMin, "kFail": kFail, "maxGapH": maxGap,
             "maxDarkH": maxDark, "linkPct": 100 * linkH / n if n else 0.0, "litPct": 100 * litH / n if n else 0.0,
             "battNeedWh": (maxDraw + autoWh) / usable if usable > 0 else math.inf, "n": n,
-            "soc": soc, "sun": sun, "link": link, "safeH": safeH, "safeArr": safe_arr, "faultK": fk if F else -1}
+            "soc": soc, "sun": sun, "link": link, "safeH": safeH, "safeArr": safe_arr, "faultK": fk if F else -1,
+            "thermal": {"heater_wh": heatWh, "heater_hours": heatH, "coldest_c": minT - 273.15, "warmest_c": maxT - 273.15} if TH else None}
 
 
 def verdict(se: dict, i0: int, cfg: dict, shape: np.ndarray | None = None) -> dict:
@@ -269,7 +312,8 @@ def cause_of(f: str) -> int:
 
 def summary_of(r: dict, cap_wh: float) -> dict:
     """JSON-friendly result (no arrays)."""
-    return {"ok": r["ok"], "fails": r["fails"], "min_soc": r["minSoc"], "min_soc_at_h": r["kMin"],
+    extra = {"thermal": r["thermal"]} if r.get("thermal") else {}
+    return {**extra, "ok": r["ok"], "fails": r["fails"], "min_soc": r["minSoc"], "min_soc_at_h": r["kMin"],
             "below_reserve_at_h": r["kFail"] if r["kFail"] >= 0 else None, "longest_link_gap_h": r["maxGapH"],
             "longest_dark_h": r["maxDarkH"], "link_pct": r["linkPct"], "lit_pct": r["litPct"],
             "battery_needed_wh": r["battNeedWh"] if math.isfinite(r["battNeedWh"]) else None,
