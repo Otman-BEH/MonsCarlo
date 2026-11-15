@@ -68,11 +68,7 @@ python run.py
 The first run downloads about 620 MB of NASA and JPL data, precomputes the site horizons and fetches the ephemeris;
 later runs skip what is done. Then open http://127.0.0.1:8000. The page and the API are served from the same address.
 
-With Docker: `docker build -t mons-carlo . && docker run -p 8000:8000 -v mons_carlo_data:/data mons-carlo`.
-`fly.toml` deploys the same image to Fly.io with a persistent volume.
-
-Tests: `cd backend && python -m pytest` (107 tests; those that need the downloaded data skip themselves until it is
-there, and two live JPL Horizons checks only run with `-m live`).
+Tests: `cd backend && python -m pytest` (107 tests; two live JPL Horizons checks only run with `-m live`).
 
 ## How we know it is right
 
@@ -112,8 +108,6 @@ there, and two live JPL Horizons checks only run with `-m live`).
 - **Server software:** FastAPI, Uvicorn, Pydantic, NumPy, SciPy, pandas, Requests, tifffile and imagecodecs (reading the
   LOLA GeoTIFFs), SpiceyPy with NAIF's CSPICE toolkit, and pytest with HTTPX for the tests. Exact versions are in
   `backend/requirements.txt`.
-- **Web page:** plain JavaScript, HTML and CSS with no framework. The typefaces are IBM Plex Sans, IBM Plex
-  Mono and Space Grotesk (all SIL Open Font Licence), served with the page from `web/fonts/`.
 - **About page:** the team photos are our own. University and company logos belong to their owners and are shown only
   to say where each of us studies or works.
 
