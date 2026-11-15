@@ -149,7 +149,8 @@
     <a href="#sec-verdict">Verdict</a><a href="#sec-risk">Landing risk</a><a href="#sec-cont">Contingencies</a><a href="#sec-design">Mission design</a><a href="#sec-rescue">Launch slip</a>
     <span class="hint">Each result is simulated hour by hour for your lander.</span>
   </nav>
-  <section class="panel lander" data-v="plan" aria-label="Mission needs">
+  <div class="ptop span2" data-v="plan">
+  <section class="panel lander" aria-label="Mission needs">
       <div class="phead"><h2>Lander and mission</h2></div>
       <label class="fl" for="m-lander">Lander<select id="m-lander"></select></label>
       <div class="lspec" id="m-lspec"></div>
@@ -178,7 +179,7 @@
     </section>
 
   <!-- results column beside the lander form: verdict, then landing risk -->
-  <div class="pstack" data-v="plan">
+  <div class="pstack">
     <section id="sec-verdict" class="panel" aria-label="Mission verdict">
         <div class="phead"><h2>If you land here at this time</h2>
           <ul class="legend"><li><i class="key" style="border-color:var(--ink);border-top-width:3px"></i>Battery, mapped terrain</li><li><i class="key dash" style="border-color:var(--muted)"></i><span>Battery, terrain <span id="mv-mlab">0.3</span>° higher</span></li></ul></div>
@@ -236,6 +237,7 @@
         </div>
         <p class="cap" id="k-cap"></p>
       </section>
+  </div>
   </div>
 
   <section id="sec-cont" class="panel span2" data-v="plan" aria-label="Contingency planning">
