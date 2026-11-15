@@ -383,8 +383,11 @@ label.fl .fh { font-weight: 400; font-size: 12px; color: var(--muted); }
 @media (min-width: 720px) { .people { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .person { margin: 0; display: grid; justify-items: center; align-content: start; gap: 18px; text-align: center; }
 .avatar { --s: 184px; --b: 64px; position: relative; width: var(--s); height: var(--s); }
-.avatar .photo, .avatar .initials { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; }
-.avatar .photo { object-fit: cover; background: var(--panel-2); }
+/* Per person, on the .avatar: --photo-y picks which part of a tall photo fills the circle (0% shows the top, 50% the
+   middle, 100% the bottom); --photo-zoom enlarges the picture. The circle and the badges stay where they are. */
+.avatar .initials, .avatar .clip { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; }
+.avatar .clip { overflow: hidden; background: var(--panel-2); }
+.avatar .photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% var(--photo-y, 50%); transform: scale(var(--photo-zoom, 1)); }
 .avatar .initials { display: grid; place-items: center; background: var(--panel-2); color: var(--muted); font-family: var(--f-display); font-size: 44px; font-weight: 500; letter-spacing: 0.02em; }
 /* the two small circles sit on the photo's rim at roughly 7 and 5 o'clock, overlapping it as in the sketch */
 .avatar .badge { position: absolute; width: var(--b); height: var(--b); border-radius: 50%; background: #fff; object-fit: contain; padding: 10px; box-shadow: 0 0 0 4px var(--panel); top: calc(var(--s) * 0.854 - var(--b) / 2); }
