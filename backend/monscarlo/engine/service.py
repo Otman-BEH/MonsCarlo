@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import numpy as np
 
 from .. import config
+from . import dsn as DSN
 from . import landers as LD
 from . import mission as M
 from . import montecarlo as MC
@@ -78,6 +79,14 @@ class Engine:
         return tab, t0h, src
 
     @staticmethod
+    def _dsn_ok(t0: int, n: int, cfg: dict) -> np.ndarray | None:
+        """Hours with a DSN complex in view, when the mission asks for ground-station contact."""
+        if not cfg.get("useDsn"):
+            return None
+        el = DSN.hourly(t0, n)
+        return None if el is None else DSN.contact_mask(el)
+
+    @staticmethod
     def _eph_sources(src: dict) -> dict:
         return {m: s for m, s in sorted(src.items())}
 
@@ -112,7 +121,7 @@ class Engine:
         from ..prep import spice
         sp_lat, sp_lon = sub_point(s_vec)
         se_lat, se_lon = sub_point(e_vec)
-        dsn = spice.dsn_view(t) if spice.available() else None
+        dsn = DSN.view(t) if DSN.available() else None
         return {
             "time": iso(t), "location": loc.as_dict(),
             "vectors_km": {"sun": [float(x) for x in s_vec], "earth": [float(x) for x in e_vec], "frame": "Moon-fixed (body-fixed), from the Moon's centre"},
@@ -143,13 +152,19 @@ class Engine:
         L = se["sunClr"] > 0
         K = se["earthClr"] > 0
         B = L & K
+        el = DSN.hourly(t0, n_h)
+        dsn_up = DSN.contact_mask(el[:, ::step_h])[:n] if el is not None else None
+        C = K & dsn_up if dsn_up is not None else None
         out = {
             "start": iso(t0), "end": iso(t0 + (n - 1) * step_h * HOUR), "step_h": step_h, "samples": n, "location": loc.as_dict(),
             "stats": {"sunlit_pct": st["litPct"], "earth_in_view_pct": st["linkPct"], "both_pct": 100 * B.sum() / n,
                       "power_share_tracking_pct": st["pTrack"], "power_share_horizontal_pct": st["pFlat"],
                       "longest_sunlit_h": st["maxLitD"] * 24, "longest_dark_h": st["maxDarkD"] * 24,
                       "longest_radio_gap_h": st["maxOutD"] * 24, "longest_both_h": (st["maxBothD"] * 24),
-                      "max_sun_elevation_deg": float(se["sunEl"].max()), "max_earth_elevation_deg": float(se["earthEl"].max())},
+                      "max_sun_elevation_deg": float(se["sunEl"].max()), "max_earth_elevation_deg": float(se["earthEl"].max()),
+                      "dsn_in_view_pct": None if C is None else 100 * dsn_up.sum() / n,
+                      "earth_contact_pct": None if C is None else 100 * C.sum() / n,
+                      "longest_contact_gap_h": None if C is None else V._max_run(~C) * step_h},
             "intervals": {"sunlit": V.intervals(L, t0, step_h * HOUR), "earth_in_view": V.intervals(K, t0, step_h * HOUR),
                           "both": V.intervals(B, t0, step_h * HOUR)},
             "_meta": {"terrain": ter, "ephemeris": self._eph_sources(src)},
@@ -157,9 +172,14 @@ class Engine:
         for k in out["intervals"].values():
             for iv in k:
                 iv["start"], iv["end"] = iso(iv["start"]), iso(iv["end"])
+        if C is not None:
+            out["intervals"]["earth_contact"] = V.intervals(C, t0, step_h * HOUR)
         if series:
             out["series"] = {"time": [iso(t0 + i * step_h * HOUR) for i in range(n)],
                              **{k: np.round(se[k], 5).tolist() for k in V.SERIES_KEYS}}
+            if C is not None:
+                out["series"]["dsn_moon_elevation_deg"] = np.round(DSN.best(el[:, ::step_h])[0][:n], 3).tolist()
+                out["series"]["earth_contact"] = C.astype(int).tolist()
         return out
 
     # ---------------------------------------------------------------- /mission
@@ -172,7 +192,8 @@ class Engine:
         tab, t0, src = self.table(landing - J * HOUR, J + after)
         i0 = int(math.floor((landing - t0) / HOUR))
         v, ter = self.view(loc, lander, mode)
-        se = V.series(v, tab)
+        ok = self._dsn_ok(t0, len(tab), cfg)
+        se = DSN.apply(V.series(v, tab), ok)
         shp = M.power_shape(se, cfg)
         vd = M.verdict(se, i0, cfg, shp)
         nom = M.mission(se, i0, cfg, 0, True, shp)
@@ -203,7 +224,7 @@ class Engine:
                 out["risk"] = {"available": False, "reason": "the landing-risk analysis needs the polar elevation models (80S to the pole)"}
             else:
                 t_r = time.time()
-                r = MC.run_risk(self.sky.terrain, tab, i0, loc.lat, loc.lon, lander, cfg, unc, mode)
+                r = MC.run_risk(self.sky.terrain, tab, i0, loc.lat, loc.lon, lander, cfg, unc, mode, dsn_ok=ok)
                 r["available"] = True
                 r["seconds"] = round(time.time() - t_r, 2)
                 out["risk"] = r
@@ -224,11 +245,19 @@ class Engine:
         step_h = max(1, int(step_h))
         v, ter = self.view(loc, lander, mode)
         tab, t0, src = self.table(start, hours + 1)
+        n_full = len(tab)
         tab = tab[::step_h]
         se = V.series(v, tab)
         out = {"location": loc.as_dict(), "start": iso(t0), "start_unix": t0, "step_h": step_h, "n": se["n"],
                "series": {k: np.round(se[k], 4).tolist() for k in V.SERIES_KEYS},
                "_meta": {"terrain": ter, "ephemeris": self._eph_sources(src)}}
+        el = DSN.hourly(t0, n_full)
+        if el is not None:
+            hi, which = DSN.best(el[:, ::step_h])
+            out["series"]["dsnEl"] = np.round(hi, 2).tolist()      # highest Moon elevation over the three complexes
+            out["series"]["dsnSite"] = which.astype(int).tolist()  # index into dsn_complexes
+            out["dsn_complexes"] = [c["name"] for c in DSN.COMPLEXES]
+            out["dsn_elevation_limit_deg"] = DSN.ELEVATION_LIMIT_DEG
         if include_horizon:
             out["horizon"] = {"azimuth_step_deg": 360.0 / len(v.sun_mask), "sun": np.round(v.sun_mask, 4).tolist(),
                               "earth": np.round(v.earth_mask, 4).tolist(), "ground_m": v.ground_m, "tiers": ter["tiers"],
@@ -254,7 +283,7 @@ class Engine:
         span_h = max(int(math.ceil((landing - first) / HOUR)), 120 * 12) + days_h + 1
         tab, t0, src = self.table(first, span_h)
         v, ter = self.view(loc, lander, mode)
-        se = V.series(v, tab)
+        se = DSN.apply(V.series(v, tab), self._dsn_ok(t0, len(tab), cfg))
         i0 = int(math.floor((landing - t0) / HOUR))
         out = D.lab(se, i0, cfg, mass_of, atlas_first=0)
         out["atlas_start"] = iso(t0)
@@ -269,12 +298,13 @@ class Engine:
         days_h = M.js_round(spec.duration_days * 24)
         t0 = int(math.floor(start / 86400)) * 86400
         tab, t0, src = self.table(t0, days * 24 + days_h + 1)
+        ok = self._dsn_ok(t0, len(tab), cfg)
         out = {"start": iso(t0), "days": days, "sites": []}
         tiers = set()
         for loc in locs:
             v, ter = self.view(loc, lander, mode)
             tiers.update(ter["tiers"])
-            out["sites"].append({"location": loc.as_dict(), **P.calendar(V.series(v, tab), cfg, days)})
+            out["sites"].append({"location": loc.as_dict(), **P.calendar(DSN.apply(V.series(v, tab), ok), cfg, days)})
         out["_meta"] = {"terrain": {"dem": mode, "tiers": sorted(tiers)}, "ephemeris": self._eph_sources(src)}
         return out
 
@@ -288,7 +318,8 @@ class Engine:
         tab, t0, src = self.table(tP, n)
         iS = slip_days * 24
         pv, _ = self.view(plan, lander, mode)
-        pse = V.series(pv, tab)
+        ok = self._dsn_ok(t0, len(tab), cfg)
+        pse = DSN.apply(V.series(pv, tab), ok)
         base = M.verdict(pse, 0, cfg)
         slipped = M.verdict(pse, iS, cfg)
         if not any(l.id == plan.id and l.lat == plan.lat and l.lon == plan.lon for l in locs):
@@ -296,7 +327,7 @@ class Engine:
         alts = []
         for loc in locs:
             v, ter = self.view(loc, lander, mode)
-            r = P.rescue_site(pse if loc is plan else V.series(v, tab), iS, flex_days, cfg)
+            r = P.rescue_site(pse if loc is plan else DSN.apply(V.series(v, tab), ok), iS, flex_days, cfg)
             alts.append((loc, r, ter))
         alts.sort(key=lambda a: (-a[1]["state"], (a[1]["i"] if a[1]["state"] else 0), -a[1]["verdict"]["nom"]["minSoc"]))
 

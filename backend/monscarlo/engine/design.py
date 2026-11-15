@@ -1,5 +1,5 @@
-"""Design lab: work back from the mission to the hardware. Port of main's src/analysis.js (bisectUp, minArray,
-designFrontier) and the design-lab and atlas logic in src/app.js (drawLab, drawAtlas).
+"""Mission design: work back from the mission to the hardware. Port of main's src/analysis.js (bisectUp, minArray,
+designFrontier) and the mission-design and landing-date logic in src/app.js (drawLab, drawAtlas).
 
 Every bisection runs for many candidates at once: one vectorised mission simulation per bisection step for all battery
 sizes (and, for the atlas, all landing times), with exactly main's step sequence, so results match main's.
@@ -128,7 +128,7 @@ def atlas(se, i_first: int, cfg: dict, mass_of=(80.0, 160.0), n: int = 120, step
 
 
 def lab(se, i0: int, cfg: dict, mass_of=(80.0, 160.0), atlas_first: int | None = None) -> dict:
-    """Everything the design-lab panel shows."""
+    """Everything the mission design panel shows."""
     shape = M.power_shape(se, cfg)
     F = frontier(se, i0, cfg, mass_of, 36, 12, True, shape)
     b = F["best"]

@@ -51,7 +51,7 @@ def _save_npy(path: Path, a: np.ndarray) -> None:
 
 
 def load_sites() -> list[dict]:
-    return json.loads((Path(__file__).resolve().parents[1] / "engine" / "sites.json").read_text())["sites"]
+    return json.loads((Path(__file__).resolve().parents[1] / "engine" / "sites.json").read_text(encoding="utf-8"))["sites"]
 
 
 def site_coords(s: dict) -> tuple[float, float]:
