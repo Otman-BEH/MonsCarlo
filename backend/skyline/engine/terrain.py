@@ -558,7 +558,8 @@ def rings_binary(T: "Terrain", lat: float, lon: float, mode: str = "best") -> by
 
     Little-endian layout: uint32 ring count, then per ring: uint32 n, float32 cell_m, float64 x0_m, float64 y0_m (map
     coordinates of the centre of the top-left cell; rows run toward -y), float32 base_m, float32 scale_m, then n*n int16
-    with height = base + value * scale. Heights come from the finest tier at each point (5 m site maps where present).
+    row-delta coded (each value is the difference from the previous one in its row, wrapping) with height = base + value
+    * scale after undoing the deltas. Heights come from the finest tier at each point (5 m site maps where present).
     """
     import struct
     x0, y0 = (float(v) for v in ll_to_xy(max(-89.9999, lat), lon))
@@ -571,7 +572,9 @@ def rings_binary(T: "Terrain", lat: float, lon: float, mode: str = "best") -> by
         h = T.elev(la.ravel(), lo.ravel(), mode).reshape(n, n)
         base = float((h.max() + h.min()) / 2)
         scale = max(0.05, float(np.ceil((h.max() - h.min()) / 65000.0 * 100) / 100))
-        q = np.clip(np.rint((h - base) / scale), -32767, 32767).astype("<i2")
+        q = np.clip(np.rint((h - base) / scale), -32767, 32767).astype(np.int16)
+        dq = q.copy()
+        dq[:, 1:] = q[:, 1:] - q[:, :-1]     # row deltas (wrapping int16) compress far better
         out.append(struct.pack("<Ifddff", n, cell, x0 + c[0], y0 - c[0], base, scale))
-        out.append(q.tobytes())
+        out.append(dq.astype("<i2").tobytes())
     return b"".join(out)

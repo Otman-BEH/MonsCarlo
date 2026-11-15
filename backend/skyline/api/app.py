@@ -16,7 +16,7 @@ from ..engine.ephemeris import EphemerisError
 from ..engine.landers import UnknownLander
 from ..engine.service import OutOfCoverage
 from ..engine.sites import BadLocation, UnknownSite
-from .routes import router
+from .routes import Busy, router
 
 DESCRIPTION = """
 Sun and Earth against the real lunar skyline, for any site, date and lander.
@@ -71,6 +71,11 @@ async def _coverage(_: Request, ex: OutOfCoverage):
 @app.exception_handler(EphemerisError)
 async def _eph(_: Request, ex: EphemerisError):
     return _err(503, str(ex), hint="Horizons could not be reached and the SPICE kernels are missing: run python -m skyline.prep.fetch_data")
+
+
+@app.exception_handler(Busy)
+async def _busy(_: Request, ex: Busy):
+    return JSONResponse(status_code=503, content={"detail": str(ex)}, headers={"Retry-After": "30"})
 
 
 @app.exception_handler(ValueError)

@@ -111,3 +111,19 @@ def test_terrain_files_and_page(c):
     assert c.get("/terrain/moon.jpg").headers["content-type"] == "image/jpeg"
     assert c.get("/").json()["docs"] == "/docs"         # API only: the page is served separately
     assert c.get("/sky", params={"site": "mala", "time": T}).json()["vectors_km"]["sun"]
+
+
+@api
+def test_heavy_results_are_reused(c):
+    body = {"location": {"site": "mala"}, "landing_time": T}
+    import time as _t
+    t0 = _t.time(); a = c.post("/design", json=body).json(); first = _t.time() - t0
+    t0 = _t.time(); b = c.post("/design", json=body).json(); second = _t.time() - t0
+    assert a["frontier"] == b["frontier"] and second < max(0.2, first / 3)
+
+
+def test_readonly_blocks_lander_changes(c, monkeypatch):
+    from skyline.api import routes
+    monkeypatch.setattr(routes, "READONLY", True)
+    assert c.post("/landers", json={"base": "reference", "id": "ro-test", "name": "x"}).status_code == 403
+    assert c.delete("/landers/anything").status_code == 403

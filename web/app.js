@@ -4,7 +4,7 @@
 (async function () {
   const $ = id => document.getElementById(id);
   const DAY = 86400e3, HOUR = 3600e3, D2R = Math.PI / 180, R2D = 180 / Math.PI, RM = 1737.4;
-  const SYNODIC = 29.530589, TAB_DAYS = 428, VIEWS = ['plan', 'explore', 'compare', 'learn', 'method'];
+  const SYNODIC = 29.530589, VIEWS = ['plan', 'explore', 'compare', 'learn', 'method'];
   // Where the Lunar Skyline API runs: ?api=... in the address wins, then web/config.js, then the page's own server.
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const API = (new URLSearchParams(location.search).get('api') || window.LUNAR_SKYLINE_API || '').replace(/\/$/, '');
@@ -108,16 +108,18 @@
   }
   function waiting(cv, text) { if (!shown(cv)) return; const { g, w, h } = prep(cv); g.fillStyle = C.muted; g.font = FONT(13); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text || 'Loading…', w / 2, Math.min(h / 2, 40)); }
 
-  // ---------- the loaded window: hourly data for TAB_DAYS from calAnchor ----------
-  const TAB = { t0: 0, n: TAB_DAYS * 24 };
+  // ---------- the loaded window: hourly data from calAnchor, long enough for the chosen span plus a lunar day ----------
+  // 120 days normally (about 1 MB less per site than a full year), 400 days when the one-year span is on screen.
+  const TAB = { t0: 0, n: 120 * 24, days: 120 };
   function ensureTab() {
-    if (S.anchor < S.calAnchor || S.anchor + (S.span + Math.max(45, S.cfg.days + 2)) * DAY > S.calAnchor + TAB_DAYS * DAY) S.calAnchor = S.anchor;
-    TAB.t0 = S.calAnchor;
+    const days = S.span >= 365 ? 400 : 120;
+    if (S.anchor < S.calAnchor || S.anchor + (S.span + Math.max(45, S.cfg.days + 2)) * DAY > S.calAnchor + days * DAY) S.calAnchor = S.anchor;
+    TAB.t0 = S.calAnchor; TAB.days = days; TAB.n = days * 24;
   }
   const idx = t => Math.round((t - TAB.t0) / HOUR);
   // Hourly Sun and Earth series plus the skyline for one site (server: /series)
   function ser(site) {
-    const key = 'ser|' + siteKey(site) + '|' + S.eye + '|' + TAB.t0;
+    const key = 'ser|' + siteKey(site) + '|' + S.eye + '|' + TAB.t0 + '|' + TAB.n;
     return need(key, async () => {
       const j = await getJSON('/series?' + qs({ ...loc(site), start: iso(TAB.t0), hours: TAB.n - 1, array_height_m: S.eye, antenna_height_m: S.eye }));
       const o = { n: j.n }; for (const k in j.series) o[k] = Float32Array.from(j.series[k]);
@@ -127,7 +129,7 @@
   }
   // Hourly Sun and Earth vectors, Moon-fixed (server: /ephemeris), for the globe, the shadow map and sub-points
   function eph() {
-    return need('eph|' + TAB.t0, async () => {
+    return need('eph|' + TAB.t0 + '|' + TAB.n, async () => {
       const j = await getJSON('/ephemeris?' + qs({ start: iso(TAB.t0), hours: TAB.n - 1 }));
       return { n: j.n, sun: Float64Array.from(j.sun_km.flat()), earth: Float64Array.from(j.earth_km.flat()) };
     });
@@ -705,7 +707,9 @@
   const TER = {
     polar: null, rings: null,
     ready: () => !!TER.polar,
-    loadPolar: async () => { const r = await api('/terrain/polar400'), n = +r.headers.get('X-Size'), buf = await r.arrayBuffer(); TER.polar = { n, km: 0.4, half: n * 0.2, a: new Int16Array(buf) }; },
+    // both terrain files arrive row-delta coded: each value is the change from the previous one in its row
+    undelta: (a, n) => { for (let r = 0; r < n; r++) { let acc = 0; for (let c = 0, i = r * n; c < n; c++, i++) { acc = (acc + a[i]) << 16 >> 16; a[i] = acc; } } return a; },
+    loadPolar: async () => { const r = await api('/terrain/polar400'), n = +r.headers.get('X-Size'), buf = await r.arrayBuffer(); TER.polar = { n, km: 0.4, half: n * 0.2, a: TER.undelta(new Int16Array(buf), n) }; },
     ringsFor(site) {
       if (site.lat > -79.9) return null;
       const key = 'rings|' + site.lat.toFixed(5) + ',' + site.lon.toFixed(5);
@@ -714,7 +718,7 @@
         let o = 0; const count = dv.getUint32(o, true); o += 4; const rings = [];
         for (let k = 0; k < count; k++) {
           const n = dv.getUint32(o, true), cell = dv.getFloat32(o + 4, true) / 1000, x0 = dv.getFloat64(o + 8, true) / 1000, y0 = dv.getFloat64(o + 16, true) / 1000, base = dv.getFloat32(o + 24, true), sc = dv.getFloat32(o + 28, true);
-          o += 32; const q = new Int16Array(buf.slice(o, o + n * n * 2)), a = new Float32Array(n * n); o += n * n * 2;
+          o += 32; const q = TER.undelta(new Int16Array(buf.slice(o, o + n * n * 2)), n), a = new Float32Array(n * n); o += n * n * 2;
           for (let i = 0; i < a.length; i++) a[i] = base + q[i] * sc;
           rings.push({ n, km: cell, x: x0, y: y0, a, half: (n - 1) / 2 * cell, cx: x0 + (n - 1) / 2 * cell, cy: y0 - (n - 1) / 2 * cell });
         }

@@ -22,6 +22,44 @@ from ..prep.store import default_store
 from .schemas import CalendarRequest, DesignRequest, MissionRequest, ReportRequest, RescueRequest
 
 router = APIRouter()
+
+# ---------------------------------------------------------------- protection for a public deployment
+# SKYLINE_READONLY=1 turns off saving and deleting landers. Heavy jobs (landing risk, design lab, rescue, calendar) run
+# at most SKYLINE_HEAVY_JOBS at a time (default 2); their results are kept (the inputs fully determine them), so the
+# same question asked again is answered at once.
+import collections
+import os
+
+READONLY = os.environ.get("SKYLINE_READONLY", "").lower() in ("1", "true", "yes")
+_heavy_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("SKYLINE_HEAVY_JOBS", "2"))))
+_results: "collections.OrderedDict[str, dict]" = collections.OrderedDict()
+_rlock = threading.Lock()
+
+
+class Busy(RuntimeError):
+    pass
+
+
+def heavy(key: str, fn):
+    with _rlock:
+        if key in _results:
+            _results.move_to_end(key)
+            return _results[key]
+    if not _heavy_slots.acquire(timeout=45):
+        raise Busy("the server is busy with other simulations; try again in a minute")
+    try:
+        r = fn()
+    finally:
+        _heavy_slots.release()
+    with _rlock:
+        _results[key] = r
+        while len(_results) > 128:
+            _results.popitem(last=False)
+    return r
+
+
+def _key(name: str, *parts) -> str:
+    return name + "|" + json.dumps(parts, sort_keys=True, default=str)
 _engine: Engine | None = None
 _elock = threading.Lock()
 
@@ -151,6 +189,8 @@ def landers_get(lid: str):
 @router.post("/landers", tags=["landers"], status_code=201)
 def landers_post(body: dict = Body(..., examples=[{"base": "reference", "id": "big-battery", "name": "Reference, 5 kWh",
                                                     "power": {"battery": {"capacity_wh": 5000}}}])):
+    if READONLY:
+        return JSONResponse(status_code=403, content={"detail": "this server is read-only: saving landers is turned off"})
     body = dict(body)
     if "base" in body:
         if not body.get("id"):
@@ -172,6 +212,8 @@ def landers_post(body: dict = Body(..., examples=[{"base": "reference", "id": "b
 
 @router.delete("/landers/{lid}", tags=["landers"], status_code=204)
 def landers_delete(lid: str):
+    if READONLY:
+        return JSONResponse(status_code=403, content={"detail": "this server is read-only: deleting landers is turned off"})
     if LD.is_preset(lid):
         return JSONResponse(status_code=409, content={"detail": "presets cannot be deleted"})
     if not default_store().delete_lander(lid):
@@ -246,7 +288,8 @@ def mission_get(site: Optional[str] = None, lat: Optional[float] = None, lon: Op
     spec = M.MissionSpec(duration_days=duration_days, needs_earth=needs_earth, max_gap_h=max_gap_h, autonomy_h=autonomy_h,
                          terrain_margin_deg=terrain_margin_deg, fault=M.Fault(kind=fault_kind, day=fault_day))
     unc = MC.Uncertainty(seed=seed)
-    r = engine().mission(loc, t, ld, spec, dem, risk=risk, unc=unc, trace=trace)
+    run = lambda: engine().mission(loc, t, ld, spec, dem, risk=risk, unc=unc, trace=trace)
+    r = heavy(_key("mission", loc.as_dict(), t, ld, spec.model_dump(), dem, unc.model_dump(), trace), run) if risk else run()
     extra = {"seed": seed} if risk else {}
     return {**_clean(r), "meta": meta(r["_meta"], ld, _defaults(landing_time=landing_time, lander=lander), **extra)}
 
@@ -256,7 +299,8 @@ def mission_post(req: MissionRequest):
     loc = _loc(req.location.site, req.location.lat, req.location.lon)
     t = parse_time(req.landing_time)
     ld = LD.resolve(req.lander)
-    r = engine().mission(loc, t, ld, req.mission, req.dem, risk=req.risk, unc=req.uncertainty, trace="trace" in req.include)
+    run = lambda: engine().mission(loc, t, ld, req.mission, req.dem, risk=req.risk, unc=req.uncertainty, trace="trace" in req.include)
+    r = heavy(_key("mission", loc.as_dict(), t, ld, req.mission.model_dump(), req.dem, req.uncertainty.model_dump(), "trace" in req.include), run) if req.risk else run()
     extra = {"seed": req.uncertainty.seed} if req.risk else {}
     return {**_clean(r), "meta": meta(r["_meta"], ld, _defaults(landing_time=req.landing_time, lander=req.lander), **extra)}
 
@@ -339,15 +383,18 @@ def design(req: DesignRequest):
     loc = _loc(req.location.site, req.location.lat, req.location.lon)
     t = parse_time(req.landing_time)
     ld = LD.resolve(req.lander)
-    r = engine().design(loc, t, ld, req.mission, req.dem, (req.array_w_per_kg, req.battery_wh_per_kg),
-                        parse_time(req.atlas_start) if req.atlas_start else None)
+    a0 = parse_time(req.atlas_start) if req.atlas_start else None
+    r = heavy(_key("design", loc.as_dict(), t, ld, req.mission.model_dump(), req.dem, req.array_w_per_kg, req.battery_wh_per_kg, a0),
+              lambda: engine().design(loc, t, ld, req.mission, req.dem, (req.array_w_per_kg, req.battery_wh_per_kg), a0))
     return {**_clean(r), "meta": meta(r["_meta"], ld)}
 
 
 @router.post("/calendar", tags=["mission"], summary="Verdict for a landing on each day, for up to 8 sites")
 def calendar(req: CalendarRequest):
     ld = LD.resolve(req.lander)
-    r = engine().calendar(_locs(req.locations), parse_time(req.start), ld, req.mission, req.dem, req.days)
+    locs, t0 = _locs(req.locations), parse_time(req.start)
+    r = heavy(_key("calendar", [l.as_dict() for l in locs], t0 // 86400, ld, req.mission.model_dump(), req.dem, req.days),
+              lambda: engine().calendar(locs, t0, ld, req.mission, req.dem, req.days))
     return {**_clean(r), "meta": meta(r["_meta"], ld)}
 
 
@@ -361,7 +408,9 @@ def rescue(req: RescueRequest):
     else:
         locs = _locs(req.sites)
     ld = LD.resolve(req.lander)
-    r = engine().rescue(plan, parse_time(req.plan_time), locs, ld, req.mission, req.slip_days, req.flex_days, req.dem)
+    tp = parse_time(req.plan_time)
+    r = heavy(_key("rescue", plan.as_dict(), tp, [l.as_dict() for l in locs], ld, req.mission.model_dump(), req.slip_days, req.flex_days, req.dem),
+              lambda: engine().rescue(plan, tp, locs, ld, req.mission, req.slip_days, req.flex_days, req.dem))
     return {**_clean(r), "meta": meta(r["_meta"], ld)}
 
 
@@ -385,17 +434,19 @@ def terrain_rings(lat: float = Query(..., ge=-90, le=-79), lon: float = Query(..
              "X-Tier": engine().sky.terrain.best_tier(lat, lon), "Access-Control-Expose-Headers": "X-Tier"})
 
 
-@router.get("/terrain/polar400", tags=["terrain"], summary="The 80 m DEM averaged to 400 m, 80S to the pole (int16 metres, row-major)")
+@router.get("/terrain/polar400", tags=["terrain"], summary="The 80 m DEM averaged to 400 m, 80S to the pole (int16 metres, row-major, each row delta-coded)")
 def terrain_polar400():
     from fastapi.responses import Response as R
     p = config.DERIVED_DIR / "polar400.npy"
     if not p.exists():
         return JSONResponse(status_code=503, content={"detail": "run python run.py (precompute) first"})
     import numpy as np
-    a = np.load(p)
-    return R(content=a.astype("<i2").tobytes(), media_type="application/octet-stream",
-             headers={"X-Size": str(a.shape[0]), "X-Cell-Km": "0.4", "X-Half-Km": str(a.shape[0] * 0.2),
-                      "Cache-Control": "public, max-age=86400", "Access-Control-Expose-Headers": "X-Size, X-Cell-Km, X-Half-Km"})
+    a = np.load(p).astype(np.int16)
+    d = a.copy()
+    d[:, 1:] = a[:, 1:] - a[:, :-1]          # row deltas (wrapping int16): compresses about 3x better than raw heights
+    return R(content=d.astype("<i2").tobytes(), media_type="application/octet-stream",
+             headers={"X-Size": str(a.shape[0]), "X-Cell-Km": "0.4", "X-Half-Km": str(a.shape[0] * 0.2), "X-Encoding": "row-delta",
+                      "Cache-Control": "public, max-age=86400", "Access-Control-Expose-Headers": "X-Size, X-Cell-Km, X-Half-Km, X-Encoding"})
 
 
 @router.get("/terrain/moon.jpg", tags=["terrain"], summary="Moon mosaic for the globe (equirectangular, 1440 x 720)")

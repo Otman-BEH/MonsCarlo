@@ -11,6 +11,8 @@ primary_region = "lhr"
 
 [env]
   SKYLINE_DATA = "/data"
+  SKYLINE_READONLY = "1"        # public demo: saving and deleting landers is turned off
+  SKYLINE_HEAVY_JOBS = "2"      # at most two simulations at once
 
 [mounts]
   source = "skyline_data"
