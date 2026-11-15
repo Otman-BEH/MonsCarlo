@@ -98,13 +98,32 @@ def test_mission_stress_block(c):
 
 @api
 def test_terrain_files_and_page(c):
-    p = c.get("/terrain/patch", params={"lat": -89.78, "lon": -155.7}).json()
-    assert p["patches"]["a"]["n"] == 150 and len(p["patches"]["a"]["h"]) == 150 * 150
+    import struct
+    r = c.get("/terrain/rings", params={"lat": -89.78, "lon": -155.7})
+    b = r.content
+    assert struct.unpack_from("<I", b, 0)[0] == 3
+    n, cell = struct.unpack_from("<If", b, 4)
+    assert (n, cell) == (300, 10.0) and r.headers["X-Tier"].startswith("LOLA 5 m")
     r = c.get("/terrain/polar400")
     if r.status_code == 200:
         n = int(r.headers["X-Size"])
         assert len(r.content) == n * n * 2
     assert c.get("/terrain/moon.jpg").headers["content-type"] == "image/jpeg"
-    page = c.get("/")
-    assert page.status_code == 200 and "app.js" in page.text
+    assert c.get("/").json()["docs"] == "/docs"         # API only: the page is served separately
     assert c.get("/sky", params={"site": "mala", "time": T}).json()["vectors_km"]["sun"]
+
+
+@api
+def test_heavy_results_are_reused(c):
+    body = {"location": {"site": "mala"}, "landing_time": T}
+    import time as _t
+    t0 = _t.time(); a = c.post("/design", json=body).json(); first = _t.time() - t0
+    t0 = _t.time(); b = c.post("/design", json=body).json(); second = _t.time() - t0
+    assert a["frontier"] == b["frontier"] and second < max(0.2, first / 3)
+
+
+def test_readonly_blocks_lander_changes(c, monkeypatch):
+    from skyline.api import routes
+    monkeypatch.setattr(routes, "READONLY", True)
+    assert c.post("/landers", json={"base": "reference", "id": "ro-test", "name": "x"}).status_code == 403
+    assert c.delete("/landers/anything").status_code == 403

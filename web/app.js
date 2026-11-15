@@ -1,40 +1,20 @@
 /* Lunar Skyline web page. Every number comes from the Lunar Skyline server (backend/, FastAPI): positions, skylines,
    series, verdicts, design lab, rescue, calendar, landing risk. This file only fetches, interpolates between hourly
    values for smooth playback, and draws. The server's API is documented at /docs. */
+import { DAY, HOUR, D2R, R2D, RM, SYNODIC, discFrac, subPoint, maskAt, lerpAz, wrap180 } from './js/geo.js';
+import { MON, p2, fmtDate, fmtDM, fmtDT, fmtDur, fmtH, fmtWh, sg, fmtLat, fmtLon, compass, STN, STL, cap1 } from './js/format.js';
+import { createServer } from './js/api.js';
+import { createTerrain } from './js/terrain.js';
+
 (async function () {
   const $ = id => document.getElementById(id);
-  const DAY = 86400e3, HOUR = 3600e3, D2R = Math.PI / 180, R2D = 180 / Math.PI, RM = 1737.4;
-  const SYNODIC = 29.530589, TAB_DAYS = 428, VIEWS = ['plan', 'explore', 'compare', 'learn'];
-  const API = (new URLSearchParams(location.search).get('api') || '').replace(/\/$/, '');
-
-  // ---------- talking to the server ----------
-  async function api(path, body) {
-    const r = await fetch(API + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined);
-    if (!r.ok) { let d = null; try { d = (await r.json()).detail; } catch (_) {} throw new Error(typeof d === 'string' ? d : 'the server answered ' + r.status); }
-    return r;
-  }
-  const getJSON = async (path, body) => (await api(path, body)).json();
-  const qs = o => Object.entries(o).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');
-  const iso = ms => new Date(ms).toISOString().slice(0, 19) + 'Z';
-  // One cache for everything fetched: a value appears when its request returns, then the page redraws.
-  const cache = new Map();
-  let lastErr = null;
-  function need(key, fn) {
-    let e = cache.get(key);
-    if (!e) {
-      if (cache.size > 400) cache.clear();
-      e = { v: undefined, err: null }; cache.set(key, e);
-      fn().then(v => { e.v = v; renderSoon(); }, err => { e.err = err; lastErr = err; console.error(err); renderSoon(); });
-    }
-    return e.v;
-  }
-  const failed = key => { const e = cache.get(key); return e && e.err ? e.err.message : null; };
-
-  // ---------- small geometry used for drawing ----------
-  function discFrac(el, r, hz) { const d = (el - hz) / r; if (d >= 1) return 1; if (d <= -1) return 0; return 1 - (Math.acos(d) - d * Math.sqrt(1 - d * d)) / Math.PI; }
-  function subPoint(v) { const d = Math.hypot(v[0], v[1], v[2]); return { lat: Math.asin(v[2] / d) * R2D, lon: Math.atan2(v[1], v[0]) * R2D }; }
-  function maskAt(mask, az) { const n = mask.length, x = (((az % 360) + 360) % 360) * n / 360; const i = Math.floor(x) % n, f = x - Math.floor(x); return mask[i] * (1 - f) + mask[(i + 1) % n] * f; }
-  const lerpAz = (a, b, f) => { let d = b - a; if (d > 180) d -= 360; if (d < -180) d += 360; return ((a + d * f) % 360 + 360) % 360; };
+  const VIEWS = ['plan', 'explore', 'compare', 'learn', 'method'];
+  // Where the Lunar Skyline API runs: ?api=... in the address wins, then web/config.js, then the page's own server.
+  const DEBUG = new URLSearchParams(location.search).has('debug');
+  if (DEBUG) { window.__dbg = []; const cl = console.log.bind(console); console.log = (...a) => { window.__dbg.push(a.join(' ')); cl(...a); }; }
+  const API = (new URLSearchParams(location.search).get('api') || window.LUNAR_SKYLINE_API || '').replace(/\/$/, '');
+  const srv = createServer({ base: API, onData: () => renderSoon(), isBusy: () => S.playing || S.scrubbing });
+  const { api, getJSON, qs, iso, cache, need, failed, latest } = srv;
 
   // ---------- sites (from the server) ----------
   let SITES = [];
@@ -49,35 +29,14 @@
               cmp: ['mala', 'ridge'], mapTab: 'pole', layer: 'sun', playing: false, plan: null, slip: 14, flex: 21, scope: 'pole', acc: 500, tjit: 6, sig: { power: 5, load: 5, cap: 3, terrain: 0.15, slope: 12, corr: false, seed: 20261114 },
               cfg: { days: 10, peakW: 400, loadSun: 180, loadDark: 60, capWh: 2000, minSoc: 0.2, tracking: true, needEarth: true, maxGapH: 12, margin: 0.3, chargeEff: 0.9, fault: { kind: 'none', day: 3 }, safe: false, autonomyH: 6 } };
 
-  // ---------- formatting ----------
-  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const p2 = n => String(n).padStart(2, '0');
-  function fmtDate(ms) { const d = new Date(ms); return d.getUTCDate() + ' ' + MON[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); }
-  function fmtDM(ms) { const d = new Date(ms); return d.getUTCDate() + ' ' + MON[d.getUTCMonth()]; }
-  function fmtDT(ms) { const d = new Date(ms); return fmtDate(ms) + ' ' + p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()) + ' UTC'; }
-  function fmtDur(ms) {
-    const h = ms / HOUR;
-    if (h < 1) return Math.max(1, Math.round(ms / 60000)) + ' min';
-    if (h < 48) return Math.floor(h) + ' h ' + p2(Math.round((h - Math.floor(h)) * 60) % 60) + ' min';
-    const d = Math.floor(h / 24); return d + ' d ' + Math.round(h - d * 24) + ' h';
-  }
-  const fmtH = h => h >= 48 ? (h / 24).toFixed(1) + ' d' : Math.round(h) + ' h';
-  const fmtWh = w => w === null || !isFinite(w) ? 'No size is enough' : w >= 1000 ? (w / 1000).toFixed(w >= 10000 ? 0 : 1) + ' kWh' : Math.round(w) + ' Wh';
-  const sg = (v, n) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(n) + '°';
-  const fmtLat = v => Math.abs(v).toFixed(2) + '°' + (v < 0 ? 'S' : 'N');
-  const fmtLon = v => { let l = ((v + 180) % 360 + 360) % 360 - 180; return Math.abs(l).toFixed(2) + '°' + (l < 0 ? 'W' : 'E'); };
-  const compass = az => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(az / 45) % 8];
-  const STN = ['Fails', 'Marginal', 'Passes'], STL = ['Does not meet the needs', 'Marginal: sensitive to terrain', 'Meets the needs'];
-  const cap1 = s => s.charAt(0).toUpperCase() + s.slice(1);
-
   // ---------- theme and canvas ----------
   let C = {};
   function readTheme() {
     const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
     C = { ink: v('--ink'), muted: v('--muted'), line: v('--line'), sun: v('--sun'), earth: v('--earth'), go: v('--go'), warn: v('--warn'), bad: v('--bad'), cell: v('--cell'), panel: v('--panel'), bg: v('--bg') };
   }
-  const FONT = (px, w) => (w || 500) + ' ' + px + 'px Barlow, "Helvetica Neue", Arial, sans-serif';
-  const FONTC = (px, w) => (w || 600) + ' ' + px + 'px "Barlow Condensed", "Arial Narrow", Arial, sans-serif';
+  const FONT = (px, w) => (w || 500) + ' ' + px + 'px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+  const FONTC = (px, w) => (w || 600) + ' ' + Math.round(px * 0.92) + 'px "Space Grotesk", Inter, system-ui, sans-serif';
   const shown = el => el.offsetParent !== null;
   function prep(cv) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2), w = cv.clientWidth, h = cv.clientHeight;
@@ -87,16 +46,18 @@
   }
   function waiting(cv, text) { if (!shown(cv)) return; const { g, w, h } = prep(cv); g.fillStyle = C.muted; g.font = FONT(13); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text || 'Loading…', w / 2, Math.min(h / 2, 40)); }
 
-  // ---------- the loaded window: hourly data for TAB_DAYS from calAnchor ----------
-  const TAB = { t0: 0, n: TAB_DAYS * 24 };
+  // ---------- the loaded window: hourly data from calAnchor, long enough for the chosen span plus a lunar day ----------
+  // 120 days normally (about 1 MB less per site than a full year), 400 days when the one-year span is on screen.
+  const TAB = { t0: 0, n: 120 * 24, days: 120 };
   function ensureTab() {
-    if (S.anchor < S.calAnchor || S.anchor + (S.span + Math.max(45, S.cfg.days + 2)) * DAY > S.calAnchor + TAB_DAYS * DAY) S.calAnchor = S.anchor;
-    TAB.t0 = S.calAnchor;
+    const days = S.span >= 365 ? 400 : 120;
+    if (S.anchor < S.calAnchor || S.anchor + (S.span + Math.max(45, S.cfg.days + 2)) * DAY > S.calAnchor + days * DAY) S.calAnchor = S.anchor;
+    TAB.t0 = S.calAnchor; TAB.days = days; TAB.n = days * 24;
   }
   const idx = t => Math.round((t - TAB.t0) / HOUR);
   // Hourly Sun and Earth series plus the skyline for one site (server: /series)
   function ser(site) {
-    const key = 'ser|' + siteKey(site) + '|' + S.eye + '|' + TAB.t0;
+    const key = 'ser|' + siteKey(site) + '|' + S.eye + '|' + TAB.t0 + '|' + TAB.n;
     return need(key, async () => {
       const j = await getJSON('/series?' + qs({ ...loc(site), start: iso(TAB.t0), hours: TAB.n - 1, array_height_m: S.eye, antenna_height_m: S.eye }));
       const o = { n: j.n }; for (const k in j.series) o[k] = Float32Array.from(j.series[k]);
@@ -106,7 +67,7 @@
   }
   // Hourly Sun and Earth vectors, Moon-fixed (server: /ephemeris), for the globe, the shadow map and sub-points
   function eph() {
-    return need('eph|' + TAB.t0, async () => {
+    return need('eph|' + TAB.t0 + '|' + TAB.n, async () => {
       const j = await getJSON('/ephemeris?' + qs({ start: iso(TAB.t0), hours: TAB.n - 1 }));
       return { n: j.n, sun: Float64Array.from(j.sun_km.flat()), earth: Float64Array.from(j.earth_km.flat()) };
     });
@@ -129,7 +90,7 @@
   function skyExact() {
     const key = 'sky|' + siteKey(S.site) + '|' + S.eye + '|' + S.t, e = cache.get(key);
     if (e && e.v) return e.v;
-    if (!S.playing && skyWant !== key) { skyWant = key; clearTimeout(skyTimer); skyTimer = setTimeout(() => need(key, () => getJSON('/sky?' + qs({ ...loc(S.site), time: iso(S.t), array_height_m: S.eye, antenna_height_m: S.eye }))), 120); }
+    if (!S.playing && !S.scrubbing && skyWant !== key) { skyWant = key; clearTimeout(skyTimer); skyTimer = setTimeout(() => need(key, () => getJSON('/sky?' + qs({ ...loc(S.site), time: iso(S.t), array_height_m: S.eye, antenna_height_m: S.eye }))), 120); }
     return null;
   }
   const evOf = ev => ev && ev.time ? { t: Date.parse(ev.time) } : null;
@@ -154,10 +115,10 @@
     faultK: x.fault_starts_at_h === null ? -1 : x.fault_starts_at_h };
   function missionNow() {
     const body = { location: loc(S.site), landing_time: iso(landingTime()), lander: lander(), mission: missionSpec(), include: ['trace'] }, key = 'mis|' + JSON.stringify(body);
-    const r = need(key, () => getJSON('/mission', body)); if (!r) return { pending: true, err: failed(key) };
+    const q = latest('mission', key, sig => getJSON('/mission', body, sig)), r = q.v; if (!r) return { pending: true, err: q.err };
     const nom = sumOf(r.nominal), rob = sumOf(r.with_terrain_margin), st = { meets: 2, marginal: 1, fails: 0 }[r.verdict];
     nom.soc = r.trace.state_of_charge; nom.sun = r.trace.sun_share; nom.link = r.trace.earth_link; nom.safeArr = r.trace.safe_mode; rob.soc = r.trace.state_of_charge_with_margin;
-    return { nom, rob, st, t: Date.parse(r.landing_time), stress: r.stress || null, reasons: r.reasons };
+    return { nom, rob, st, t: Date.parse(r.landing_time), stress: r.stress || null, reasons: r.reasons, stale: !q.fresh, err: q.err };
   }
 
   // ---------- plan: mission verdict and survival timeline ----------
@@ -165,7 +126,7 @@
     const mv = missionNow(), cfg = S.cfg;
     if (mv.pending) { S.mv = null; $('mv-pill').innerHTML = '<span class="pill big off">' + (mv.err ? 'Server error' : 'Simulating…') + '</span>'; $('mv-say').textContent = mv.err || ''; waiting($('surv'), mv.err ? ' ' : 'Simulating the mission…'); return; }
     S.mv = mv; const { nom, rob, st } = mv;
-    $('mv-pill').innerHTML = '<span class="pill big ' + ['bad', 'warn', 'go'][st] + '">' + STL[st] + '</span>';
+    $('mv-pill').innerHTML = mv.stale ? '<span class="pill big off">' + (mv.err ? 'Server error' : 'Updating…') + '</span>' : '<span class="pill big ' + ['bad', 'warn', 'go'][st] + '">' + STL[st] + '</span>';
     const where = short(S.site) + ', landing ' + fmtDT(mv.t) + ', ' + cfg.days + '-day mission: ';
     $('mv-say').textContent = where + (st === 2 ? 'power and Earth contact hold for the whole mission, even with every horizon raised by ' + cfg.margin + '°.'
       : st === 1 ? 'it works on the modelled terrain, but with horizons raised by ' + cfg.margin + '° ' + rob.fails.join(' and ') + '.'
@@ -218,18 +179,19 @@
   function labNow() {
     const body = { location: loc(S.site), landing_time: iso(landingTime()), lander: lander(), mission: missionSpec(), array_w_per_kg: LAB.wkg, battery_wh_per_kg: LAB.whkg,
                    atlas_start: iso(Math.max(TAB.t0, floorDay(S.t) - 5 * DAY)) }, key = 'lab|' + JSON.stringify(body);
-    return { r: need(key, () => getJSON('/design', body)), err: failed(key) };
+    const q = latest('design', key, sig => getJSON('/design', body, sig)); return { r: q.v, err: q.err, stale: !q.fresh };
   }
   function drawLab() {
     const cv = $('dfront'); if (!shown(cv)) return;
     const q = labNow(), R = q.r, cfg = S.cfg;
-    if (!R || !S.mv) { $('d-pill').innerHTML = '<span class="pill big off">' + (q.err ? 'Server error' : 'Searching designs…') + '</span>'; waiting(cv, q.err || 'Searching array and battery sizes…'); waiting($('dab'), ' '); waiting($('datlas'), ' '); return; }
+    if (!R || !S.mv || S.mv.pending) { $('d-pill').innerHTML = '<span class="pill big off">' + (q.err ? 'Server error' : 'Searching designs…') + '</span>'; waiting(cv, q.err || 'Searching array and battery sizes…'); waiting($('dab'), ' '); waiting($('datlas'), ' '); return; }
     LAB.res = R; LAB.F = R.frontier; const F = R.frontier, b = F.best, st = S.mv.st, mc = labMass(cfg.peakW, cfg.capWh);
+    if (q.stale || S.mv.stale) { $('d-pill').innerHTML = '<span class="pill big off">' + (q.err ? 'Server error' : 'Updating…') + '</span>'; }
     $('d-apply').hidden = !b;
     if (b) { $('d-best').textContent = fmtW(b.peakW) + ' + ' + fmtCap(b.capWh); $('d-best-s').textContent = 'About ' + fmtKg(b.mass) + ' of array and battery. A screening figure from the W per kg and Wh per kg above.'; }
     else { $('d-best').textContent = 'None'; $('d-best-s').textContent = 'No array and battery pass at this landing time, because ' + (R.why_none || 'the needs cannot be met') + '. Try another time in the atlas below.'; }
     $('d-cur').textContent = STN[st]; $('d-cur-s').textContent = fmtW(cfg.peakW) + ' + ' + fmtCap(cfg.capWh) + ', about ' + fmtKg(mc) + (b ? (st === 2 ? (mc - b.mass > 0.05 ? ' · ' + fmtKg(mc - b.mass) + ' more than the lightest' : ' · as light as it gets') : ' · the lightest passing design is ' + fmtKg(b.mass)) : '');
-    $('d-pill').innerHTML = !b ? '<span class="pill big bad">No hardware works at this time</span>' : st === 2 ? '<span class="pill big go">' + ((mc - b.mass) / b.mass < 0.15 ? 'Lean design' : 'Passes, with mass to spare') + '</span>' : '<span class="pill big ' + (st === 1 ? 'warn">Marginal: needs more hardware' : 'bad">Fails: needs more hardware') + '</span>';
+    if (!(q.stale || S.mv.stale)) $('d-pill').innerHTML = !b ? '<span class="pill big bad">No hardware works at this time</span>' : st === 2 ? '<span class="pill big go">' + ((mc - b.mass) / b.mass < 0.15 ? 'Lean design' : 'Passes, with mass to spare') + '</span>' : '<span class="pill big ' + (st === 1 ? 'warn">Marginal: needs more hardware' : 'bad">Fails: needs more hardware') + '</span>';
     const alts = [];
     if (b) {
       const pa = R.min_array_at_your_battery_w, cb = R.min_battery_at_your_array_wh;
@@ -300,9 +262,9 @@
   let riskLast = null, riskMemo = { key: null, r: null };
   function riskNow() {
     if (!riskOk()) return null;
-    const key = riskKey(), j = need(key, () => getJSON('/mission', riskBody()));
+    const key = riskKey(), body = riskBody(), q = latest('risk', key, sig => getJSON('/mission', body, sig), 600), j = q.fresh ? q.v : null;
     if (j && riskMemo.key === key) return riskMemo.r;
-    if (!j) return riskLast && riskLast.site === siteKey(S.site) ? Object.assign({}, riskLast, { stale: true, err: failed(key) }) : { pending: true, err: failed(key) };
+    if (!j) return riskLast && riskLast.site === siteKey(S.site) ? Object.assign({}, riskLast, { stale: true, err: q.err }) : { pending: true, err: q.err };
     const k = j.risk, gd = k.grid, n = gd.n, sp = gd.spacing_m / 1000, W = gd.half_width_m / 1000, c = (n - 1) / 2;
     const rho0 = 2 * RM * Math.tan((90 + Math.max(-89.999, S.site.lat)) / 2 * D2R);
     let bi = 0, bd = 1e9; gd.lat.forEach((la, q) => { const d = Math.hypot(la - k.best_aim.lat, (gd.lon[q] - k.best_aim.lon) * Math.cos(la * D2R)); if (d < bd) { bd = d; bi = q; } });
@@ -360,7 +322,7 @@
   function rows() { return [S.site].concat(S.cmp.filter(id => id !== S.site.id).map(byId).filter(Boolean)).slice(0, 5); }
   function rescueNow() {
     const body = { plan: loc(S.plan.site), plan_time: iso(S.plan.t), sites: S.scope === 'cmp' ? rows().map(loc) : S.scope, slip_days: S.slip, flex_days: S.flex, lander: lander(), mission: missionSpec() };
-    const key = 'res|' + JSON.stringify(body); return { r: need(key, () => getJSON('/rescue', body)), err: failed(key) };
+    const key = 'res|' + JSON.stringify(body), q = latest('rescue', key, sig => getJSON('/rescue', body, sig)); return { r: q.v, err: q.err, stale: !q.fresh };
   }
   function drawRescue() {
     $('r-slipv').textContent = S.slip + (S.slip === 1 ? ' day' : ' days');
@@ -393,13 +355,22 @@
       : 'The Sun is ' + Math.abs(c.sunClr).toFixed(2) + '° below the terrain horizon' + (c.sunFrac > 0 ? ', with ' + Math.round(c.sunFrac * 100) + '% of its disc still showing.' : '.');
     const earthTxt = link ? 'Earth is ' + Math.abs(c.earthClr).toFixed(2) + '° clear of the terrain.' : (c.earthEl < -c.earthRad ? 'Earth is below the horizon.' : 'Earth is hidden behind terrain.');
     $('say').textContent = sunTxt + ' ' + earthTxt;
-    $('t-sun').textContent = sg(c.sunClr, 2); $('t-sun-s').textContent = 'Elevation ' + sg(c.sunEl, 2) + ' · bearing ' + c.sunAz.toFixed(0) + '° ' + compass(c.sunAz);
-    $('t-earth').textContent = sg(c.earthClr, 2); $('t-earth-s').textContent = 'Elevation ' + sg(c.earthEl, 2) + ' · bearing ' + c.earthAz.toFixed(0) + '° ' + compass(c.earthAz);
+    $('t-sun').previousElementSibling.textContent = c.sunClr >= 0 ? 'Sun above terrain' : 'Sun below terrain';
+    $('t-earth').previousElementSibling.textContent = c.earthClr >= 0 ? 'Earth above terrain' : 'Earth below terrain';
+    $('t-sun').textContent = Math.abs(c.sunClr).toFixed(2) + '°'; $('t-sun-s').textContent = 'Elevation ' + sg(c.sunEl, 2) + ' · bearing ' + c.sunAz.toFixed(0) + '° ' + compass(c.sunAz);
+    $('t-earth').textContent = Math.abs(c.earthClr).toFixed(2) + '°'; $('t-earth-s').textContent = 'Elevation ' + sg(c.earthEl, 2) + ' · bearing ' + c.earthAz.toFixed(0) + '° ' + compass(c.earthAz);
     $('t-sset-k').textContent = lit ? 'Sunset in' : 'Sunrise in';
     $('t-sset').textContent = !S.ev ? '…' : se ? fmtDur(se.t - S.t) : '> ' + look + ' d'; $('t-sset-s').textContent = !S.ev ? '' : se ? fmtDT(se.t) : (lit ? 'No sunset in the next ' + look + ' days' : 'No sunrise in the next ' + look + ' days');
     $('t-eset-k').textContent = link ? 'Earthset in' : 'Earthrise in';
     $('t-eset').textContent = !S.ev ? '…' : ee ? fmtDur(ee.t - S.t) : (link ? 'Never sets' : 'Never rises'); $('t-eset-s').textContent = !S.ev ? '' : ee ? fmtDT(ee.t) : 'Within the next ' + look + ' days';
     const flat = c.sunFrac * Math.max(0, Math.sin(c.sunEl * D2R)), w = S.cfg.peakW * c.irr * (S.cfg.tracking ? c.sunFrac : flat);
+    const gP = $('g-power').parentElement, gL = $('g-link').parentElement;
+    $('g-power').textContent = Math.round(w) + ' W'; $('g-power-s').textContent = Math.round(c.sunFrac * 100) + '% of the Sun visible · ' + S.cfg.peakW + ' W ' + (S.cfg.tracking ? 'tracking' : 'flat') + ' array';
+    gP.classList.toggle('ok', w > 1); gP.classList.toggle('no', !(w > 1));
+    const dsnUp = (S.dsn || []).filter(d => d.elevation_deg > 10).map(d => d.name);
+    $('g-link').textContent = link ? (S.dsn && !dsnUp.length ? 'Earth up, no station' : 'Available') : 'Blocked';
+    $('g-link-s').textContent = link ? (S.dsn ? (dsnUp.length ? 'Ground stations in view: ' + dsnUp.join(', ') : 'No Deep Space Network station sees the Moon now') : 'Earth is ' + c.earthClr.toFixed(2) + '° clear of the terrain') : (c.earthEl < -c.earthRad ? 'Earth is below the horizon' : 'Earth is hidden behind terrain');
+    gL.classList.toggle('ok', link && !(S.dsn && !dsnUp.length)); gL.classList.toggle('no', !link);
     $('kv-power').textContent = 'Idealized index: sun-tracking array ' + Math.round(c.sunFrac * 100) + '%, horizontal array ' + Math.round(flat * 100) + '%. Your array would give about ' + Math.round(w) + ' W.';
     $('kv-los').textContent = link ? 'Yes, Earth\'s centre clears the terrain by ' + c.earthClr.toFixed(2) + '°.' : 'No.';
     const dsn = (S.dsn || []).filter(d => d.elevation_deg > 10).sort((a, b) => b.elevation_deg - a.elevation_deg);
@@ -473,8 +444,14 @@
       }
       const mini = w < 520, lab = (kind === 'sun' ? 'Sun ' : 'Earth ') + Math.abs(clr).toFixed(1) + '° ' + (clr > 0 ? 'above' : 'below') + (mini ? '' : ' terrain'); g.font = FONTC(13); const tw = g.measureText(lab).width;
       const lx = x + 11 + tw > w - padR ? x - 11 - tw : x + 11; g.textAlign = 'left'; g.fillStyle = kind === 'sun' ? '#ffd98a' : '#b9d6ff';
-      g.fillText(lab, lx, mini && kind === 'sun' ? Math.min(padT + ph - 8, y + 15) : Math.max(padT + 12, y - 9));
+      let ly = mini && kind === 'sun' ? Math.min(padT + ph - 8, y + 15) : Math.max(padT + 12, y - 9);
+      // keep the two labels apart: if this one would overlap the label drawn first, put it below its body instead
+      const o = labels[0];
+      if (o && lx < o.x + o.w + 6 && lx + tw + 6 > o.x && Math.abs(ly - o.y) < 15) ly = Math.min(padT + ph - 6, Math.max(y + 17, o.y + 16));
+      labels.push({ x: lx, y: ly, w: tw });
+      g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.75)'; g.strokeText(lab, lx, ly); g.fillText(lab, lx, ly);
     }
+    const labels = [];
     const M = a => maskAt(m, a);
     const gr = g.createLinearGradient(0, Y(Math.min(yMax, 6)), 0, padT + ph); gr.addColorStop(0, 'rgba(126,121,113,0.96)'); gr.addColorStop(1, 'rgba(58,56,53,0.96)');
     g.fillStyle = gr; g.beginPath(); g.moveTo(X(0), padT + ph + 2);
@@ -517,9 +494,9 @@
   function scrub(cv, padL, padR, setter) {
     let down = false;
     const at = e => { const r = cv.getBoundingClientRect(), f = Math.max(0, Math.min(1, (e.clientX - r.left - padL) / (r.width - padL - padR))); setter(S.anchor + f * S.span * DAY); };
-    cv.addEventListener('pointerdown', e => { down = true; try { cv.setPointerCapture(e.pointerId); } catch (_) {} at(e); });
+    cv.addEventListener('pointerdown', e => { down = true; S.scrubbing = true; try { cv.setPointerCapture(e.pointerId); } catch (_) {} at(e); });
     cv.addEventListener('pointermove', e => { if (down) at(e); });
-    ['pointerup', 'pointercancel'].forEach(n => cv.addEventListener(n, () => { down = false; }));
+    ['pointerup', 'pointercancel'].forEach(n => cv.addEventListener(n, () => { if (down) { down = false; S.scrubbing = false; renderSoon(); } }));
   }
   // window statistics (server: /windows)
   function statsFor(site, t0, days) {
@@ -613,7 +590,7 @@
   // ---------- compare ----------
   function calNow() {
     const rs = rows(), body = { locations: rs.map(loc), start: iso(S.calAnchor), days: 366, lander: lander(), mission: missionSpec() }, key = 'cal|' + JSON.stringify(body);
-    const j = need(key, () => getJSON('/calendar', body)); if (!j) return null;
+    const q = latest('calendar', key, sig => getJSON('/calendar', body, sig)), j = q.v; if (!j) return null;
     const out = {}; j.sites.forEach((s, k) => { out[siteKey(rs[k])] = s; }); return out;
   }
   function drawCompare() {
@@ -663,40 +640,7 @@
     if (cal && d >= 0 && d < nd) $('calread').textContent = 'Land on ' + fmtDate(S.calAnchor + d * DAY) + ' for ' + S.cfg.days + ' days: ' + rs.map(s => { const c = cal[siteKey(s)]; if (!c) return short(s) + ' …'; const v = c.state[d]; return short(s) + ' ' + (v === 2 ? 'passes' : v === 1 ? 'is marginal' : 'fails, ' + c.cause[d]); }).join(' · ') + '.';
   }
 
-  // ---------- terrain for drawing (server: /terrain/polar400 and /terrain/patch) ----------
-  // The surface view, the shadow map and the risk map's relief are drawn from these height grids.
-  const TER = {
-    polar: null, focus: null,
-    ready: () => !!TER.polar,
-    loadPolar: async () => { const r = await api('/terrain/polar400'), n = +r.headers.get('X-Size'), buf = await r.arrayBuffer(); TER.polar = { n, km: 0.4, half: n * 0.2, a: new Int16Array(buf) }; },
-    patches(site) {
-      if (site.lat > -79.9) return null;
-      const key = 'patch|' + site.lat.toFixed(5) + ',' + site.lon.toFixed(5);
-      return need(key, async () => { const j = await getJSON('/terrain/patch?' + qs({ lat: site.lat, lon: site.lon })), o = {}; for (const k of ['a', 'b']) { const p = j.patches[k]; o[k] = { n: p.n, km: p.cell_km, x: p.x_km, y: p.y_km, a: Float32Array.from(p.h) }; } return o; });
-    },
-    patchAt(q, x, y) {
-      const c = (x - q.x) / q.km, r = (q.y - y) / q.km; if (c < 0 || r < 0 || c > q.n - 1.001 || r > q.n - 1.001) return NaN;
-      const c0 = Math.floor(c), r0 = Math.floor(r), fc = c - c0, fr = r - r0, a = q.a, i = r0 * q.n + c0;
-      return (a[i] * (1 - fc) + a[i + 1] * fc) * (1 - fr) + (a[i + q.n] * (1 - fc) + a[i + q.n + 1] * fc) * fr;
-    },
-    patchSmooth(q, x, y) {
-      const cr = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
-      const c = (x - q.x) / q.km, r = (q.y - y) / q.km, c0 = Math.floor(c), r0 = Math.floor(r);
-      if (c0 < 1 || r0 < 1 || c0 > q.n - 3 || r0 > q.n - 3) return NaN;
-      const fc = c - c0, fr = r - r0, a = q.a, n = q.n; let i = (r0 - 1) * n + c0 - 1;
-      const v0 = cr(a[i], a[i + 1], a[i + 2], a[i + 3], fc); i += n; const v1 = cr(a[i], a[i + 1], a[i + 2], a[i + 3], fc); i += n;
-      const v2 = cr(a[i], a[i + 1], a[i + 2], a[i + 3], fc); i += n; const v3 = cr(a[i], a[i + 1], a[i + 2], a[i + 3], fc);
-      return cr(v0, v1, v2, v3, fr);
-    },
-    polarXY(x, y) {
-      const P = TER.polar; let c = (x + P.half) / P.km - 0.5, r = (P.half - y) / P.km - 0.5;
-      if (c < 0) c = 0; if (r < 0) r = 0; if (c > P.n - 1.001) c = P.n - 1.001; if (r > P.n - 1.001) r = P.n - 1.001;
-      const c0 = Math.floor(c), r0 = Math.floor(r), fc = c - c0, fr = r - r0, a = P.a, i = r0 * P.n + c0;
-      return (a[i] * (1 - fc) + a[i + 1] * fc) * (1 - fr) + (a[i + P.n] * (1 - fc) + a[i + P.n + 1] * fc) * fr;
-    },
-    elevXY(x, y) { const f = TER.focus; if (f) { let v = TER.patchAt(f.a, x, y); if (v === v) return v; v = TER.patchAt(f.b, x, y); if (v === v) return v; } return TER.polarXY(x, y); },
-    elevXYsmooth(x, y) { const f = TER.focus; if (f) { let v = TER.patchSmooth(f.a, x, y); if (v === v) return v; v = TER.patchSmooth(f.b, x, y); if (v === v) return v; } return TER.elevXY(x, y); },
-  };
+  const TER = createTerrain({ api, need, qs });
 
   // ---------- maps ----------
   const PS = 400, CAP = -80, RHO = 2 * RM * Math.tan((90 + CAP) / 2 * D2R), PXKM = 2 * RHO / PS;
@@ -741,60 +685,110 @@
   function sunRaster() { if (polarBuilt && S.now && sunFt !== S.t) { castPolar(S.now.sun, false, 0.266, sunF, sunI); sunFt = S.t; } }
 
   // ---------- explore: first-person surface view ----------
-  const VW = { az: null, fov: 90, off: document.createElement('canvas'), lit: new Float32Array(128 * 128), litKey: '' };
-  const wrap180 = a => ((a + 540) % 360) - 180;
+  const VW = { az: null, fov: 75, off: document.createElement('canvas'), litKey: '', fine: null, near: null, far: null, drag: false };
+  // Which ground is in sunlight: for each cell of a grid around the site, march toward the Sun over the terrain and
+  // keep the steepest rise; the share of the solar disc above it is the light that cell gets.
+  function litGrid(x0, y0, ux, uy, sunEl, cell, n, tmax) {
+    const out = new Float32Array(n * n), H = TER.elevXY, half = (n - 1) / 2;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const x = x0 + (i - half) * cell, y = y0 + (half - j) * cell, h1 = H(x, y);
+      const el = sunEl + ((x - x0) * ux + (y - y0) * uy) / RM * R2D, top = Math.tan((el + 0.27) * D2R);
+      let mt = -0.2;
+      for (let t = cell * 0.75; t < tmax; t += Math.max(cell * 0.75, t * 0.06)) {
+        const v = (H(x + ux * t, y + uy * t) - h1) / (1000 * t) - t / (2 * RM);
+        if (v > mt) { mt = v; if (mt > top) break; }
+      }
+      out[j * n + i] = discFrac(el, 0.266, Math.atan(mt) * R2D);
+    }
+    return { a: out, n, cell, x0, y0 };
+  }
+  function litAtGrid(g, x, y) {
+    const half = (g.n - 1) / 2, i = (x - g.x0) / g.cell + half, j = half - (y - g.y0) / g.cell;
+    if (!(i >= 0 && j >= 0 && i < g.n - 1 && j < g.n - 1)) return NaN;
+    const i0 = i | 0, j0 = j | 0, fi = i - i0, fj = j - j0, a = g.a, k = j0 * g.n + i0;
+    return (a[k] * (1 - fi) + a[k + 1] * fi) * (1 - fj) + (a[k + g.n] * (1 - fi) + a[k + g.n + 1] * fi) * fj;
+  }
+  // Fine surface texture below the 5 to 10 m resolution of the data. Illustrative only: it changes the brightness by a
+  // few percent within a few hundred metres of the camera and never changes heights, shadows or any number.
+  const hash2 = (i, j) => { let h = (i * 374761393 + j * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  function vnoise(x, y) {
+    const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+    const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  }
+  function regolith(x, y, d) {
+    const fade = Math.max(0, 1 - d / 0.4); if (fade <= 0) return 1;
+    const m = x * 1000, n = y * 1000;   // metres
+    const t = 0.55 * vnoise(m / 2.5, n / 2.5) + 0.3 * vnoise(m / 0.8, n / 0.8) + 0.15 * vnoise(m / 0.25, n / 0.25);
+    const pebble = vnoise(m / 0.12, n / 0.12) > 0.82 ? 0.82 : 1;   // scattered small stones
+    return (1 + fade * 0.3 * (t - 0.5)) * (fade > 0.3 ? pebble : 1);
+  }
   function drawSurface() {
     const cv = $('surf'); if (!shown(cv)) return;
-    TER.focus = TER.patches(S.site) || null;
-    const can = riskOk() && TER.ready() && TER.focus && siteMask(S.site) && S.now;
-    cv.style.height = (riskOk() ? Math.round(Math.max(190, Math.min(540, cv.clientWidth * (cv.clientWidth < 520 ? 0.62 : 0.37)))) : 96) + 'px';
+    const can = riskOk() && TER.ready() && TER.rings && siteMask(S.site) && S.now && S.cur;
+    cv.style.height = (riskOk() ? Math.round(Math.max(220, Math.min(560, cv.clientWidth * (cv.clientWidth < 520 ? 0.66 : 0.42)))) : 96) + 'px';
     const { g, w, h } = prep(cv); g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
-    if (!riskOk()) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('The surface view needs the polar terrain, which covers 80°S to the south pole.', w / 2, h / 2); $('surfcap').textContent = 'Pick a south-pole site to stand on the surface. The chart below shows the sky for any site.'; return; }
+    if (!riskOk()) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('The surface view needs the polar terrain, which covers 80°S to the south pole.', w / 2, h / 2); $('surfcap').textContent = 'Pick a south-pole site to stand on the surface. The sky chart shows the horizon for any site.'; return; }
     if (!can) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the terrain around the site…', w / 2, h / 2); return; }
-    const c = S.cur, m = siteMask(S.site), mask = m.mask;
+    const c = S.cur, m = siteMask(S.site), mask = m.mask, dpr = Math.min(window.devicePixelRatio || 1, 2), tStart = performance.now();
     if (VW.az === null) { const sepA = wrap180(c.earthAz - c.sunAz); VW.az = Math.abs(sepA) <= 0.86 * VW.fov ? c.sunAz + sepA / 2 : c.sunAz + VW.fov * 0.24; }
-    const fast = S.playing || VW.drag, Wc = Math.min(fast ? 400 : 900, Math.round(w)), grow = fast ? 0.025 : 0.013, Hc = Math.round(Wc * h / w), fovH = VW.fov, fovV = fovH * Hc / Wc, elC = -0.02 * fovV;
+    const fast = S.playing || VW.drag, Wc = Math.min(2600, Math.round(w * (fast ? Math.min(dpr, 1) * 0.6 : dpr))), Hc = Math.round(Wc * h / w);
+    const fovH = VW.fov, fovV = fovH * Hc / Wc, elC = -0.02 * fovV;
     const lam = S.site.lon * D2R, nx = Math.sin(lam), ny = Math.cos(lam), ex = Math.cos(lam), ey = -Math.sin(lam);
     const rho0 = 2 * RM * Math.tan((90 + Math.max(-89.999, S.site.lat)) / 2 * D2R), x0 = rho0 * nx, y0 = rho0 * ny, hEye = m.h0 + S.eye;
-    const sa = c.sunAz * D2R, ux = nx * Math.cos(sa) + ex * Math.sin(sa), uy = ny * Math.cos(sa) + ey * Math.sin(sa), E = TER.elevXYsmooth, EB = TER.elevXY;
-    const NL = 128, LS = 0.2, key = [S.site.lat, S.site.lon, S.t].join('|');
+    const sa = c.sunAz * D2R, ux = nx * Math.cos(sa) + ex * Math.sin(sa), uy = ny * Math.cos(sa) + ey * Math.sin(sa), E = TER.elevXYsmooth;
+    // shadows: fine near the site, coarser farther out, then the polar shadow map
+    // while playing, shadows are recomputed every 30 minutes of mission time instead of every frame
+    const key = [S.site.lat, S.site.lon, fast ? Math.round(S.t / 1800e3) : S.t, fast ? 1 : 0].join('|');
     if (VW.litKey !== key) {
       VW.litKey = key; sunRaster();
-      for (let j = 0; j < NL; j++) for (let i = 0; i < NL; i++) {
-        const x = x0 + (i - NL / 2 + 0.5) * LS, y = y0 + (NL / 2 - j - 0.5) * LS, h1 = EB(x, y), el = c.sunEl + ((x - x0) * ux + (y - y0) * uy) / RM * R2D; let mt = -0.2;
-        for (let t = 0.08; t < 160; t += Math.max(0.08, t * 0.09)) { const v = (EB(x + ux * t, y + uy * t) - h1) / (1000 * t) - t / (2 * RM); if (v > mt) mt = v; }
-        VW.lit[j * NL + i] = discFrac(el, 0.266, Math.atan(mt) * R2D);
-      }
+      VW.fine = fast ? null : litGrid(x0, y0, ux, uy, c.sunEl, 0.01, 300, 12);
+      VW.near = litGrid(x0, y0, ux, uy, c.sunEl, fast ? 0.12 : 0.04, fast ? 100 : 300, 40);
+      VW.far = litGrid(x0, y0, ux, uy, c.sunEl, fast ? 0.6 : 0.2, fast ? 100 : 300, 160);
     }
     const litAt = (x, y) => {
-      const i = (x - x0) / LS + NL / 2 - 0.5, j = NL / 2 - 0.5 - (y - y0) / LS;
-      if (i >= 0 && j >= 0 && i < NL - 1 && j < NL - 1) { const i0 = i | 0, j0 = j | 0, fi = i - i0, fj = j - j0, a = VW.lit, k = j0 * NL + i0; return (a[k] * (1 - fi) + a[k + 1] * fi) * (1 - fj) + (a[k + NL] * (1 - fi) + a[k + NL + 1] * fi) * fj; }
+      let v = VW.fine ? litAtGrid(VW.fine, x, y) : NaN; if (v === v) return v;
+      v = litAtGrid(VW.near, x, y); if (v === v) return v;
+      v = litAtGrid(VW.far, x, y); if (v === v) return v;
       const px = Math.floor(x / PXKM + PS / 2), py = Math.floor(PS / 2 - y / PXKM); return px >= 0 && py >= 0 && px < PS && py < PS ? sunF[py * PS + px] : 1;
     };
     const off = VW.off; if (off.width !== Wc || off.height !== Hc) { off.width = Wc; off.height = Hc; }
     const og = off.getContext('2d'), im = og.createImageData(Wc, Hc), buf = new Uint32Array(im.data.buffer);
     const Y = el => (0.5 - (el - elC) / fovV) * Hc, expo = 1 / (6 * Math.sin(Math.max(0.6, c.sunEl) * D2R));
+    const mix = (c1, c2, f) => 0xff000000 | (((c1 >> 16 & 255) * f + (c2 >> 16 & 255) * (1 - f)) << 16) | (((c1 >> 8 & 255) * f + (c2 >> 8 & 255) * (1 - f)) << 8) | ((c1 & 255) * f + (c2 & 255) * (1 - f));
+    const stepK = fast ? 2 : 1;
     for (let col = 0; col < Wc; col++) {
       const az = VW.az + ((col + 0.5) / Wc - 0.5) * fovH, a = az * D2R, dx = nx * Math.cos(a) + ex * Math.sin(a), dy = ny * Math.cos(a) + ey * Math.sin(a), toSun = Math.cos(a - sa);
-      let yb = Hc, last = 0xff0a0a0a, pr = -1, pf = 0, pc = 0;
-      const mix = (c1, c2, f) => 0xff000000 | (((c1 >> 16 & 255) * f + (c2 >> 16 & 255) * (1 - f)) << 16) | (((c1 >> 8 & 255) * f + (c2 >> 8 & 255) * (1 - f)) << 8) | ((c1 & 255) * f + (c2 & 255) * (1 - f));
-      for (let d = 0.004 * (1 + grow * ((col * 7919) % 13) / 13); d < 300 && yb > 0; d += Math.max(0.002, d * grow)) {
-        const x = x0 + dx * d, y = y0 + dy * d, hh = E(x, y), pyF = Y(Math.atan((hh - hEye) / (1000 * d) - d / (2 * RM)) * R2D), py = Math.floor(pyF);
-        if (py >= yb) continue;
-        const dl = Math.max(0.03, d * 0.01), gx = (E(x + dl, y) - E(x - dl, y)) / (2000 * dl), gy = (E(x, y + dl) - E(x, y - dl)) / (2000 * dl);
-        const elL = (c.sunEl + d / RM * toSun * R2D) * D2R, chh = Math.cos(elL), lam2 = Math.max(0, (-gx * ux * chh - gy * uy * chh + Math.sin(elL)) / Math.sqrt(1 + gx * gx + gy * gy));
-        const q = litAt(x, y) * lam2 * expo * 1.7, v = (6 + 249 * Math.pow(q / (1 + q), 0.72)) | 0;
+      let yb = Hc, last = 0xff0a0a0a, lastV = -1, pr = -1, pf = 0, pc = 0;
+      const rowsPerDeg = Hc / fovV;
+      for (let d = 0.003; d < 300 && yb > 0;) {
+        const res = TER.resAt(d), x = x0 + dx * d, y = y0 + dy * d, hh = E(x, y), pyF = Y(Math.atan((hh - hEye) / (1000 * d) - d / (2 * RM)) * R2D), py = Math.floor(pyF);
+        // step: fine enough for the terrain at this distance, and no more than about one pixel row on screen
+        const rowsPerKm = (Math.abs(hh - hEye) / 1000 / (d * d) + 1 / (2 * RM)) * R2D * rowsPerDeg;
+        d += stepK * Math.min(Math.max(res * 0.5, d * (d > 25 ? 0.0035 : 0.006)), Math.max(0.00002, 1.1 / rowsPerKm));
+        if (py >= yb) { lastV = -1; continue; }   // hidden behind nearer ground: never blend across a silhouette
+        // ground normal at a scale tied to distance, so the 5 m and 10 m detail near the site shows without banding
+        const dl = Math.min(0.25, Math.max(0.006, d * 0.012)), gx = (E(x + dl, y) - E(x - dl, y)) / (2000 * dl), gy = (E(x, y + dl) - E(x, y - dl)) / (2000 * dl);
+        const elL = (c.sunEl + (d / RM) * toSun * R2D) * D2R, chh = Math.cos(elL), lam2 = Math.max(0, (-gx * ux * chh - gy * uy * chh + Math.sin(elL)) / Math.sqrt(1 + gx * gx + gy * gy));
+        const q = litAt(x, y) * lam2 * expo * 1.7 * regolith(x, y, d), v = 6 + 249 * Math.pow(q / (1 + q), 0.72);
         last = 0xff000000 | ((v * 0.9) << 16) | ((v * 0.96) << 8) | v;
         if (pr >= 0) buf[pr * Wc + col] = mix(pc, last, pf);
-        for (let r = Math.max(0, py + 1); r < yb; r++) buf[r * Wc + col] = last;
+        // fill the rows down to the previous sample, blending toward its brightness, so steps never show as bands
+        const span = yb - (py + 1), contiguous = lastV >= 0 && span <= 6;
+        for (let r = Math.max(0, py + 1); r < yb; r++) {
+          const vv = contiguous ? v + (lastV - v) * ((r - py) / (span + 1)) : v;
+          buf[r * Wc + col] = 0xff000000 | ((vv * 0.9) << 16) | ((vv * 0.96) << 8) | vv;
+        }
         if (py >= 0) { buf[py * Wc + col] = last; pr = py; pf = py + 1 - pyF; pc = last; } else pr = -1;
-        yb = py;
+        yb = py; lastV = v;
       }
+      // the painted skyline agrees exactly with the server's skyline used for every number on the page
       const ymF = Math.max(0, Math.min(Hc, Y(maskAt(mask, az)))), ym = Math.floor(ymF);
       if (yb > ym) for (let r = ym; r < Math.min(Hc, yb); r++) buf[r * Wc + col] = last; else for (let r = Math.max(0, yb); r < ym; r++) buf[r * Wc + col] = 0;
       if (ym >= 0 && ym < Hc) buf[ym * Wc + col] = (buf[ym * Wc + col] & 0x00ffffff) | (Math.round(255 * (ym + 1 - ymF)) << 24);
     }
     og.putImageData(im, 0, 0);
+    if (DEBUG) console.log('surface view: ' + Wc + ' columns in ' + Math.round(performance.now() - tStart) + ' ms' + (fast ? ' (fast)' : ''));
     const X = az => (wrap180(az - VW.az) / fovH + 0.5) * w, Yc = el => (0.5 - (el - elC) / fovV) * h, ppd = w / fovH;
     const sep = Math.acos(Math.max(-1, Math.min(1, Math.sin(c.sunEl * D2R) * Math.sin(c.earthEl * D2R) + Math.cos(c.sunEl * D2R) * Math.cos(c.earthEl * D2R) * Math.cos((c.sunAz - c.earthAz) * D2R)))), k = (1 - Math.cos(sep)) / 2;
     const exs = X(c.earthAz), eys = Yc(c.earthEl), re = Math.max(3, c.earthRad * ppd), sxs = X(c.sunAz), sys = Yc(c.sunEl), rs = Math.max(1.6, c.sunRad * ppd);
@@ -803,7 +797,7 @@
     g.fillStyle = '#5b9cf0'; g.beginPath(); g.arc(0, 0, re, -Math.PI / 2, Math.PI / 2, false); g.ellipse(0, 0, Math.abs(1 - 2 * k) * re, re, 0, Math.PI / 2, -Math.PI / 2, k < 0.5); g.closePath(); g.fill(); g.restore();
     const gl = g.createRadialGradient(sxs, sys, rs, sxs, sys, Math.max(26, rs * 7)); gl.addColorStop(0, 'rgba(255,240,205,0.9)'); gl.addColorStop(0.25, 'rgba(255,225,160,0.28)'); gl.addColorStop(1, 'rgba(255,220,150,0)');
     g.fillStyle = gl; g.beginPath(); g.arc(sxs, sys, Math.max(26, rs * 7), 0, 7); g.fill(); g.fillStyle = '#fffaf0'; g.beginPath(); g.arc(sxs, sys, rs, 0, 7); g.fill();
-    g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, w, h);
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(off, 0, 0, w, h);
     g.font = FONTC(13); g.textBaseline = 'middle';
     const tag = (t, x, y, col, hidden, r) => {
       if (x < -20 || x > w + 20) return; if (hidden) { g.setLineDash([3, 3]); g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, Math.max(6, r), 0, 7); g.stroke(); g.setLineDash([]); }
@@ -816,16 +810,8 @@
     for (let a = Math.ceil((VW.az - fovH / 2) / stepA) * stepA; a <= VW.az + fovH / 2; a += stepA) { const x = (a - VW.az) / fovH * w + w / 2, aa = ((a % 360) + 360) % 360; g.beginPath(); g.moveTo(x, h - 4); g.lineTo(x, h - 9); g.stroke(); g.fillText(aa % 90 === 0 ? ['N', 'E', 'S', 'W'][aa / 90] : aa + '°', Math.max(12, Math.min(w - 12, x)), h - 12); }
     g.textAlign = 'left'; g.textBaseline = 'middle'; const stepE = fovV > 30 ? 5 : fovV > 12 ? 2 : 1;
     for (let e = Math.ceil((elC - fovV / 2) / stepE) * stepE; e <= elC + fovV / 2; e += stepE) { const y = Yc(e); if (y < 10 || y > h - 26) continue; g.beginPath(); g.moveTo(0, y); g.lineTo(5, y); g.stroke(); g.fillText((e > 0 ? '+' : e < 0 ? '−' : '') + Math.abs(e) + '°', 8, y); }
-    if (w >= 560 && S.ev) {
-      const line = (name, clr, ev) => name + ' ' + Math.abs(clr).toFixed(2) + '° ' + (clr > 0 ? 'above' : 'below') + ' the terrain · ' + (ev ? (clr > 0 ? 'sets in ' : 'rises in ') + fmtDur(ev.t - S.t) : (clr > 0 ? 'stays up for the next 90 days' : 'stays down for the next 90 days'));
-      const rowsH = [[line('Sun', c.sunClr, S.ev.sun), c.sunClr > 0 ? '#ffd98a' : 'rgba(255,217,138,0.55)'], [line('Earth', c.earthClr, S.ev.earth), c.earthClr > 0 ? '#b9d6ff' : 'rgba(185,214,255,0.55)']];
-      const both = c.sunClr > 0 && c.earthClr > 0, head = both ? 'POWER AND EARTH LINK' : c.sunClr > 0 ? 'POWER, NO EARTH LINK' : c.earthClr > 0 ? 'EARTH LINK, NO POWER' : 'NO POWER, NO EARTH LINK';
-      g.font = FONT(13); const bw = Math.max(g.measureText(rowsH[0][0]).width, g.measureText(rowsH[1][0]).width) + 44, bh = 74, bx = w - bw - 12, by = 12;
-      g.fillStyle = 'rgba(8,10,14,0.72)'; g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 1; g.beginPath(); g.roundRect ? g.roundRect(bx, by, bw, bh, 6) : g.rect(bx, by, bw, bh); g.fill(); g.stroke();
-      g.textAlign = 'left'; g.textBaseline = 'middle'; g.font = FONTC(13); g.fillStyle = both ? '#3fc78d' : '#e8894a'; g.fillText(head, bx + 14, by + 16);
-      g.font = FONT(13); rowsH.forEach(([t, col], k) => { const y = by + 38 + k * 20; g.fillStyle = col; g.beginPath(); g.arc(bx + 19, y, 4.5, 0, 7); g.fill(); g.fillText(t, bx + 32, y); });
-    }
-    $('surfcap').textContent = 'The view from ' + S.eye + ' m above the ground at ' + short(S.site) + ', ' + fmtDT(S.t) + ', ' + Math.round(fovH) + '° wide. Terrain and shadows come from NASA\'s LOLA height maps, served by the Lunar Skyline server; the Sun and Earth are drawn at their true sizes and nothing is stretched. There is no air, so far hills look as sharp as near ones. Drag sideways to look around.';
+    const rg = cache.get('rings|' + S.site.lat.toFixed(5) + ',' + S.site.lon.toFixed(5)), tier = rg && rg.v ? rg.v.tier : '';
+    $('surfcap').textContent = 'The view from ' + S.eye + ' m above the ground at ' + short(S.site) + ', ' + fmtDT(S.t) + ', ' + Math.round(fovH) + '° wide. Terrain and shadows from NASA\'s LOLA height maps (' + (tier || 'LOLA') + ' at the site); the Sun and Earth are drawn at their true sizes and nothing is stretched. There is no air, so far hills look as sharp as near ones. Texture finer than the height map is illustrative. Drag sideways to look around.';
   }
   function polarXY(lat, lon, R, cx, cy) { const rho = 2 * RM * Math.tan((90 + lat) / 2 * D2R) / RHO * R; return [cx + rho * Math.sin(lon * D2R), cy - rho * Math.cos(lon * D2R)]; }
   let mapGeom = null;
@@ -977,7 +963,7 @@
 
   // ---------- report ----------
   function reportText() {
-    const c = S.cfg, m = siteMask(S.site) || { h0: 0, lo: 0, hi: 0, tiers: [] }, mv = S.mv, rq = rescueNow(), r = rq.r, L = [];
+    const c = S.cfg, m = siteMask(S.site) || { h0: 0, lo: 0, hi: 0, tiers: [] }, mv = S.mv && !S.mv.pending ? S.mv : null, rq = rescueNow(), r = rq.r, L = [];
     L.push('# Lunar Skyline mission report', '', 'Generated ' + fmtDT(Date.now()) + '.', '');
     L.push('## Scenario', '- Site: ' + S.site.name + ' (' + fmtLat(S.site.lat) + ', ' + fmtLon(S.site.lon) + '), terrain height ' + Math.round(m.h0) + ' m, mast ' + S.eye + ' m', '- Terrain: ' + tierText(m) + ', ' + sg(m.lo, 1) + ' to ' + sg(m.hi, 1), mv ? '- Landing: ' + fmtDT(mv.t) : '- Landing: ' + fmtDT(landingTime()), '- Surface mission: ' + c.days + ' days', '');
     L.push('## Mission needs', '- Solar array: ' + c.peakW + ' W in full Sun, ' + (c.tracking ? 'sun-tracking' : 'fixed horizontal'), '- Load: ' + c.loadSun + ' W in sunlight, ' + c.loadDark + ' W in darkness', '- Battery: ' + c.capWh + ' Wh, reserve ' + Math.round(c.minSoc * 100) + '%, charge efficiency ' + Math.round(c.chargeEff * 100) + '%',
@@ -1018,6 +1004,7 @@
     document.querySelectorAll('[data-span]').forEach(b => b.classList.toggle('on', +b.dataset.span === S.span));
     document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === S.view));
     document.querySelectorAll('[data-v]').forEach(s => { s.hidden = s.dataset.v !== S.view; });
+    document.body.dataset.view = S.view;
   }
   function setTime(t, jump) {
     S.t = t;
@@ -1087,7 +1074,7 @@
   function render() {
     if (!ready) return;
     ensureTab();
-    TER.focus = TER.patches(S.site) || null;
+    { const rg = TER.ringsFor(S.site); TER.rings = rg ? rg.rings : null; }
     S.now = bodyAt(S.t);
     const exact = skyExact(), lerped = stateAt(ser(S.site), S.t);
     if (exact) {
@@ -1100,12 +1087,13 @@
       S.cur = lerped;
       if (S.ev && S.evAt !== S.t) { const keep = ev => ev && ev.t > S.t ? ev : null; S.ev = { sun: keep(S.ev.sun), earth: keep(S.ev.earth) }; }
     }
-    drawSiteInfo(); drawMission();
-    if (S.view === 'plan') { drawLab(); drawRescue(); drawRisk(); }
-    else if (S.view === 'explore') { if (S.cur) { drawSurface(); drawStatus(); drawSky(); } else { waiting($('surf'), 'Loading the sky…'); waiting($('sky'), 'Loading the sky…'); } drawTimeline(); drawMap(); }
+    drawSiteInfo();
+    if (S.cur) drawStatus();
+    if (S.view === 'plan') { drawMission(); drawLab(); drawRescue(); drawRisk(); }
+    else if (S.view === 'explore') { $('surf').closest('section').hidden = !riskOk(); if (S.cur) { drawSurface(); drawSky(); } else { waiting($('surf'), 'Loading the sky…'); waiting($('sky'), 'Loading the sky…'); } drawTimeline(); drawMap(); }
     else if (S.view === 'learn') drawLearn();
     else { drawCmpSky(); drawCompare(); drawCalendar(); }
-    if (lastErr && !$('srverr')) { const p = document.createElement('p'); p.id = 'srverr'; p.className = 'tag'; p.style.color = 'var(--bad)'; p.textContent = 'Some data could not be loaded from the server: ' + lastErr.message + '.'; $('siteinfo').after(p); }
+    if (srv.lastErr && !$('srverr')) { const p = document.createElement('p'); p.id = 'srverr'; p.className = 'tag'; p.style.color = 'var(--bad)'; p.textContent = 'Some data could not be loaded from the server: ' + srv.lastErr.message + '.'; $('siteinfo').after(p); }
   }
   function renderSoon() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
 
@@ -1122,7 +1110,7 @@
   ['m-days', 'm-peak', 'm-array', 'm-lsun', 'm-ldark', 'm-cap', 'm-res', 'm-dte', 'm-gap', 'm-margin', 'm-auto', 'm-fault', 'm-fday', 'm-safe'].forEach(id => $(id).addEventListener('change', readCfg));
   $('s-sun').addEventListener('click', () => { if (S.cur) { VW.az = S.cur.sunAz; drawSurface(); } });
   $('s-earth').addEventListener('click', () => { if (S.cur) { VW.az = S.cur.earthAz; drawSurface(); } });
-  $('s-zoom').addEventListener('click', () => { VW.fov = VW.fov === 90 ? 45 : VW.fov === 45 ? 20 : 90; drawSurface(); });
+  $('s-zoom').addEventListener('click', () => { VW.fov = VW.fov === 75 ? 40 : VW.fov === 40 ? 20 : 75; drawSurface(); });
   (() => { const cv = $('surf'); let px = null, az0 = 0, pend = 0;
     cv.addEventListener('pointerdown', e => { px = e.clientX; az0 = VW.az; VW.drag = true; try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
     cv.addEventListener('pointermove', e => { if (px === null || VW.az === null) return; VW.az = az0 - (e.clientX - px) / cv.clientWidth * VW.fov; if (!pend) pend = requestAnimationFrame(() => { pend = 0; drawSurface(); }); });
@@ -1196,7 +1184,7 @@
   const TOUR = [
     { v: 'explore', sel: '[aria-label="Surface view"]', t: 'You are standing on the rim of Shackleton crater, near the Moon\'s south pole. The Sun and the Earth both sit just above the hills. Drag the picture to look around.', go: () => pickSite('shack') },
     { v: 'explore', sel: '[aria-label="Surface view"]', t: 'Days pass in seconds. The Sun slides sideways along the horizon instead of climbing overhead, and the Earth barely moves. That is why one ridge can decide a mission here.', go: () => { tourKeep.t = S.t; if (!S.playing) $('play').click(); }, leave: () => { if (S.playing) $('play').click(); setTime(tourKeep.t, true); } },
-    { v: 'explore', sel: '[aria-label="Status now"]', t: 'The same sky as numbers: how far the Sun and the Earth sit above the terrain, and how long until each one sets.' },
+    { v: 'explore', sel: '#glance', t: 'The same sky as numbers, always at the top: how far the Sun and the Earth sit above the terrain, how long until each one sets, how much power a solar array gets right now, and whether a radio link to Earth is possible.' },
     { v: 'plan', sel: '[aria-label="Mission needs"]', t: 'Describe a lander: its solar array, its battery, how long it can go without radio contact. The server simulates the battery hour by hour and says whether the mission survives.' },
     { v: 'plan', sel: '[aria-label="Design lab"]', t: 'Now work backwards. This lander is too small: a 100 W array and a 500 Wh battery. The green region shows every array and battery pair that survives, the diamond is the lightest, and the atlas below shows which landing dates need the least hardware.',
       go: () => { tourKeep.hw = [S.cfg.peakW, S.cfg.capWh]; setHardware(100, 500); }, leave: () => setHardware(tourKeep.hw[0], tourKeep.hw[1]) },
@@ -1216,6 +1204,18 @@
     const el = document.querySelector(st.sel); if (el) { try { el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); } catch (_) { el.scrollIntoView(); } el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); }
   }
   $('tour-go').addEventListener('click', () => tourShow(0));
+  // first-visit introduction: hidden for good once dismissed
+  let introSeen = false; try { introSeen = localStorage.getItem('ls-intro') === 'hidden'; } catch (_) {}
+  $('intro').hidden = introSeen;
+  const hideIntro = () => { $('intro').hidden = true; try { localStorage.setItem('ls-intro', 'hidden'); } catch (_) {} };
+  $('intro-x').addEventListener('click', hideIntro);
+  document.querySelectorAll('[data-intro]').forEach(b => b.addEventListener('click', () => {
+    const go = b.dataset.intro; hideIntro();
+    if (go === 'tour') tourShow(0); else if (go === 'compare') { S.cmp = ['mala', 'ridge', 'gerl']; pickSite('shack'); setView('compare'); } else setView(go);
+    window.scrollTo(0, 0);
+  }));
+  try { const th = localStorage.getItem('ls-theme'); if (th) document.documentElement.dataset.theme = th; } catch (_) {}
+  $('theme').addEventListener('click', () => { const th = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; document.documentElement.dataset.theme = th; try { localStorage.setItem('ls-theme', th); } catch (_) {} });
   $('tour-x').addEventListener('click', () => tourShow(tourI + 1));
   $('tour-b').addEventListener('click', () => tourShow(tourI - 1));
   $('tour-c').addEventListener('click', () => tourShow(-1));
@@ -1227,13 +1227,14 @@
   // ---------- boot ----------
   try {
     readTheme();
+    document.querySelectorAll('a[href="docs"]').forEach(a => { a.href = (API || '') + '/docs'; });
     const sj = await getJSON('/sites');
     SITES = sj.sites.map(s => ({ id: s.id, g: s.group, name: s.name, lat: s.lat, lon: s.lon, note: s.note }));
     S.site = SITES[0];
-    $('boot').textContent = 'Loading the polar terrain and the ephemeris from the server…';
+    $('boot').querySelector('p').textContent = 'Loading the polar terrain and the ephemeris from the server…';
     texImg = new Image(); texImg.onload = () => { try { const c = document.createElement('canvas'); c.width = texImg.naturalWidth; c.height = texImg.naturalHeight; const cg = c.getContext('2d'); cg.drawImage(texImg, 0, 0); const d = cg.getImageData(0, 0, c.width, c.height).data, a = new Uint8Array(c.width * c.height); for (let i = 0; i < a.length; i++) a[i] = d[i * 4]; GL.tex = a; GL.tw = c.width; GL.th = c.height; } catch (_) {} if (ready && S.mapTab !== 'pole') drawMap(); };
     texImg.src = API + '/terrain/moon.jpg';
-    TER.loadPolar().then(() => { buildPolar(); renderSoon(); }, err => { lastErr = err; renderSoon(); });
+    TER.loadPolar().then(() => { buildPolar(); renderSoon(); }, err => { srv.lastErr = err; renderSoon(); });
     const hv = hashView(); if (VIEWS.includes(hv)) S.view = hv;
     ensureTab();
     // default plan: the middle of the first run of landing days at the default site that meet the needs
@@ -1250,7 +1251,7 @@
     render();
     window.__ready = true;
   } catch (err) {
-    $('boot').innerHTML = 'The Lunar Skyline server could not be reached (' + (err && err.message ? err.message : err) + '). Start it with <code>python run.py</code> in the <code>backend</code> folder, then open <a href="http://127.0.0.1:8000/">http://127.0.0.1:8000/</a>.';
+    $('boot').innerHTML = '<p>The Lunar Skyline API could not be reached at <code>' + (API || location.origin) + '</code> (' + (err && err.message ? err.message : err) + '). Start it with <code>python run.py</code> in the <code>backend</code> folder, or set its address in <code>web/config.js</code>, then reload.</p>';
     throw err;
   }
 })();

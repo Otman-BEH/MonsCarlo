@@ -13,8 +13,9 @@ Two packages in one FastAPI service:
   landers, the mission simulation and Monte Carlo. Ported from main's `src/engine.js`, `src/terrain.js`,
   `src/analysis.js` and `src/app.js`, and checked against them (see Validation).
 
-The same server also serves the web page (`../web/`) at `/`: the page fetches every number from the endpoints below and
-only draws. The original single-file app, with its own in-browser engine, was retired (git history, commit `afd9e78`);
+This is the backend only. The web page (`../web/`) is a separate static frontend that calls these endpoints for every
+number and only draws; it is served on its own (`python serve_web.py` in the repo root). The API allows cross-origin
+calls; set `SKYLINE_CORS_ORIGINS` (comma list) to limit them to the page's address when hosted. The original single-file app, with its own in-browser engine, was retired (git history, commit `afd9e78`);
 the engine here was ported from it and checked against it.
 
 ## Install
@@ -44,7 +45,7 @@ This runs, in order, and every step skips work already done:
    modes). About 10 s on an Apple M1, then skipped while the stamp matches.
 3. **Ephemeris**: pre-fetches 14 months of hourly Sun and Earth vectors from JPL Horizons (28 requests, about 40 s).
    If Horizons cannot be reached, those months come from SPICE and are replaced by Horizons data on a later run.
-4. **Server** on http://127.0.0.1:8000: the web page at `/`, interactive API documentation at `/docs`.
+4. **API** on http://127.0.0.1:8000, interactive documentation at `/docs`.
 
 Flags: `--skip-fetch`, `--skip-prefetch`, `--all-data` (also the optional files: illumination maps, hillshade, extra
 5 m tiles), `--port`, `--no-serve`. The data directory is `backend/data/` unless `SKYLINE_DATA` points elsewhere.
@@ -67,14 +68,23 @@ Flags: `--skip-fetch`, `--skip-prefetch`, `--all-data` (also the optional files:
 | `POST /rescue` | After a schedule slip: the plan's verdict, the verdict after the slip, and other sites and landing times ranked by verdict, extra wait and battery margin. |
 | `GET /series`, `GET /ephemeris` | Hourly series and skyline for a site, and hourly Moon-fixed Sun and Earth vectors (used by the page for charts and smooth playback). |
 | `GET /dsn` | Moon elevation at the three Deep Space Network complexes (SPICE). |
-| `GET /terrain/patch`, `GET /terrain/polar400`, `GET /terrain/moon.jpg` | Height grids around a site (40 m within 3 km, 240 m within 15 km), the 400 m south-pole raster and the Moon mosaic, for drawing the surface view, the shadow map and the globe. |
+| `GET /terrain/rings`, `GET /terrain/polar400`, `GET /terrain/moon.jpg` | Binary height grids around a site (10 m within 1.5 km, 40 m within 6 km, 160 m within 30 km, from the 5 m maps where present), the 400 m south-pole raster (both row-delta coded) and the Moon mosaic, for drawing the surface view, the shadow map and the globe. |
 
 Common inputs: location `site=<id>` or `lat=&lon=` (east positive); `time=` or `start=`/`end=` (ISO 8601 UTC, default
 now and 30 days); `lander=<id>` plus overrides; `dem=best|80m`. Every response has `meta`: ephemeris source per month,
 terrain tiers and citations, `lander_resolved` (the exact lander used) and `defaults_used`. Monte Carlo responses also
 carry the seed.
 
-Errors: 404 unknown site or lander, 422 invalid input, 400 outside 1900 to 2100, 503 when no ephemeris can be produced.
+Errors: 404 unknown site or lander, 422 invalid input, 400 outside 1900 to 2100, 503 when no ephemeris can be produced
+or when the server is busy (see below), 403 for lander changes on a read-only server.
+
+### Running it in public
+
+- `SKYLINE_READONLY=1`: turns off saving and deleting landers.
+- `SKYLINE_HEAVY_JOBS` (default 2): how many heavy jobs (landing risk, design lab, rescue, calendar) run at once; others
+  wait up to 45 s, then get a 503 with `Retry-After`.
+- Heavy results are kept in memory (the last 128) and reused when the same question is asked again.
+- `SKYLINE_CORS_ORIGINS`: comma list of page addresses allowed to call the API (default: any).
 
 ### Examples
 

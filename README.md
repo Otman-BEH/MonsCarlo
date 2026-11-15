@@ -6,20 +6,39 @@ Interactive mission-planning tool for the NASA Space Apps challenge "Lunar Landi
 It shows where the Sun and Earth sit against the terrain horizon of any lunar site on any date,
 tests a mission against power and communication needs, and finds alternative sites and dates when a landing slips.
 
-It runs as one service: a Python backend (`backend/`) that does every calculation from NASA data and serves the web page
-(`web/`) that draws the results.
+Two separate parts:
+- **Backend** (`backend/`): a Python API that does every calculation from NASA data.
+- **Frontend** (`web/`): a static web page that asks the API and draws the answers. It finds the API at the address in
+  `web/config.js` (default http://127.0.0.1:8000); `?api=<address>` in the page's address overrides it.
 
+Run each in its own terminal:
+
+    # 1. backend (API on http://127.0.0.1:8000, docs at /docs)
     cd backend
     python -m venv .venv && source .venv/bin/activate        (Windows: .venv\Scripts\activate)
     pip install -r requirements.txt
     python run.py
 
-Then open http://127.0.0.1:8000/ for the page and http://127.0.0.1:8000/docs for the API. The first start downloads about
-620 MB of NASA data (LOLA elevation models, SPICE kernels) and 14 months of Sun and Earth positions from JPL Horizons;
-later starts skip what is already there. Details: [backend/README.md](backend/README.md).
+    # 2. frontend (web page on http://127.0.0.1:5173)
+    python serve_web.py
 
-To put it online, deploy the `Dockerfile` on any host with a persistent disk (a `fly.toml` for Fly.io is included; see
-[Hosting](#hosting)).
+Then open http://127.0.0.1:5173/. Any static file server works for the frontend; `serve_web.py` only needs Python. The
+backend's first start downloads about 620 MB of NASA data (LOLA elevation models, SPICE kernels) and 14 months of Sun and
+Earth positions from JPL Horizons; later starts skip what is already there. Details: [backend/README.md](backend/README.md).
+
+To put it online, host the backend from the `Dockerfile` on any host with a persistent disk (a `fly.toml` for Fly.io is
+included) and the frontend on any static host; see [Hosting](#hosting).
+
+## The page
+
+- **App bar**: the five views (Site, Plan a mission, Compare, Why the pole?, Method), the guided tour, a share link and
+  a light/dark switch.
+- **Site and time bar**: pick a listed site or a custom point, the mast height, the date, step through time or play.
+- **At a glance** (on every working view): the challenge's core answers. Sun and Earth above the terrain, time to
+  sunset and Earthset, solar power right now, and whether a direct link to Earth is possible (with the Deep Space
+  Network stations that can see the Moon).
+- The page only asks the server for expensive results (mission, design lab, landing risk, rescue, calendar) for the
+  view on screen, never while playing or dragging, and cancels questions that are out of date.
 
 ## What it does
 - **Plan a mission**: enter mission length, array output, loads, battery, reserve, link-gap limit and a terrain margin.
@@ -40,10 +59,12 @@ To put it online, deploy the `Dockerfile` on any host with a persistent disk (a 
 - **Share and export**: "Copy link to this scenario" puts the site or custom coordinates, time, mast height, compared sites and mission needs in the address, so a colleague opens the same view. The time series (CSV) and the mission report (Markdown) can be copied or saved as files.
 
 ## Layout
-- `web/`        the page: `index.html`, `style.css`, `app.js` (fetches every number from the server and draws it)
-- `backend/`    the server: data preparation (`skyline/prep`), the engine (`skyline/engine`), the API (`skyline/api`),
+- `web/`        the frontend: `index.html`, `style.css`, `config.js` (the API address), `app.js` (the views: state, panels,
+                drawing) and `js/` (`api.js` requests and caching, `terrain.js` terrain for drawing, `geo.js`, `format.js`)
+- `backend/`    the backend: data preparation (`skyline/prep`), the engine (`skyline/engine`), the API (`skyline/api`),
                 tests and the NASA data manifest; see [backend/README.md](backend/README.md)
-- `Dockerfile`, `fly.toml`   hosting
+- `serve_web.py`   a small static server for the frontend
+- `Dockerfile`, `fly.toml`   hosting for the backend
 
 The original single-file app (in-browser engine, embedded data, `build/` pipeline) was retired when the page moved onto
 the backend; it is in the git history at commit `afd9e78`.
@@ -90,13 +111,20 @@ the backend; it is in the git history at commit `afd9e78`.
 Code, tests and text were drafted with Claude (Anthropic) and reviewed with feedback from ChatGPT (OpenAI).
 
 ## Hosting
-The submission needs a public link, so the service runs in a container on any host with a persistent disk:
+The submission needs a public link. The two parts are hosted separately.
+
+**Backend** (needs a persistent disk for the NASA data), for example on Fly.io:
 
     fly launch --no-deploy --copy-config          # once: choose an app name and region
     fly volumes create skyline_data --size 3      # 3 GB for the NASA data and the cache
+    fly secrets set SKYLINE_CORS_ORIGINS=https://<where-the-frontend-lives>   # optional: only that page may call the API
     fly deploy
 
 The first start downloads the data (a few minutes); `/health` reports progress. Locally the server peaked at about
-820 MB while serving every view (Monte Carlo included), so 2 GB of memory leaves room. The
-Dockerfile has not yet been built and run end to end; test it locally with
+820 MB while serving every view (Monte Carlo included), so 2 GB of memory leaves room. The Dockerfile has not yet been
+built and run end to end; test it locally with
 `docker build -t lunar-skyline . && docker run -p 8000:8000 -v "$PWD/backend/data:/data" lunar-skyline`.
+
+**Frontend** (static files only): set the backend's public address in `web/config.js`, then publish the `web/` folder on
+any static host. Netlify and Cloudflare Pages can publish the `web/` folder directly. GitHub Pages needs a small Actions
+workflow, because it only serves a branch's root or `/docs` folder on its own.

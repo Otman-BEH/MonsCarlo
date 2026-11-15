@@ -3,7 +3,7 @@
 1. verify or download the raw NASA / JPL files listed in manifest.json
 2. precompute derived products (skipped when the stamp matches)
 3. pre-fetch 14 months of ephemeris from JPL Horizons (SPICE fallback; failures do not stop startup)
-4. start the API on http://127.0.0.1:8000  (interactive docs at /docs)
+4. start the API on http://127.0.0.1:8000  (interactive docs at /docs). The web page is served separately (serve_web.py).
 
 Every step is safe to rerun and skips work already done.
 """
@@ -59,7 +59,8 @@ def main(argv=None) -> int:
     if a.no_serve:
         return 0
     import uvicorn
-    print(f"Serving on http://{a.host}:{a.port}  (docs: http://{a.host}:{a.port}/docs)")
+    print(f"API on http://{a.host}:{a.port}  (docs: http://{a.host}:{a.port}/docs)")
+    print("The web page is separate: python serve_web.py in the repo root, then open http://127.0.0.1:5173/")
     uvicorn.run("skyline.api.app:app", host=a.host, port=a.port, workers=1, log_level="info")
     return 0
 
