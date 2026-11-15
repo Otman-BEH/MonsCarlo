@@ -212,6 +212,7 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
     F = cfg["fault"] if cfg.get("fault") and cfg["fault"]["kind"] != "none" else None
     fk = M.js_round(F["day"] * 24) if F else 10 ** 9
     fkind = F["kind"] if F else "none"
+    aMul, xLoad, bMul, outH = M.fault_effects(F)
     capNow = cap.astype(np.float64).copy()
     safe = np.zeros(T, bool)
     eff = cfg["chargeEff"]
@@ -232,9 +233,9 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
             dc = np.clip(d, -1, 1)
             f = np.where(d >= 1, 1.0, np.where(d <= -1, 0.0, 1 - (np.arccos(dc) - dc * np.sqrt(1 - dc * dc)) / math.pi))
             on = k >= fk
-            p = peak * g(irr, i) * f * gs(i) * (0.7 if (on and fkind == "array") else 1)
-            if on and fkind == "battery" and k == fk:
-                capNow = np.where(act, cap * 0.75, capNow)
+            p = peak * g(irr, i) * f * gs(i) * (aMul if on else 1)
+            if on and bMul < 1 and k == fk:
+                capNow = np.where(act, cap * bMul, capNow)
                 E = np.where(act & (E > capNow), capNow, E)
             load = np.where(f > 0.02, lsun, ldark)
             if cfg["safe"]:
@@ -242,8 +243,8 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
                 leave = safe & (E > 0.7 * capNow)
                 safe = np.where(act, (safe | enter) & ~leave, safe)
                 load = np.where(safe, np.minimum(load, ldark), load)
-            if on and fkind == "load":
-                load = load + 100
+            if on and xLoad:
+                load = load + xLoad
             net = p - load
             dE = np.where(net > 0, net * eff, net)
             En = np.minimum(capNow, E + dE)
@@ -252,7 +253,7 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
             dn = np.minimum(0.0, draw + dE)
             draw = np.where(act, dn, draw)
             maxDraw = np.where(act & (-draw > maxDraw), -draw, maxDraw)
-            L = (g(eclr, i) - margin > 0) & (not (on and fkind == "antenna" and k < fk + 24))
+            L = (g(eclr, i) - margin > 0) & (not (on and outH > 0 and k < fk + outH))
             gap = np.where(act, np.where(L, 0, gap + 1), gap)
             maxGap = np.maximum(maxGap, gap)
         # failure checks in main's order; cause of the first one

@@ -22,9 +22,33 @@ VERDICT_TEXT = {2: "Meets the needs", 1: "Marginal: passes only without the terr
 
 
 class Fault(BaseModel):
+    """One contingency, starting on mission day `day`. The named kinds are fixed cases; `custom` uses the four
+    numbers below together (array, load and battery effects last to the end of the mission; the outage lasts
+    comms_outage_h hours)."""
     model_config = ConfigDict(extra="forbid")
-    kind: Literal["none", "array", "battery", "load", "antenna"] = "none"
+    kind: Literal["none", "array", "battery", "load", "antenna", "custom"] = "none"
     day: float = Field(default=3, ge=0, le=365)
+    array_loss_pct: float = Field(default=0, ge=0, le=100, description="custom: solar output lost, %")
+    extra_load_w: float = Field(default=0, ge=0, le=100000, description="custom: extra continuous load, W")
+    battery_loss_pct: float = Field(default=0, ge=0, lt=100, description="custom: battery capacity lost, %")
+    comms_outage_h: float = Field(default=0, ge=0, le=10000, description="custom: hours with no Earth link")
+
+
+def fault_effects(F: dict | None) -> tuple[float, float, float, float]:
+    """(array output multiplier, extra load W, battery capacity multiplier, comms outage hours) once the fault starts."""
+    if not F or F["kind"] == "none":
+        return 1, 0, 1, 0
+    k = F["kind"]
+    if k == "array":
+        return 0.7, 0, 1, 0
+    if k == "load":
+        return 1, 100, 1, 0
+    if k == "battery":
+        return 1, 0, 0.75, 0
+    if k == "antenna":
+        return 1, 0, 1, 24
+    return (1 - F.get("array_loss_pct", 0) / 100, F.get("extra_load_w", 0), 1 - F.get("battery_loss_pct", 0) / 100,
+            F.get("comms_outage_h", 0))
 
 
 class MissionSpec(BaseModel):
@@ -115,6 +139,7 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
     F = cfg["fault"] if cfg.get("fault") and cfg["fault"]["kind"] != "none" else None
     fk = js_round(F["day"] * 24) if F else 10 ** 9
     capNow = cap
+    aMul, xLoad, bMul, outH = fault_effects(F)
     safe = False
     safeH = 0
     shp = power_shape(se, cfg) if shape is None else shape
@@ -131,9 +156,9 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
         i = i0 + k
         f = _frac1(se, i, margin)
         on = k >= fk
-        p = peak * float(irr[i]) * f * float(shp[i]) * (0.7 if (on and F["kind"] == "array") else 1)
-        if on and F["kind"] == "battery" and capNow == cap:
-            capNow = cap * 0.75
+        p = peak * float(irr[i]) * f * float(shp[i]) * (aMul if on else 1)
+        if on and bMul < 1 and capNow == cap:
+            capNow = cap * bMul
             if E > capNow:
                 E = capNow
         load = lsun if f > 0.02 else ldark
@@ -145,8 +170,8 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
             if safe:
                 load = min(load, ldark)
                 safeH += 1
-        if on and F["kind"] == "load":
-            load += 100
+        if on and xLoad:
+            load += xLoad
         net = p - load
         dE = net * eff if net > 0 else net
         E = min(capNow, E + dE)
@@ -158,7 +183,7 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
         draw = min(0.0, draw + dE)
         if -draw > maxDraw:
             maxDraw = -draw
-        L = (float(eclr[i]) - margin > 0) and not (on and F["kind"] == "antenna" and k < fk + 24)
+        L = (float(eclr[i]) - margin > 0) and not (on and outH > 0 and k < fk + outH)
         if L:
             linkH += 1
             gap = 0
@@ -196,7 +221,7 @@ def mission(se: dict, i0: int, cfg: dict, margin: float, keep: bool = False, sha
         g = js_fixed(maxGap / 24, 1) + " d" if maxGap >= 48 else f"{maxGap} h"
         fails.append(f"no Earth contact for {g} (limit {js_num(cfg['maxGapH'])} h)" if cfg.get("useDsn")
                      else f"Earth is out of view for {g} (limit {js_num(cfg['maxGapH'])} h)")
-    usable = (0.75 if (F and F["kind"] == "battery") else 1.0) - cfg["minSoc"]
+    usable = bMul - cfg["minSoc"]
     return {"ok": len(fails) == 0, "fails": fails, "minSoc": max(0.0, minE / cap), "kMin": kMin, "kFail": kFail, "maxGapH": maxGap,
             "maxDarkH": maxDark, "linkPct": 100 * linkH / n if n else 0.0, "litPct": 100 * litH / n if n else 0.0,
             "battNeedWh": (maxDraw + autoWh) / usable if usable > 0 else math.inf, "n": n,

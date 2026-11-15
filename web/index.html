@@ -136,35 +136,35 @@
 
   <!-- PLAN -->
   <nav class="panel span2 subnav" data-v="plan" aria-label="Plan sections">
-    <a href="#sec-verdict">Verdict</a><a href="#sec-design">Mission design</a><a href="#sec-risk">Landing risk</a><a href="#sec-rescue">Launch slip</a>
+    <a href="#sec-verdict">Verdict</a><a href="#sec-cont">Contingencies</a><a href="#sec-design">Mission design</a><a href="#sec-risk">Landing risk</a><a href="#sec-rescue">Launch slip</a>
     <span class="hint">Simulated hour by hour on the server for the lander below.</span>
   </nav>
   <section class="panel" data-v="plan" aria-label="Mission needs">
       <div class="phead"><h2>Lander and mission</h2></div>
       <label class="fl" for="m-lander">Lander<select id="m-lander"></select></label>
       <div class="lspec" id="m-lspec"></div>
-      <p class="cap">Pick a real lander or change any number. Values marked (assumed) are our estimates where the operator has not published a figure.</p>
+      <p class="cap">Picking a lander fills in the numbers below. Change any of them to try your own design. "(assumed)" means the operator has not published that figure and it is our estimate.</p>
+      <h3 class="subh">Power</h3>
       <div class="form">
-        <label class="fl" for="m-days">Surface mission, days<input id="m-days" type="number" min="1" max="60" step="1" value="10"></label>
-        <label class="fl" for="m-array">Solar array<select id="m-array"><option value="track">Sun-tracking</option><option value="vert">Fixed, on the sides (vertical)</option><option value="flat">Fixed, flat on top</option></select></label>
-        <label class="fl" for="m-peak">Solar output in full Sun, W<input id="m-peak" type="number" min="0" max="100000" step="10" value="400"></label>
-        <label class="fl" for="m-cap">Battery, Wh<input id="m-cap" type="number" min="1" max="1000000" step="100" value="2000"></label>
-        <label class="fl" for="m-lsun">Load in sunlight, W<input id="m-lsun" type="number" min="0" max="100000" step="10" value="180"></label>
-        <label class="fl" for="m-ldark">Load in darkness, W<input id="m-ldark" type="number" min="0" max="100000" step="10" value="60"></label>
-        <label class="fl" for="m-res">Battery reserve, %<input id="m-res" type="number" min="0" max="90" step="5" value="20"></label>
-        <label class="fl" for="m-gap">Longest link gap allowed, h<input id="m-gap" type="number" min="0" max="2000" step="1" value="12"></label>
-        <label class="fl" for="m-margin">Terrain margin, °<input id="m-margin" type="number" min="0" max="3" step="0.1" value="0.3"></label>
-        <label class="fl" for="m-auto">Ride out a blackout of, h<input id="m-auto" type="number" min="0" max="72" step="1" value="6"></label>
-        <label class="chk" for="m-dte"><input id="m-dte" type="checkbox" checked> Needs a direct Earth link</label>
-        <label class="chk" for="m-dsn"><input id="m-dsn" type="checkbox" checked> Talk to Earth through NASA's Deep Space Network (a dish at Goldstone, Madrid or Canberra must have the Moon above 10°)</label>
+        <label class="fl" for="m-array">Solar panels <span class="fh">how they are mounted</span><select id="m-array"><option value="track">Turn to follow the Sun</option><option value="vert">Fixed on the sides (vertical)</option><option value="flat">Fixed flat on top</option></select></label>
+        <label class="fl" for="m-peak">Solar output, W <span class="fh">with the Sun square on the panels</span><input id="m-peak" type="number" min="0" max="100000" step="10" value="400"></label>
+        <label class="fl" for="m-cap">Battery capacity, Wh <span class="fh">energy stored when full</span><input id="m-cap" type="number" min="1" max="1000000" step="100" value="2000"></label>
+        <label class="fl" for="m-res">Keep in reserve, % <span class="fh">never plan to go below this</span><input id="m-res" type="number" min="0" max="90" step="5" value="20"></label>
+        <label class="fl" for="m-lsun">Power use in sunlight, W <span class="fh">instruments, radio, computer</span><input id="m-lsun" type="number" min="0" max="100000" step="10" value="180"></label>
+        <label class="fl" for="m-ldark">Power use in the dark, W <span class="fh">mostly heaters and the computer</span><input id="m-ldark" type="number" min="0" max="100000" step="10" value="60"></label>
       </div>
-      <h3 class="subh">Stress test: what if something breaks?</h3>
+      <h3 class="subh">Mission</h3>
       <div class="form">
-        <label class="fl" for="m-fault">Fault<select id="m-fault"><option value="none">Nothing fails</option><option value="array">Solar array loses 30% output</option><option value="load">Unexpected 100 W load</option><option value="battery">Battery loses 25% capacity</option><option value="antenna">Antenna down for 24 hours</option></select></label>
-        <label class="fl" for="m-fday">Starts on mission day<input id="m-fday" type="number" min="0" max="60" step="0.5" value="3"></label>
-        <label class="chk" for="m-safe"><input id="m-safe" type="checkbox"> Safe mode: drop to the darkness load when the battery is under 40%, until it recovers to 70%</label>
+        <label class="fl" for="m-days">Time on the surface, days<input id="m-days" type="number" min="1" max="60" step="1" value="10"></label>
+        <label class="fl" for="m-auto">Survive a blackout of, h <span class="fh">spare battery at the lowest point</span><input id="m-auto" type="number" min="0" max="72" step="1" value="6"></label>
+        <label class="fl" for="m-margin">Terrain margin, ° <span class="fh">raises every hill to allow for map error</span><input id="m-margin" type="number" min="0" max="3" step="0.1" value="0.3"></label>
       </div>
-      <p class="cap">The terrain margin raises every horizon by that angle. A plan that only passes without it is flagged as marginal.</p>
+      <h3 class="subh">Communications</h3>
+      <div class="form">
+        <label class="chk" for="m-dte"><input id="m-dte" type="checkbox" checked> Needs a direct link to Earth</label>
+        <label class="chk" for="m-dsn"><input id="m-dsn" type="checkbox" checked> Through NASA's Deep Space Network (a dish at Goldstone, Madrid or Canberra must have the Moon above 10°)</label>
+        <label class="fl" for="m-gap">Longest time without contact, h<input id="m-gap" type="number" min="0" max="2000" step="1" value="12"></label>
+      </div>
     </section>
 
   <section id="sec-verdict" class="panel" data-v="plan" aria-label="Mission verdict">
@@ -176,61 +176,75 @@
         <div class="tile"><div class="k">Battery needed</div><div class="v" id="mv-need"></div><div class="s" id="mv-need-s"></div></div>
         <div class="tile sun"><div class="k">Time in sunlight</div><div class="v" id="mv-lit"></div><div class="s" id="mv-lit-s"></div></div>
       </div>
-      <p class="readout" id="mv-fault"></p>
       <canvas id="surv" role="img" aria-label="Mission survival timeline: sunlight, Earth line of sight and battery level for each mission day"></canvas>
       <ul class="legend"><li><i style="background:var(--sun)"></i>Sunlight on the array</li><li><i style="background:var(--earth)"></i>Earth line of sight</li><li><i style="background:var(--go)"></i>Battery level</li><li><i style="background:var(--muted)"></i>Battery with the terrain margin applied</li><li><i style="background:var(--warn)"></i>Safe mode</li></ul>
       <div class="row"><button id="report" type="button">Copy mission report</button><button id="reportdl" type="button">Download report</button><span class="readout" id="reportmsg"></span></div>
     </section>
 
+  <section id="sec-cont" class="panel span2" data-v="plan" aria-label="Contingency planning">
+      <div class="phead"><h2>Contingency planning</h2><div class="pills" id="c-pill"></div></div>
+      <p class="cap">Something going wrong partway through the mission, and whether the lander still gets through. Results show in the verdict above.</p>
+      <div class="form">
+        <label class="fl" for="m-fault">Scenario<select id="m-fault"><option value="none">Nominal: nothing goes wrong</option><option value="array">Solar output drops 30%</option><option value="load">Extra 100 W load that will not switch off</option><option value="battery">Battery loses 25% of its capacity</option><option value="antenna">No Earth contact for 24 hours</option><option value="custom">Custom</option></select></label>
+        <label class="fl" for="m-fday">Starts on mission day<input id="m-fday" type="number" min="0" max="60" step="0.5" value="3"></label>
+      </div>
+      <p class="cap" id="c-why"></p>
+      <div class="form" id="c-custom" hidden>
+        <label class="fl" for="c-arr">Solar output lost, %<input id="c-arr" type="number" min="0" max="100" step="5" value="20"></label>
+        <label class="fl" for="c-load">Extra load, W<input id="c-load" type="number" min="0" max="10000" step="10" value="50"></label>
+        <label class="fl" for="c-bat">Battery capacity lost, %<input id="c-bat" type="number" min="0" max="95" step="5" value="10"></label>
+        <label class="fl" for="c-out">No Earth contact for, h<input id="c-out" type="number" min="0" max="1000" step="1" value="12"></label>
+      </div>
+      <label class="chk" for="m-safe"><input id="m-safe" type="checkbox"> Safe mode: when the battery falls below 40%, cut power use to the dark-time level until it is back above 70%</label>
+      <p class="readout" id="mv-fault"></p>
+    </section>
+
   <section id="sec-design" class="panel span2" data-v="plan" aria-label="Mission design">
       <div class="phead"><h2>Mission design</h2><div class="pills" id="d-pill"></div></div>
-      <p class="cap">Which solar array and battery sizes get through this mission. Each point on the chart is one combination, run through the same simulation as the verdict above. The green area passes. Click the chart to try a size.</p>
-      <div class="row">
-        <label class="fl" for="d-wkg">Solar array, W per kg<input id="d-wkg" type="number" min="5" max="500" step="5" value="80"></label>
-        <label class="fl" for="d-whkg">Battery, Wh per kg<input id="d-whkg" type="number" min="20" max="500" step="10" value="160"></label>
-        <button id="d-hard" type="button">Try a hard case</button>
-      </div>
+      <p class="cap">Which combinations of solar output and battery size get through this mission, at this site and landing time. The green area passes even with the terrain margin. The ring is your lander. Click the chart to try a combination.</p>
       <div class="risk">
         <div class="riskl">
           <div class="tiles">
-            <div class="tile"><div class="k">Smallest that passes</div><div class="v" id="d-best">…</div><div class="s" id="d-best-s"></div>
-              <div class="row" style="margin-top:8px"><button id="d-apply" type="button">Use this design</button></div></div>
-            <div class="tile"><div class="k">Your lander</div><div class="v" id="d-cur">…</div><div class="s" id="d-cur-s"></div></div>
+            <div class="tile"><div class="k">Battery needed with your solar panels</div><div class="v" id="d-cb">…</div><div class="s" id="d-cb-s"></div>
+              <div class="row" style="margin-top:8px"><button id="d-cb-go" type="button">Use this battery</button></div></div>
+            <div class="tile"><div class="k">Solar output needed with your battery</div><div class="v" id="d-pa">…</div><div class="s" id="d-pa-s"></div>
+              <div class="row" style="margin-top:8px"><button id="d-pa-go" type="button">Use this solar output</button></div></div>
           </div>
           <div class="bars" id="d-alt"></div>
-          <canvas id="dab" role="img" aria-label="Battery level through the mission for your lander and for the smallest one that passes"></canvas>
-          <ul class="legend"><li><i style="background:var(--muted)"></i>Your lander</li><li><i style="background:var(--go)"></i>Smallest that passes</li></ul>
+          <div class="row"><button id="d-hard" type="button">Try an undersized lander</button></div>
         </div>
         <div>
-          <canvas id="dfront" role="img" aria-label="Survival frontier: which solar array and battery sizes pass the mission"></canvas>
+          <canvas id="dfront" role="img" aria-label="Which solar output and battery sizes pass the mission"></canvas>
           <ul class="legend" style="margin-top:8px"><li><i style="background:var(--go)"></i>Passes with the terrain margin</li><li><i style="background:var(--warn)"></i>Passes only without it</li><li><i style="background:var(--cell)"></i>Fails</li></ul>
         </div>
       </div>
       <h3 class="subh">Other landing dates</h3>
-      <p class="cap">The same sizing done for a landing every 12 hours over the next 60 days. Lower means less array and battery mass. Grey gaps are dates where no size works, usually because the landing would be in the dark or out of contact. Click to move the landing date.</p>
-      <canvas id="datlas" role="img" aria-label="Array and battery mass needed for each landing time"></canvas>
+      <p class="cap">For a landing every 12 hours over the next 60 days: the battery your lander would need with the solar panels it has. The dashed line is your battery. Bars under the line are dates your lander already handles. Grey means no battery is big enough, usually because the landing would be in the dark or out of contact. Click to move the landing date.</p>
+      <canvas id="datlas" role="img" aria-label="Battery needed for each landing time with your solar panels"></canvas>
       <div class="tblwrap"><table id="d-tbl"></table></div>
     </section>
 
   <section id="sec-risk" class="panel span2" data-v="plan" aria-label="Landing risk">
       <div class="phead"><h2>Landing risk</h2><div class="pills" id="k-pill"></div></div>
-      <p class="cap">Landers never come down exactly on target. This runs thousands of missions with small changes to the touchdown point, landing time, terrain height and hardware performance. Landing on ground steeper than the safe slope counts as a loss. The share that still makes it is the chance of success.</p>
+      <p class="cap">Landers never touch down exactly on target. This simulates a few thousand landings around your aim point, each a little off in position and timing, with small errors in solar output, power use and the terrain map. Landing on ground steeper than the safe slope counts as a loss. The share that still completes the mission is the chance of success.</p>
       <div class="row">
-        <label class="fl" for="k-acc">Landing accuracy, m (3σ)<input id="k-acc" type="number" min="200" max="5000" step="100" value="500"></label>
-        <label class="fl" for="k-time">Landing time uncertainty, h (3σ)<input id="k-time" type="number" min="0" max="72" step="1" value="6"></label>
-        <label class="fl" for="k-slope">Steepest safe slope, °<input id="k-slope" type="number" min="1" max="45" step="1" value="12"></label>
-        <button id="k-new" type="button">New random draw</button>
+        <label class="fl" for="k-acc">Landing accuracy, m <span class="fh">almost all landings fall within this</span><input id="k-acc" type="number" min="200" max="5000" step="100" value="500"></label>
+        <label class="fl" for="k-slope">Safe slope, °<input id="k-slope" type="number" min="1" max="45" step="1" value="12"></label>
+        <label class="fl" for="k-level">How uncertain<select id="k-level"><option value="low">Low</option><option value="typical" selected>Typical</option><option value="high">High</option><option value="custom" hidden>Custom</option></select></label>
+        <button id="k-new" type="button">Run again</button>
         <span class="readout" id="k-msg"></span>
       </div>
-      <details id="k-assume"><summary>Change the assumptions</summary>
+      <details id="k-assume"><summary>Fine-tune the uncertainties</summary>
         <div class="row" style="margin-top:10px">
-          <label class="fl" for="k-sp">Array output error, % (1σ)<input id="k-sp" type="number" min="0" max="50" step="1" value="5"></label>
-          <label class="fl" for="k-sl">Load error, % (1σ)<input id="k-sl" type="number" min="0" max="50" step="1" value="5"></label>
-          <label class="fl" for="k-sb">Battery capacity error, % (1σ)<input id="k-sb" type="number" min="0" max="50" step="1" value="3"></label>
-          <label class="fl" for="k-st">Terrain height error, ° (1σ)<input id="k-st" type="number" min="0" max="2" step="0.05" value="0.15"></label>
-          <label class="fl" for="k-seed">Random seed<input id="k-seed" type="number" min="1" max="2000000000" step="1" value="20261114"></label>
-          <label class="chk" for="k-corr"><input id="k-corr" type="checkbox"> Cold case: loads run high and the battery runs low together</label>
+          <label class="fl" for="k-time">Landing time, ± h<input id="k-time" type="number" min="0" max="72" step="1" value="6"></label>
+          <label class="fl" for="k-sp">Solar output, ± %<input id="k-sp" type="number" min="0" max="50" step="1" value="5"></label>
+          <label class="fl" for="k-sl">Power use, ± %<input id="k-sl" type="number" min="0" max="50" step="1" value="5"></label>
+          <label class="fl" for="k-sb">Battery capacity, ± %<input id="k-sb" type="number" min="0" max="50" step="1" value="3"></label>
+          <label class="fl" for="k-st">Terrain map, ± °<input id="k-st" type="number" min="0" max="2" step="0.05" value="0.15"></label>
+          <label class="fl" for="k-seed">Random seed <span class="fh">same seed, same result</span><input id="k-seed" type="number" min="1" max="2000000000" step="1" value="20261114"></label>
+          <label class="chk" for="k-corr"><input id="k-corr" type="checkbox"> Cold case: power use runs high and the battery runs low at the same time</label>
         </div>
+        <p class="cap">Landing time is a 3σ spread; the others are 1σ.</p>
       </details>
       <div class="risk">
         <div class="riskl">
@@ -238,14 +252,14 @@
             <div class="tile"><div class="k">Chance of success</div><div class="v" id="k-p">…</div><div class="s" id="k-p-s"></div></div>
             <div class="tile"><div class="k">With a perfect landing</div><div class="v" id="k-det">…</div><div class="s" id="k-det-s"></div></div>
           </div>
-          <div class="tile"><div class="k">Best aim point nearby</div><div class="v" id="k-best">…</div><div class="s" id="k-best-s"></div>
-            <div class="row" style="margin-top:8px"><button id="k-go" type="button">Retarget there</button></div></div>
+          <div class="tile"><div class="k">Better aim point nearby</div><div class="v" id="k-best">…</div><div class="s" id="k-best-s"></div>
+            <div class="row" style="margin-top:8px"><button id="k-go" type="button">Aim there</button></div></div>
           <div class="bars" id="k-causes"></div>
           <div class="bars" id="k-drivers"></div>
         </div>
         <div>
           <canvas id="risk" role="img" aria-label="Map of the landing area coloured by the chance of mission success at each touchdown point"></canvas>
-          <ul class="legend" style="margin-top:8px"><li><i style="background:var(--go)"></i>Greener ground: more simulated missions succeed there</li><li><i style="background:#fff;border:1px solid var(--muted);border-radius:50%"></i>Dashed circle: where the lander may come down</li><li><i style="background:repeating-linear-gradient(135deg,var(--bad) 0 2px,transparent 2px 5px)"></i>Hatched: steeper than the safe slope</li></ul>
+          <ul class="legend" style="margin-top:8px"><li><i style="background:var(--go)"></i>Greener: more landings there succeed</li><li><i style="background:#fff;border:1px solid var(--muted);border-radius:50%"></i>Dashed circle: where the lander may come down</li><li><i style="background:repeating-linear-gradient(135deg,var(--bad) 0 2px,transparent 2px 5px)"></i>Hatched: too steep</li></ul>
         </div>
       </div>
       <p class="cap" id="k-cap"></p>
@@ -341,8 +355,8 @@
             <li>Earth contact means line of sight to Earth's centre and, with the DSN option on, the Moon at least 10° above the horizon at Goldstone, Madrid or Canberra (positions from SPICE). Dish scheduling, link margin and weather are not modelled.</li>
             <li>Hourly sampling can miss a visibility window shorter than an hour.</li>
             <li>The chance of success comes with a 95% interval that reflects the finite number of simulated missions only. It is not a mission reliability guarantee: the spreads fed in are assumptions you can change under "Change the assumptions". Slope is measured over about 160 m, so boulders and small craters are not seen.</li>
-            <li>Mission design masses are rough figures: array output and battery energy divided by the W per kg and Wh per kg you enter. Structure, wiring, thermal control and margins are not included.</li>
-            <li>The stress test applies one fault at a time, and safe mode is a simple rule. Neither models how real flight software behaves.</li>
+            <li>Mission design sizes solar output and battery only. It does not estimate mass, cost or volume.</li>
+            <li>Contingency planning applies one scenario at a time (a custom scenario can combine several effects), and safe mode is a simple rule. Neither models how real flight software behaves.</li>
             <li>The landing-risk analysis ray-casts each touchdown cell on the server from the finest terrain there (5 m where a site map exists, else 80 m), sampled every 30 m near the cell. Hazards smaller than that are not seen.</li>
             <li>At 400 m and coarser, features smaller than the grid are smoothed. Use the terrain margin to see how sensitive a result is.</li>
             <li>Coordinates of planned missions are published targets and may change.</li>
