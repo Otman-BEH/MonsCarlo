@@ -19,14 +19,22 @@ import { createTerrain } from './js/terrain.js';
   // ---------- sites (from the server) ----------
   let SITES = [];
   const byId = id => id === 'custom' ? S.custom : SITES.find(s => s.id === id);
-  const short = s => s.name.split(/,| \(/)[0];
+  // Short site name for labels. Two listed sites can share one ("Mons Mouton" is both the VIPER target and the IM-2
+  // landing), so those keep the start of their bracket: "Mons Mouton (VIPER)", "Mons Mouton (IM-2)".
+  const baseName = s => s.name.split(/,| \(/)[0];
+  const short = s => {
+    const b = baseName(s); if (!SITES.some(o => o.id !== s.id && baseName(o) === b)) return b;
+    const m = /\(([^,)]*)/.exec(s.name); return m ? b + ' (' + m[1].replace(/ (target|landing|candidate)$/, '') + ')' : b;
+  };
+  // A 95% interval in whole percent, or to one decimal when both ends round to the same number.
+  const ciTxt = (lo, hi) => { const a = Math.round(lo * 100), b = Math.round(hi * 100); return a !== b ? a + ' to ' + b + '%' : (lo * 100).toFixed(1) + ' to ' + (hi * 100).toFixed(1) + '%'; };
   const loc = s => s.id === 'custom' || !s.id ? { lat: +s.lat.toFixed(5), lon: +s.lon.toFixed(5) } : { site: s.id };
   const siteKey = s => s.id === 'custom' ? 'c' + s.lat.toFixed(5) + ',' + s.lon.toFixed(5) : s.id;
 
   const floorDay = t => Math.floor(t / DAY) * DAY, floorHour = t => Math.floor(t / HOUR) * HOUR;
   const t0 = Math.round(Date.now() / 60000) * 60000;
   const S = { site: null, custom: null, t: t0, eye: 2, span: 7, landerId: 'reference', landerEdited: false, anchor: floorDay(t0), calAnchor: floorDay(t0), view: 'explore',
-              cmp: ['mala', 'ridge'], mapTab: 'pole', layer: 'sun', playing: false, plan: null, slip: 14, flex: 21, scope: 'pole', acc: 500, tjit: 6, sig: { power: 5, load: 5, cap: 3, terrain: 0.15, slope: 12, corr: false, seed: 20261114 },
+              cmp: ['shack', 'mala'], mapTab: 'pole', layer: 'sun', playing: false, plan: null, slip: 14, flex: 21, scope: 'pole', acc: 500, tjit: 6, sig: { power: 5, load: 5, cap: 3, terrain: 0.15, slope: 12, corr: false, seed: 20261114 },
               cfg: { days: 10, peakW: 400, loadSun: 180, loadDark: 60, capWh: 2000, minSoc: 0.2, arrayType: 'track', needEarth: true, useDsn: true, maxGapH: 12, margin: 0.3, chargeEff: 0.9, fault: { kind: 'none', day: 3 }, safe: false, autonomyH: 6, strict: false, heat: false } };
 
   // ---------- theme and canvas ----------
@@ -234,7 +242,7 @@ import { createTerrain } from './js/terrain.js';
     if (!R || !S.mv || S.mv.pending) { $('d-pill').innerHTML = '<span class="pill big off">' + (q.err ? 'Server error' : 'Working…') + '</span>'; waiting(cv, q.err || 'Trying solar and battery sizes…'); waiting($('datlas'), ' '); return; }
     LAB.res = R; LAB.F = R.frontier; const F = R.frontier, st = S.mv.st, stale = q.stale || S.mv.stale, any = F.rob.some(v => v !== null);
     const cb = R.min_battery_at_your_array_wh, pa = R.min_array_at_your_battery_w;
-    LAB.cb = cb == null ? null : Math.ceil(cb / 10) * 10; LAB.pa = pa == null ? null : Math.ceil(pa / 5) * 5;
+    LAB.cb = cb == null ? null : Math.ceil((cb - 1e-3) / 10) * 10; LAB.pa = pa == null ? null : Math.ceil(pa / 5) * 5;
     const diff = (have, need, f) => have >= need ? f(have - need) + ' to spare' : f(need - have) + ' short';
     if (!any) {
       $('d-cb').textContent = 'None'; $('d-pa').textContent = 'None';
@@ -326,16 +334,23 @@ import { createTerrain } from './js/terrain.js';
     const cv = $('risk'), r = riskNow(), cur = r && !r.pending && !r.stale;
     if (!riskOk()) {
       $('k-pill').innerHTML = ''; ['k-p', 'k-det', 'k-best'].forEach(id => { $(id).textContent = '—'; }); ['k-p-s', 'k-det-s', 'k-best-s'].forEach(id => { $(id).textContent = ''; }); $('k-causes').innerHTML = ''; $('k-drivers').innerHTML = ''; $('k-go').disabled = true;
-      $('k-cap').textContent = 'This analysis needs the polar terrain, which covers 80°S to the south pole. Pick a south-pole site to use it.'; $('k-msg').textContent = '';
+      $('k-cap').textContent = 'This analysis needs the polar terrain, which covers 80°S to the south pole. Pick a south-pole site to use it.'; $('k-msg').textContent = ''; $('k-say').textContent = '';
     } else if (r && !r.pending) {
       const pc = Math.round(r.p * 100), lvl = r.p >= 0.9 ? ['go', 'Low risk'] : r.p >= 0.6 ? ['warn', 'Moderate risk'] : ['bad', 'High risk'];
       $('k-pill').innerHTML = cur ? '<span class="pill big ' + lvl[0] + '">' + lvl[1] + '</span>' : '<span class="pill big off">' + (r.err ? 'Server error' : 'Updating…') + '</span>';
       $('k-msg').textContent = cur ? r.total.toLocaleString('en-US') + ' landings in ' + r.seconds + ' s' : r.err || 'Simulating…';
-      $('k-p').textContent = pc + '%'; $('k-p-s').textContent = '95% interval ' + Math.round(r.lo * 100) + ' to ' + Math.round(r.hi * 100) + '% · ' + r.total.toLocaleString('en-US') + ' simulated missions';
+      $('k-p').textContent = pc + '%'; $('k-p-s').textContent = '95% interval ' + ciTxt(r.lo, r.hi) + ' · ' + r.total.toLocaleString('en-US') + ' simulated missions';
       const mid = (r.n * r.n - 1) / 2, d = r.slope[mid] > S.sig.slope ? 0 : r.det[mid]; $('k-det').textContent = STN[d]; $('k-det-s').textContent = 'Nothing varied · slope at the aim point ' + r.slope[mid].toFixed(0) + '°';
       const better = r.best.clear;
+      // The verdict further up is for one touchdown point and one landing hour. When that passes but many of the scattered
+      // landings do not, say so in words, with the most common cause.
+      if (d === 2 && r.p < 0.9) {
+        let top = 0; r.causes.forEach((v, j) => { if (v > r.causes[top]) top = j; });
+        $('k-say').textContent = 'A touchdown exactly on the aim point at the planned hour meets the needs, and that is the verdict above. Across the landing circle only ' + pc + '% of the simulated landings do. The most common failure is "' + CAUSES[top].toLowerCase() + '", in ' + Math.round(r.causes[top] * 100) + '% of runs.'
+          + (better ? ' Moving the aim ' + fmtDist(r.best.dist) + ' raises the chance to ' + Math.round(r.best.p * 100) + '%.' : '');
+      } else $('k-say').textContent = '';
       $('k-best').textContent = better ? Math.round(r.best.p * 100) + '%' : 'Keep this aim'; $('k-go').disabled = !better || !cur; $('k-go').hidden = !better;
-      $('k-best-s').textContent = better ? 'Checked on a separate set of draws: 95% interval ' + Math.round(r.best.lo * 100) + ' to ' + Math.round(r.best.hi * 100) + '%. Move the aim ' + fmtDist(r.best.dist) + ' toward ' + r.best.bearing.toFixed(0) + '° ' + compass(r.best.bearing) + ', to ' + fmtLat(r.best.lat) + ' ' + fmtLon(r.best.lon) : 'Nowhere within ' + fmtDist(1.5 * r.Rkm) + ' is clearly better';
+      $('k-best-s').textContent = better ? 'Checked on a separate set of draws: 95% interval ' + ciTxt(r.best.lo, r.best.hi) + '. Move the aim ' + fmtDist(r.best.dist) + ' toward ' + r.best.bearing.toFixed(0) + '° ' + compass(r.best.bearing) + ', to ' + fmtLat(r.best.lat) + ' ' + fmtLon(r.best.lon) : 'Nowhere within ' + fmtDist(1.5 * r.Rkm) + ' is clearly better';
       const fail = 1 - r.p; let h = '<div class="bt">Why landings fail, share of all runs</div>';
       CAUSES.forEach((nm, j) => { if (j >= 4 && r.causes[j] < 0.005) return; h += '<div class="br"><span>' + nm + '</span><span class="bb"><i style="width:' + Math.min(100, r.causes[j] * 100).toFixed(1) + '%"></i></span><span class="bv">' + Math.round(r.causes[j] * 100) + '%</span></div>'; });
       $('k-causes').innerHTML = fail < 0.005 ? '<div class="bt">No simulated mission failed</div>' : h;
@@ -1090,7 +1105,7 @@ import { createTerrain } from './js/terrain.js';
     if (LAB.F) L.push('## Mission design', '- Battery needed with ' + fmtW(c.peakW) + ' of solar: ' + (LAB.cb === null ? 'no size is enough' : fmtWh(LAB.cb)), '- Solar output needed with a ' + fmtWh(c.capWh) + ' battery: ' + (LAB.pa === null ? 'no amount is enough' : fmtW(LAB.pa)), '- Blackout rule: ride out ' + c.autonomyH + ' h at the dark-time load from the lowest charge', '');
     const k = riskOk() ? riskNow() : null;
     if (k && !k.pending && !k.stale) {
-      L.push('## Landing risk (Monte Carlo)', '- Chance of success: ' + Math.round(k.p * 100) + '% (95% interval ' + Math.round(k.lo * 100) + ' to ' + Math.round(k.hi * 100) + '%, reflecting the number of simulated missions only), from ' + k.total.toLocaleString('en-US') + ' simulated missions, seed ' + S.sig.seed,
+      L.push('## Landing risk (Monte Carlo)', '- Chance of success: ' + Math.round(k.p * 100) + '% (95% interval ' + ciTxt(k.lo, k.hi) + ', reflecting the number of simulated missions only), from ' + k.total.toLocaleString('en-US') + ' simulated missions, seed ' + S.sig.seed,
         '- Spreads (3 sigma): touchdown within ' + S.acc + ' m, landing time within ' + S.tjit + ' h; 1 sigma: terrain ' + S.sig.terrain + '°, array output ' + S.sig.power + '%, loads ' + S.sig.load + '%, battery ' + S.sig.cap + '%' + (S.sig.corr ? ', loads and battery linked' : '') + '; steepest safe slope ' + S.sig.slope + '°',
         '- Failure causes: ' + CAUSES.map((nm, j) => nm.toLowerCase() + ' ' + Math.round(k.causes[j] * 100) + '%').slice(0, 5).join(', '),
         '- If one thing were known exactly: ' + k.drivers.map(d => d[0].toLowerCase() + ' ' + Math.round(d[1] * 100) + '%').join(', '),
@@ -1346,6 +1361,7 @@ import { createTerrain } from './js/terrain.js';
     { v: 'explore', sel: '[aria-label="Surface view"]', t: 'You are standing on the rim of Shackleton crater, near the Moon\'s south pole. The Sun and the Earth both sit just above the hills. Drag the picture to look around.', go: () => pickSite('shack') },
     { v: 'explore', sel: '[aria-label="Surface view"]', t: 'Days pass in seconds. The Sun slides sideways along the horizon instead of climbing overhead, and the Earth barely moves. That is why one ridge can decide a mission here.', go: () => { tourKeep.t = S.t; if (!S.playing) $('play').click(); }, leave: () => { if (S.playing) $('play').click(); setTime(tourKeep.t, true); } },
     { v: 'explore', sel: '#glance', t: 'The same sky as numbers along the top: how far the Sun and Earth sit above the hills, how long until each one sets, how much power the lander gets right now, and how many of the next 24 hours it can reach Earth through the Deep Space Network.' },
+    { v: 'compare', sel: '[aria-label="Compare sites"]', t: 'Put sites side by side. Each strip is one site at the same instant, and the bars underneath show when each has the Sun, the Earth, or both. The calendar further down marks the landing days that work at each site over a whole year.' },
     { v: 'plan', sel: '[aria-label="Mission needs"]', t: 'Pick a lander, such as ispace\'s HAKUTO-R or Intuitive Machines\' Nova-C, or type your own numbers. The server runs the battery and the radio link hour by hour and says whether the mission makes it.' },
     { v: 'plan', sel: '[aria-label="Mission design"]', t: 'This lander is too small: 100 W of solar and a 500 Wh battery. The green area is every solar and battery size that gets through. The two tiles say how big the battery would need to be with these panels, or how much solar with this battery, and the chart underneath does the same for other landing dates.',
       go: () => { tourKeep.hw = [S.cfg.peakW, S.cfg.capWh]; setHardware(100, 500); }, leave: () => setHardware(tourKeep.hw[0], tourKeep.hw[1]) },
@@ -1353,8 +1369,7 @@ import { createTerrain } from './js/terrain.js';
       go: () => { tourKeep.site = S.site.id; tourKeep.t2 = S.t; $('m-fault').value = 'load'; $('m-fday').value = 3; $('m-safe').checked = true; readCfg(); pickSite('mala'); setTime(Date.UTC(2026, 11, 23), true); },
       leave: () => { $('m-fault').value = 'none'; $('m-safe').checked = false; readCfg(); pickSite(tourKeep.site); setTime(tourKeep.t2, true); } },
     { v: 'plan', sel: '[aria-label="Landing risk"]', t: 'Landers miss their target by hundreds of metres. Thousands of simulated landings give a chance of success, show what goes wrong, and check whether aiming a little to one side is safer.' },
-    { v: 'plan', sel: '[aria-label="Launch slip"]', t: 'Say the launch slips by 14 days. The table lists the sites and landing times that still work. Move the slider to try other delays.' },
-    { v: 'compare', sel: '[aria-label="Landing-date calendar"]', t: 'Last, compare sites over a whole year. Green columns are landing days that work for this lander. Click a day to go there.' },
+    { v: 'plan', sel: '[aria-label="Launch slip"]', t: 'Last, say the launch slips by 14 days. The table lists the sites and landing times that still work. Move the slider to try other delays.' },
   ];
   const tourKeep = {}; let tourI = -1;
   function tourShow(i) {
@@ -1402,7 +1417,7 @@ import { createTerrain } from './js/terrain.js';
     document.querySelectorAll('a[href="docs"]').forEach(a => { a.href = (API || '') + '/docs'; });
     const sj = await getJSON('/sites');
     SITES = sj.sites.map(s => ({ id: s.id, g: s.group, name: s.name, lat: s.lat, lon: s.lon, note: s.note }));
-    S.site = SITES[0];
+    S.site = byId('ridge') || SITES[0];
     try { LANDERS = (await getJSON('/landers?full=true')).landers.filter(l => l.kind === 'preset'); } catch (_) { LANDERS = []; }
     fillLanders(); readCfg();
     $('boot').querySelector('p').textContent = 'Loading the polar terrain and the ephemeris from the server…';
@@ -1411,10 +1426,11 @@ import { createTerrain } from './js/terrain.js';
     TER.loadPolar().then(() => { buildPolar(); renderSoon(); }, err => { srv.lastErr = err; renderSoon(); });
     const hv = hashView(); if (VIEWS.includes(hv)) S.view = hv;
     ensureTab();
-    // default plan: the middle of the first run of landing days at the default site that meet the needs
+    // default plan: the last landing day of the first run of days at the default site that meet the needs. The mission then
+    // runs up to the end of the window, so the page opens on a plan that passes with little to spare and not on the easiest day.
     try {
       const cal = await getJSON('/calendar', { locations: [loc(S.site)], start: iso(S.calAnchor), days: 120, lander: lander(), mission: missionSpec() });
-      const st = cal.sites[0].state; let d0 = 0; for (let d = 0; d < 120; d++) if (st[d] === 2) { let e = d; while (e + 1 < st.length && st[e + 1] === 2) e++; d0 = Math.floor((d + e) / 2); break; }
+      const st = cal.sites[0].state; let d0 = 0; for (let d = 0; d < 120; d++) if (st[d] === 2) { let e = d; while (e + 1 < st.length && st[e + 1] === 2) e++; d0 = e; break; }
       S.t = S.calAnchor + d0 * DAY;
     } catch (_) {}
     S.plan = { site: S.site, t: floorHour(S.t) }; S.anchor = floorDay(S.t); if (S.anchor < S.calAnchor) S.calAnchor = S.anchor;
