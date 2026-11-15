@@ -322,8 +322,9 @@ label.fl .fh { font-weight: 400; font-size: 12px; color: var(--muted); }
 .avatar .badge { position: absolute; width: var(--b); height: var(--b); border-radius: 50%; background: #fff; object-fit: contain; padding: 10px; box-shadow: 0 0 0 4px var(--panel); top: calc(var(--s) * 0.854 - var(--b) / 2); }
 .avatar .badge.left { left: calc(var(--s) * 0.146 - var(--b) / 2); }
 .avatar .badge.right { left: calc(var(--s) * 0.854 - var(--b) / 2); }
-.person figcaption { display: grid; gap: 3px; max-width: 36ch; }
+.person figcaption { display: grid; gap: 3px; max-width: 42ch; text-wrap: balance; }
 .avatar .badge[src$="bath.svg"] { padding: 5px; }
+.avatar .badge[src$="finbourne.svg"] { padding: 17px; }
 .person b { font-size: 17px; font-weight: 600; }
 .person span { font-size: 14px; }
 .person .ed { color: var(--muted); }
