@@ -14,12 +14,19 @@ from pathlib import Path
 WEB = Path(__file__).resolve().parent / "web"
 
 
+class NoCache(http.server.SimpleHTTPRequestHandler):
+    """Tells the browser to check for changed files on every load, so edits to the page show up on a plain reload."""
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=5173)
     ap.add_argument("--host", default="127.0.0.1")
     a = ap.parse_args()
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(WEB))
+    handler = functools.partial(NoCache, directory=str(WEB))
     with http.server.ThreadingHTTPServer((a.host, a.port), handler) as srv:
         print(f"Web page on http://{a.host}:{a.port}/  (API address set in web/config.js)")
         srv.serve_forever()
