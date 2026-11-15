@@ -5,6 +5,9 @@ Products (in derived/):
                                        browser): the web page's shadow map, and a stand-in if the 80 m DEM is missing
   <DEM>.npy + <DEM>.geo.npy            only when a regional GeoTIFF is compressed (fast memory-mapping)
   skylines/<site>_<mode>.npy + skylines/index.json   site skylines, 720 azimuths x heights [0, 2, 5, 10, 20, 50, 100] m
+  map/grid_<dem>_<size>_v<n>.npz       the /map grids (heights, hillshade, slope, trig) at 400 px, from the 80 m DEM
+                                       (best) and from the 400 m raster (80m, main's parity mode); other sizes are built
+                                       on first request and saved here
 
     python -m skyline.prep.precompute [--force]
 """
@@ -36,6 +39,22 @@ def build_polar400(log=print) -> None:
     a = np.asarray(r.data[: n * 5, : n * 5], dtype=np.float32).reshape(n, 5, n, 5).mean(axis=(1, 3))
     _save_npy(config.DERIVED_DIR / "polar400.npy", np.rint(a).astype(np.int16))
     log(f"  polar400.npy: {n} x {n} cells of 400 m")
+
+
+def build_map_grids(log=print, sizes=(400,)) -> None:
+    from ..engine import polarmap as PM
+    from ..engine.terrain import Terrain
+    T = Terrain()
+    for size in sizes:
+        for dem in ("best", "80m"):
+            t0 = time.time()
+            try:
+                g = PM.build_grid(size, dem, T)
+            except FileNotFoundError as ex:
+                log(f"  map grid {dem} {size}: skipped ({ex})")
+                continue
+            PM.save_grid(g)
+            log(f"  map grid {dem:4s} {size} px: {g['tier']} ({time.time() - t0:.1f} s)")
 
 
 def _save_npz(path: Path, **arrays) -> None:
@@ -131,6 +150,8 @@ def run(force: bool = False, store: Store | None = None, log=print) -> bool:
     build_polar400(log)
     log("precompute: site skylines")
     build_skylines(log)
+    log("precompute: /map grids")
+    build_map_grids(log)
     store.put_stamp(STEP, ih, config.CODE_VERSION)
     log(f"precompute: done in {time.time() - t0:.0f} s")
     return True

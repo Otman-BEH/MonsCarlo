@@ -16,10 +16,18 @@ from .montecarlo import mission_batch
 C0, C1 = 60.0, 60000.0
 
 
+SCALAR_MAX = 16      # below this many candidates the scalar port is faster than one vectorised step loop
+
+
 def _ok(se, i0, cfg, margin, peak, cap, shape, lsun=None) -> np.ndarray:
     T = len(peak)
     i0 = np.broadcast_to(np.asarray(i0, dtype=np.int64), (T,))
     ls = np.full(T, float(cfg["loadSun"])) if lsun is None else np.asarray(lsun, dtype=np.float64)
+    if T <= SCALAR_MAX:
+        # mission.mission is the scalar port of main's Ana.mission (same answers as mission_batch, tested), about
+        # 0.3 ms per candidate against about 7 ms for one vectorised pass however few candidates it carries
+        return np.array([M.mission(se, int(i0[k]), dict(cfg, peakW=float(peak[k]), capWh=float(cap[k]), loadSun=float(ls[k])),
+                                   float(margin), False, shape)["ok"] for k in range(T)], dtype=bool)
     ok, _ = mission_batch(se, i0.copy(), cfg, np.full(T, float(margin)), np.asarray(peak, dtype=np.float64), ls,
                           np.full(T, float(cfg["loadDark"])), np.asarray(cap, dtype=np.float64), shape)
     return ok
@@ -152,3 +160,63 @@ def lab(se, i0: int, cfg: dict, mass_of=(80.0, 160.0), atlas_first: int | None =
     if atlas_first is not None:
         out["atlas"] = atlas(se, atlas_first, cfg, mass_of, 120, 12, shape)
     return out
+
+
+# ---------------------------------------------------------------- text and helpers for /mission-design
+def fmt_w(p: float) -> str:
+    return f"{M.js_round(p):,} W"
+
+
+def fmt_cap(c: float) -> str:
+    return f"{M.js_round(c):,} Wh"
+
+
+def fmt_kg(m: float) -> str:
+    return (M.js_fixed(m, 1) if m < 10 else str(M.js_round(m))) + " kg"
+
+
+def fixes(cfg: dict, pa, cb, load, state: int, mass_of) -> list[dict]:
+    """The fixes list of main's design lab, as numbers and as main's sentences (drawLab, src/app.js)."""
+    wkg, whkg = mass_of
+    out = []
+    cap, peak = cfg["capWh"], cfg["peakW"]
+    if pa is None:
+        out.append({"kind": "array_at_your_battery", "keep": "battery", "array_w": None, "delta_kg": None,
+                    "text": f"Keeping the {fmt_cap(cap)} battery: no array size is enough."})
+    else:
+        up = pa > peak
+        r = math.ceil(pa / 5) * 5
+        out.append({"kind": "array_at_your_battery", "keep": "battery", "array_w": float(r), "array_w_exact": float(pa),
+                    "delta_kg": (pa - peak) / wkg,
+                    "text": f"Keeping the {fmt_cap(cap)} battery: the array {'must grow to ' if up else 'could shrink to '}{fmt_w(r)} "
+                            f"({'+' if up else '−'}{fmt_kg(abs(pa - peak) / wkg)})."})
+    if cb is None:
+        out.append({"kind": "battery_at_your_array", "keep": "array", "battery_wh": None, "delta_kg": None,
+                    "text": f"Keeping the {fmt_w(peak)} array: no battery size is enough."})
+    else:
+        up = cb > cap
+        r = math.ceil(cb / 10) * 10
+        out.append({"kind": "battery_at_your_array", "keep": "array", "battery_wh": float(r), "battery_wh_exact": float(cb),
+                    "delta_kg": (cb - cap) / whkg,
+                    "text": f"Keeping the {fmt_w(peak)} array: the battery {'must grow to ' if up else 'could shrink to '}{fmt_cap(r)} "
+                            f"({'+' if up else '−'}{fmt_kg(abs(cb - cap) / whkg)})."})
+    if state < 2:
+        if load is None or load < 1:
+            out.append({"kind": "sunlit_load", "keep": "hardware", "load_sunlit_w": None,
+                        "text": "Cutting the sunlight load alone cannot save this hardware."})
+        else:
+            out.append({"kind": "sunlit_load", "keep": "hardware", "load_sunlit_w": float(math.floor(load)), "load_sunlit_w_exact": float(load),
+                        "text": f"Keeping all hardware: cut the sunlight load from {fmt_w(cfg['loadSun'])} to {fmt_w(math.floor(load))}."})
+    return out
+
+
+def best_dates(mass: list, n: int = 4, min_sep: int = 6) -> list[int]:
+    """main's atlas table: the n lightest landing times, each at least min_sep steps from the ones already picked."""
+    order = sorted((j for j, m in enumerate(mass) if m is not None), key=lambda j: mass[j])
+    top: list[int] = []
+    for j in order:
+        if all(abs(q - j) >= min_sep for q in top):
+            top.append(j)
+        if len(top) == n:
+            break
+    return top

@@ -2,7 +2,8 @@
 
 1. verify or download the raw NASA / JPL files listed in manifest.json
 2. precompute derived products (skipped when the stamp matches)
-3. pre-fetch 14 months of ephemeris from JPL Horizons (SPICE fallback; failures do not stop startup)
+3. pre-fetch 14 months of ephemeris and of the Deep Space Network view from JPL Horizons (SPICE fallback; failures do
+   not stop startup)
 4. start the API on http://127.0.0.1:8000  (interactive docs at /docs)
 
 Every step is safe to rerun and skips work already done.
@@ -55,6 +56,14 @@ def main(argv=None) -> int:
         except Exception as ex:   # a failure here must not stop the server: requests fetch on demand
             print(f"    pre-fetch stopped: {ex}")
         print(f"    done in {time.time() - t:.0f} s; cache: {default_ephemeris().coverage()}")
+        from skyline.engine.dsn import default_dsn
+        t = time.time()
+        print(f"    Deep Space Network view: {a.months} months, 3 stations (cached months are skipped)")
+        try:
+            default_dsn().prefetch(a.months)
+        except Exception as ex:
+            print(f"    DSN pre-fetch stopped: {ex}")
+        print(f"    done in {time.time() - t:.0f} s; cache: {default_dsn().coverage()}")
 
     if a.no_serve:
         return 0

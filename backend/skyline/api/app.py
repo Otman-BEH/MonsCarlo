@@ -15,6 +15,7 @@ from ..engine.landers import UnknownLander
 from ..engine.service import OutOfCoverage
 from ..engine.sites import BadLocation, UnknownSite
 from .routes import router
+from .routes_plan import router as plan_router
 
 DESCRIPTION = """
 Sun and Earth against the real lunar skyline, for any site, date and lander.
@@ -22,6 +23,15 @@ Sun and Earth against the real lunar skyline, for any site, date and lander.
 **One call answers the challenge question** (`/report`). Five more give you every number behind it:
 `/sky` (Sun and Earth now), `/windows` (power and radio windows), `/mission` (verdict for a lander, optional Monte Carlo
 landing risk), `/horizon` (the skyline), `/sites` and `/landers`.
+
+**Planning, in the order a mission planner asks:**
+
+- *Where?* `/map` (sunlight and Earth view across the south pole right now, PNG or JSON) and `/compare` (2 to 8 sites
+  or points side by side, with the best site per column).
+- *When, and can we talk to Earth?* `/landing-window` (best landing times at one or many sites, also after a schedule
+  slip) and `/dsn` (Moon elevation at Goldstone, Madrid and Canberra; `dsn=true` on `/sky` and `/windows`).
+- *With what hardware?* `/mission-design` (the lightest array and battery that survive, with fixes) and
+  `/mission-design/atlas` (the landing dates that need the least hardware).
 
 Ephemeris: JPL Horizons API, cached by month in SQLite (SPICE DE440 fallback). Terrain: NASA LOLA elevation models
 (PGDA products 78 and 90). Every response names its sources in `meta`.
@@ -32,6 +42,7 @@ app = FastAPI(title="Mons Carlo API", version=config.API_VERSION, description=DE
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "DELETE"], allow_headers=["*"])
 app.add_middleware(GZipMiddleware, minimum_size=2000)
 app.include_router(router)
+app.include_router(plan_router)
 
 
 def _err(status: int, detail: str, **extra):
@@ -76,7 +87,10 @@ async def _value(_: Request, ex: ValueError):
 @app.get("/api", include_in_schema=False)
 def api_root():
     return {"name": "Mons Carlo API", "version": config.API_VERSION, "docs": "/docs",
-            "try": ["/report?site=shack", "/sky?site=mala", "/sites", "/landers"]}
+            "try": ["/report?site=shack", "/sky?site=mala&dsn=true", "/sites", "/landers"],
+            "plan": {"where": ["/map?layer=sun&format=png", "/compare?sites=shack,ridge,mala"],
+                     "when": ["/landing-window?site=mala", "/dsn?start=now"],
+                     "what_hardware": ["/mission-design?site=mala", "/mission-design/atlas?site=mala"]}}
 
 
 # the web page (repo folder web/): the same server answers the API and serves the page that uses it

@@ -85,3 +85,38 @@ class RescueRequest(BaseModel):
     lander: Optional[LanderSpec] = None
     mission: MissionSpec = MissionSpec()
     dem: Literal["best", "80m"] = "best"
+
+
+class LandingWindowRequest(BaseModel):
+    """POST /landing-window: the nested form (like POST /mission)."""
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [{
+        "plan": {"site": "mala"}, "plan_time": "2026-12-01T06:00:00Z", "slip_days": 14, "flex_days": 21, "scope": "pole",
+        "lander": "reference", "mission": {"duration_days": 10}}]})
+    plan: LocationIn
+    plan_time: Optional[str] = Field(default=None, description="ISO 8601 UTC; default now")
+    slip_days: int = Field(default=0, ge=0, le=365, description="schedule slip before the search starts (main's default was 14)")
+    flex_days: int = Field(default=21, ge=0, le=60, description="how many days after the slipped date to search")
+    scope: Literal["pole", "all"] = Field(default="pole", description="pole: every catalogue site at or below 80S; all: every site")
+    sites: Optional[list[LocationIn]] = Field(default=None, max_length=30, description="search these instead of scope")
+    step_h: int = Field(default=6, ge=1, le=24)
+    needs_dsn_at_landing: bool = False
+    min_el_deg: float = Field(default=10, ge=0, le=90)
+    lander: Optional[LanderSpec] = None
+    mission: MissionSpec = MissionSpec()
+    dem: Literal["best", "80m"] = "best"
+
+
+class MissionDesignRequest(BaseModel):
+    """POST /mission-design and POST /mission-design/atlas: everything POST /mission takes, plus the mass figures."""
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [{
+        "location": {"site": "mala"}, "landing_time": "2026-12-01T06:00:00Z", "lander": "reference", "mission": {"duration_days": 10}}]})
+    location: LocationIn
+    landing_time: Optional[str] = None
+    lander: Optional[LanderSpec] = None
+    mission: MissionSpec = MissionSpec()
+    array_w_per_kg: Optional[float] = Field(default=None, ge=5, le=500, description="default: the lander's mass block, else 80")
+    battery_wh_per_kg: Optional[float] = Field(default=None, ge=20, le=500, description="default: the lander's mass block, else 160")
+    start: Optional[str] = Field(default=None, description="atlas only: first landing time (default 5 days before the landing day)")
+    days: float = Field(default=60, ge=1, le=120, description="atlas only")
+    step_h: int = Field(default=12, ge=1, le=48, description="atlas only")
+    dem: Literal["best", "80m"] = "best"

@@ -190,8 +190,9 @@ def draws(R: Rng, K: int, sig: dict) -> dict:
 
 def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak: np.ndarray, lsun: np.ndarray,
                   ldark: np.ndarray, cap: np.ndarray, shape: np.ndarray, row: np.ndarray | None = None,
-                  shape_per_trial: bool = False) -> tuple[np.ndarray, np.ndarray]:
-    """Vectorised Ana.mission for T trials. Returns (ok (T,), first-fail cause index (T,), -1 when ok).
+                  shape_per_trial: bool = False, stats: bool = False):
+    """Vectorised Ana.mission for T trials. Returns (ok (T,), first-fail cause index (T,), -1 when ok), and with
+    stats=True a third item: {"min_soc": (T,), "max_gap_h": (T,)} (lowest charge as a share of capacity, longest link gap).
 
     One series: se arrays (H,), shape (H,) or (T, H) per trial.
     Many cells at once: se arrays (C, H), row (T,) = each trial's cell, shape (C, H) or (T, H) per trial."""
@@ -274,6 +275,8 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
         first((autoWh > 0) & (minE >= floor) & (minE - floor < autoWh), 2)
         if cfg["needEarth"]:
             first(maxGap > cfg["maxGapH"], 3)
+    if stats:
+        return cause < 0, cause, {"min_soc": np.maximum(0.0, minE / cap), "max_gap_h": maxGap}
     return cause < 0, cause
 
 

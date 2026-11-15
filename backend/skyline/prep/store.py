@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS ephem_months (
 CREATE TABLE IF NOT EXISTS landers (id TEXT PRIMARY KEY, body TEXT NOT NULL, created_utc TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, bytes INTEGER NOT NULL, sha256 TEXT NOT NULL, verified_utc TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS stamps (step TEXT PRIMARY KEY, inputs_hash TEXT NOT NULL, code_version TEXT NOT NULL, done_utc TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS dsn (
+  station TEXT NOT NULL, t INTEGER NOT NULL, az REAL NOT NULL, el REAL NOT NULL, source TEXT NOT NULL,
+  PRIMARY KEY (station, t));
+CREATE TABLE IF NOT EXISTS dsn_months (
+  station TEXT NOT NULL, month TEXT NOT NULL, source TEXT NOT NULL, fetched_utc TEXT NOT NULL, rows INTEGER NOT NULL,
+  PRIMARY KEY (station, month));
 """
 
 
@@ -87,6 +93,29 @@ class Store:
     def months(self) -> list[dict]:
         cur = self.conn().execute("SELECT body, month, source, fetched_utc, rows FROM ephem_months ORDER BY month, body")
         return [dict(zip(("body", "month", "source", "fetched_utc", "rows"), r)) for r in cur.fetchall()]
+
+    # ---------- Deep Space Network: Moon azimuth and elevation per station ----------
+    def dsn_month_info(self, station: str, month: str) -> dict | None:
+        r = self.conn().execute("SELECT source, fetched_utc, rows FROM dsn_months WHERE station=? AND month=?", (station, month)).fetchone()
+        return {"source": r[0], "fetched_utc": r[1], "rows": r[2]} if r else None
+
+    def put_dsn_month(self, station: str, month: str, t: np.ndarray, az: np.ndarray, el: np.ndarray, source: str) -> None:
+        rows = [(station, int(ti), float(a), float(e), source) for ti, a, e in zip(t, az, el)]
+        with self.tx() as c:
+            c.executemany("INSERT OR REPLACE INTO dsn (station, t, az, el, source) VALUES (?,?,?,?,?)", rows)
+            c.execute("INSERT OR REPLACE INTO dsn_months (station, month, source, fetched_utc, rows) VALUES (?,?,?,?,?)",
+                      (station, month, source, utcnow(), len(rows)))
+
+    def get_dsn(self, station: str, t0: int, t1: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
+        rows = self.conn().execute("SELECT t, az, el, source FROM dsn WHERE station=? AND t>=? AND t<=? ORDER BY t", (station, t0, t1)).fetchall()
+        if not rows:
+            return np.zeros(0, np.int64), np.zeros(0), np.zeros(0), []
+        return (np.fromiter((r[0] for r in rows), np.int64, len(rows)), np.array([r[1] for r in rows]),
+                np.array([r[2] for r in rows]), [r[3] for r in rows])
+
+    def dsn_months(self) -> list[dict]:
+        cur = self.conn().execute("SELECT station, month, source, fetched_utc, rows FROM dsn_months ORDER BY month, station")
+        return [dict(zip(("station", "month", "source", "fetched_utc", "rows"), r)) for r in cur.fetchall()]
 
     # ---------- landers ----------
     def list_landers(self) -> list[dict]:

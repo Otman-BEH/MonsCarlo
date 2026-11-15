@@ -15,9 +15,9 @@ MANIFEST_PATH = BACKEND_DIR / "manifest.json"
 # and the Moon mosaic used by the web page's globe. Both were derived from the LLNL ssa-data-lunar package.
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
-API_VERSION = "0.1.0"
+API_VERSION = "0.2.0"
 # Bump when precompute logic or the site list changes: the stamp then no longer matches and precompute reruns.
-CODE_VERSION = "4"
+CODE_VERSION = "5"
 
 # Geometry (km), as in main's src/engine.js
 RM = 1737.4

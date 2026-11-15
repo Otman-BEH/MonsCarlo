@@ -61,23 +61,65 @@ DSN = [("Goldstone", 35.4267, -116.8900, 900.0), ("Madrid", 40.4314, -4.2481, 90
 
 
 def dsn_view(t_unix: float) -> list[dict]:
-    """Elevation of the Moon's centre above the horizon at each DSN complex (IAU_EARTH from pck00011, light time and
-    stellar aberration corrected): geometric elevation, no atmospheric refraction. Above 15 deg it agrees with main's
-    Astronomy Engine values to 0.06 deg; near and below the horizon main's figures are lifted by its 'normal' refraction
-    (up to about 0.7 deg), which does not matter for the 10 deg visibility check."""
+    """Elevation of the Moon's centre at each DSN complex at one instant (see dsn_azel)."""
+    az, el = dsn_azel(np.array([float(t_unix)]))
+    return [{"name": d[0], "azimuth_deg": float(az[k, 0]), "elevation_deg": float(el[k, 0])} for k, d in enumerate(DSN)]
+
+
+_AS = np.pi / 180 / 3600
+J2000_UNIX = 946728000.0          # 2000-01-01T12:00:00 UTC
+
+
+def _rz(a):
+    c, s, o, i = np.cos(a), np.sin(a), np.zeros_like(a), np.ones_like(a)
+    return np.stack([np.stack([c, s, o], -1), np.stack([-s, c, o], -1), np.stack([o, o, i], -1)], -2)
+
+
+def _ry(a):
+    c, s, o, i = np.cos(a), np.sin(a), np.zeros_like(a), np.ones_like(a)
+    return np.stack([np.stack([c, o, -s], -1), np.stack([o, i, o], -1), np.stack([s, o, c], -1)], -2)
+
+
+def earth_fixed_from_j2000(et: np.ndarray, t_unix: np.ndarray) -> np.ndarray:
+    """Rotation matrices (n, 3, 3) from J2000 to an Earth-fixed frame: IAU 1976 precession to the mean equator and
+    equinox of date, then Greenwich mean sidereal time (IAU 1982) with UT1 taken as UTC. Nutation (up to 0.005 deg) and
+    polar motion are left out. pck00011's IAU_EARTH frame is not used: it turns with TDB rather than UT1 and puts the
+    Moon about 0.07 deg off at the stations, against 0.003 deg for this rotation (checked against Astronomy Engine)."""
+    T = np.asarray(et, dtype=np.float64) / 86400.0 / 36525.0
+    zeta = (2306.2181 * T + 0.30188 * T ** 2 + 0.017998 * T ** 3) * _AS
+    z = (2306.2181 * T + 1.09468 * T ** 2 + 0.018203 * T ** 3) * _AS
+    th = (2004.3109 * T - 0.42665 * T ** 2 - 0.041833 * T ** 3) * _AS
+    d = (np.asarray(t_unix, dtype=np.float64) - J2000_UNIX) / 86400.0
+    tu = d / 36525.0
+    gmst = np.radians((280.46061837 + 360.98564736629 * d + 0.000387933 * tu ** 2 - tu ** 3 / 38710000.0) % 360.0)
+    return _rz(gmst) @ _rz(-z) @ _ry(th) @ _rz(-zeta)
+
+
+def dsn_azel(t_unix) -> tuple[np.ndarray, np.ndarray]:
+    """Azimuth and elevation (deg) of the Moon's centre at each DSN complex for many instants: arrays (3, n).
+    Geometric (airless, no refraction), light time and stellar aberration corrected; azimuth from north through east.
+    Stations on the pck00011 Earth ellipsoid (georec)."""
     import spiceypy as sp
+    t = np.atleast_1d(np.asarray(t_unix, dtype=np.float64))
     with _lock:
         _load()
-        et = float(unix_to_et(np.array([t_unix]))[0])
-        moon, _ = sp.spkpos("MOON", et, "IAU_EARTH", "LT+S", "EARTH")
+        et = unix_to_et(t)
+        moon, _ = sp.spkpos("MOON", et, "J2000", "LT+S", "EARTH")
         _, radii = sp.bodvrd("EARTH", "RADII", 3)
+    moon = np.einsum("nij,nj->ni", earth_fixed_from_j2000(et, t), np.asarray(moon, dtype=np.float64).reshape(-1, 3))
     re, rp = radii[0], radii[2]
     f = (re - rp) / re
-    out = []
-    for name, lat, lon, h in DSN:
+    az = np.empty((len(DSN), len(t)))
+    el = np.empty((len(DSN), len(t)))
+    for k, (name, lat, lon, h) in enumerate(DSN):
         la, lo = np.radians(lat), np.radians(lon)
         stn = np.array(sp.georec(lo, la, h / 1000.0, re, f))
         up = np.array([np.cos(la) * np.cos(lo), np.cos(la) * np.sin(lo), np.sin(la)])
-        v = np.asarray(moon) - stn
-        out.append({"name": name, "elevation_deg": float(np.degrees(np.arcsin(v @ up / np.linalg.norm(v))))})
-    return out
+        east = np.array([-np.sin(lo), np.cos(lo), 0.0])
+        north = np.cross(up, east)
+        v = moon - stn
+        d = np.linalg.norm(v, axis=1)
+        el[k] = np.degrees(np.arcsin(np.clip(v @ up / d, -1, 1)))
+        a = np.degrees(np.arctan2(v @ east, v @ north))
+        az[k] = np.where(a < 0, a + 360, a)
+    return az, el

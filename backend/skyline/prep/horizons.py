@@ -8,6 +8,7 @@ engine.geometry.look() then gives the view from any other site.
 """
 from __future__ import annotations
 
+import math
 import re
 from calendar import monthrange
 from datetime import datetime, timezone
@@ -61,7 +62,7 @@ def parse(text: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         raise HorizonsError("Horizons table has no header line")
     ia = next(i for i, c in enumerate(header) if c.startswith("Azi"))
     ie = next(i for i, c in enumerate(header) if c.startswith("Elev"))
-    ir = next(i for i, c in enumerate(header) if c == "delta")
+    ir = next((i for i, c in enumerate(header) if c == "delta"), None)     # absent when quantity 20 was not asked for
     t, az, el, rg = [], [], [], []
     for row in body.strip().splitlines():
         f = [c.strip() for c in row.split(",")]
@@ -73,7 +74,7 @@ def parse(text: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         t.append(int(round(dt.timestamp() + sec)))
         az.append(float(f[ia]))
         el.append(float(f[ie]))
-        rg.append(float(f[ir]))
+        rg.append(float(f[ir]) if ir is not None else math.nan)
     if not t:
         raise HorizonsError("Horizons table is empty")
     return np.array(t, dtype=np.int64), np.array(az), np.array(el), np.array(rg)

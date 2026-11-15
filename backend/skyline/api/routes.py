@@ -68,6 +68,9 @@ def meta(part_meta: dict | None = None, lander: dict | None = None, defaults: li
     if part_meta:
         eph = part_meta.get("ephemeris", {})
         m["sources"] = {"ephemeris": eph, "terrain": part_meta.get("terrain"), "citations": _cite(part_meta.get("terrain", {}).get("tiers", []), eph)}
+        if part_meta.get("dsn"):
+            m["sources"]["dsn"] = part_meta["dsn"]
+            m["sources"]["citations"] = list(dict.fromkeys(m["sources"]["citations"] + _cite([], part_meta["dsn"])))
     if lander is not None:
         m["lander_resolved"] = lander
     if defaults is not None:
@@ -119,6 +122,7 @@ def health():
     return {"status": "ok" if ok else "degraded", "files": files,
             "precompute": {"ok": precompute.stamp_ok(st), "stamp": stamp, "code_version": config.CODE_VERSION},
             "ephemeris": {**cov, "spice_fallback_available": spice.available(), "primary_source": horizons.SOURCE},
+            "dsn": eng.dsn().coverage(),
             "terrain": terrain, "meta": meta()}
 
 
@@ -198,11 +202,13 @@ def horizon(site: Optional[str] = None, lat: Optional[float] = None, lon: Option
 def sky(site: Optional[str] = None, lat: Optional[float] = None, lon: Optional[float] = None,
         time: Optional[str] = Query(None, description="ISO 8601 UTC, default now"), lander: Optional[str] = LanderQ,
         array_height_m: Optional[float] = Query(None, ge=0, le=100), antenna_height_m: Optional[float] = Query(None, ge=0, le=100),
+        dsn: bool = Query(False, description="add the Deep Space Network stations that see the Moon"),
+        min_el_deg: float = Query(10, ge=0, le=90, description="lowest usable station elevation (main: 10)"),
         dem: Literal["best", "80m"] = DemQ):
     loc = _loc(site, lat, lon)
     t = parse_time(time)
     ld = _lander_get(lander, _flat(None, None, array_height_m, None, antenna_height_m, None, None, None, None, None, None))
-    r = engine().sky_now(loc, t, ld, dem)
+    r = engine().sky_now(loc, t, ld, dem, dsn=dsn, min_el=min_el_deg)
     return {**_clean(r), "meta": meta(r["_meta"], ld, _defaults(time=time, lander=lander))}
 
 
@@ -211,12 +217,14 @@ def windows(site: Optional[str] = None, lat: Optional[float] = None, lon: Option
             start: Optional[str] = Query(None, description="default now"), end: Optional[str] = Query(None, description="default start + 30 days"),
             step_h: int = Query(1, ge=1, le=24), lander: Optional[str] = LanderQ,
             array_height_m: Optional[float] = Query(None, ge=0, le=100), antenna_height_m: Optional[float] = Query(None, ge=0, le=100),
-            needs_earth: bool = True, series: bool = False, format: Literal["json", "csv"] = "json", dem: Literal["best", "80m"] = DemQ):
+            needs_earth: bool = True, series: bool = False, format: Literal["json", "csv"] = "json",
+            dsn: bool = Query(False, description="add contact intervals: Earth above the skyline and a DSN station above min_el_deg"),
+            min_el_deg: float = Query(10, ge=0, le=90), dem: Literal["best", "80m"] = DemQ):
     loc = _loc(site, lat, lon)
     t0 = parse_time(start)
     t1 = parse_time(end, default=t0 + 30 * 86400)
     ld = _lander_get(lander, _flat(None, None, array_height_m, None, antenna_height_m, None, None, None, None, None, None))
-    r = engine().windows(loc, t0, t1, ld, dem, step_h, needs_earth, series=series or format == "csv")
+    r = engine().windows(loc, t0, t1, ld, dem, step_h, needs_earth, series=series or format == "csv", dsn=dsn, min_el=min_el_deg)
     if format == "csv":
         import pandas as pd
         df = pd.DataFrame(r["series"])
@@ -263,9 +271,14 @@ def mission_post(req: MissionRequest):
 
 def _report(loc, t, ld, spec, dem, window_days, include, unc, given) -> dict:
     r = RP.report(engine(), loc, t, ld, spec, dem, window_days, include, unc)
-    r["details"] = {k: f"/{k}?" + q for k, q in (
+    lid = ld["id"] if LD.is_preset(ld["id"]) else None
+    r["details"] = {k.replace("-", "_").replace("/", "_"): f"/{k}?" + q for k, q in (
         ("sky", _q(loc, time=iso(t))), ("windows", _q(loc, start=iso(t), end=iso(t + window_days * 86400))),
-        ("mission", _q(loc, landing_time=iso(t), lander=ld["id"] if LD.is_preset(ld["id"]) else None)), ("horizon", _q(loc)))}
+        ("mission", _q(loc, landing_time=iso(t), lander=lid)), ("horizon", _q(loc)),
+        ("landing-window", _q(loc, plan_time=iso(t), lander=lid)), ("mission-design", _q(loc, landing_time=iso(t), lander=lid)),
+        ("mission-design/atlas", _q(loc, landing_time=iso(t), lander=lid)), ("dsn", f"time={iso(t)}"))}
+    if loc.lat <= -80:
+        r["details"]["map"] = f"/map?time={iso(t)}&format=png"
     extra = {"seed": unc.seed} if "risk" in include else {}
     return {**_clean(r), "meta": meta(r["_meta"], ld, _defaults(**given), **extra)}
 
@@ -326,15 +339,29 @@ def ephemeris(start: Optional[str] = Query(None, description="default now"), hou
     return {**_clean(r), "meta": meta({"ephemeris": r["_meta"]["ephemeris"], "terrain": {"tiers": []}})}
 
 
-@router.get("/dsn", tags=["sky"], summary="Moon elevation at the three Deep Space Network complexes")
-def dsn(time: Optional[str] = Query(None, description="default now")):
-    t = parse_time(time)
-    if not spice.available():
-        return JSONResponse(status_code=503, content={"detail": "the DSN view needs the SPICE kernels; run python -m skyline.prep.fetch_data"})
-    return {"time": iso(t), "stations": spice.dsn_view(t), "meta": meta()}
+@router.get("/dsn", tags=["pick a time"], summary="DSN station view: Moon elevation at Goldstone, Madrid and Canberra")
+def dsn(time: Optional[str] = Query(None, description="one instant (default now when start is not given)"),
+        start: Optional[str] = Query(None, description="hourly series and intervals from here"),
+        end: Optional[str] = Query(None, description="default start + 30 days"),
+        min_el_deg: float = Query(10, ge=0, le=90, description="lowest usable elevation (main: 10)"),
+        series: bool = Query(True, description="with start: include the hourly elevation and azimuth arrays")):
+    eng = engine()
+    if start is None:
+        t = parse_time(time)
+        r = eng.dsn_at(t, min_el_deg)
+        defaults = [k for k, v in dict(time=time).items() if v is None]
+    else:
+        t0 = parse_time(start)
+        r = eng.dsn_window(t0, parse_time(end, default=t0 + 30 * 86400), min_el_deg, series)
+        defaults = [k for k, v in dict(end=end).items() if v is None]
+    src = r.pop("sources")
+    cites = sorted({CITATIONS[s] for m in src.values() for s in m.values() if s in CITATIONS})
+    return {**r, "meta": meta(None, None, defaults, sources={"dsn": src, "citations": cites},
+                              method="JPL Horizons OBSERVER tables (Moon seen from each station, airless), cached by month; SPICE DE440 with IAU 1976 precession and GMST when Horizons cannot be reached")}
 
 
-@router.post("/design", tags=["mission"], summary="Design lab: the lightest array and battery that pass, and a 60-day atlas")
+@router.post("/design", tags=["mission"], deprecated=True,
+             summary="Design lab (superseded by /mission-design and /mission-design/atlas; kept for older pages)")
 def design(req: DesignRequest):
     loc = _loc(req.location.site, req.location.lat, req.location.lon)
     t = parse_time(req.landing_time)
@@ -351,7 +378,8 @@ def calendar(req: CalendarRequest):
     return {**_clean(r), "meta": meta(r["_meta"], ld)}
 
 
-@router.post("/rescue", tags=["mission"], summary="Mission rescue: after a schedule slip, the sites and times that still work")
+@router.post("/rescue", tags=["mission"], deprecated=True,
+             summary="Mission rescue (superseded by /landing-window; kept for older pages)")
 def rescue(req: RescueRequest):
     plan = _loc(req.plan.site, req.plan.lat, req.plan.lon)
     if req.sites == "all":
