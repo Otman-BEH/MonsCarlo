@@ -682,10 +682,10 @@ import { createTerrain } from './js/terrain.js';
       pInc[i] = Math.max(0, Math.sin((el + Math.atan(gsl) * R2D) * D2R));
     }
   }
-  function sunRaster() { if (polarBuilt && S.now && sunFt !== S.t && !(S.playing && Math.abs(S.t - sunFt) < 3 * HOUR)) { castPolar(S.now.sun, false, 0.266, sunF, sunI); sunFt = S.t; } }
+  function sunRaster() { if (polarBuilt && S.now && sunFt !== S.t) { castPolar(S.now.sun, false, 0.266, sunF, sunI); sunFt = S.t; } }
 
   // ---------- explore: first-person surface view ----------
-  const VW = { az: null, fov: 75, off: document.createElement('canvas'), offF: document.createElement('canvas'), raf: 0, jobKey: '', litKey: '', fine: null, near: null, far: null, drag: false };
+  const VW = { az: null, fov: 75, off: document.createElement('canvas'), litKey: '', fine: null, near: null, far: null, drag: false };
   // Which ground is in sunlight: for each cell of a grid around the site, march toward the Sun over the terrain and
   // keep the steepest rise; the share of the solar disc above it is the light that cell gets.
   function litGrid(x0, y0, ux, uy, sunEl, cell, n, tmax) {
@@ -723,75 +723,73 @@ import { createTerrain } from './js/terrain.js';
     const pebble = vnoise(m / 0.12, n / 0.12) > 0.82 ? 0.82 : 1;   // scattered small stones
     return (1 + fade * 0.3 * (t - 0.5)) * (fade > 0.3 ? pebble : 1);
   }
-  // Shadow grids around the site for the current Sun (coarser and cached per 30 min of mission time while moving)
-  function surfGrids(P, fast) {
+  function drawSurface() {
+    const cv = $('surf'); if (!shown(cv)) return;
+    const can = riskOk() && TER.ready() && TER.rings && siteMask(S.site) && S.now && S.cur;
+    cv.style.height = (riskOk() ? Math.round(Math.max(220, Math.min(560, cv.clientWidth * (cv.clientWidth < 520 ? 0.66 : 0.42)))) : 96) + 'px';
+    const { g, w, h } = prep(cv); g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+    if (!riskOk()) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('The surface view needs the polar terrain, which covers 80°S to the south pole.', w / 2, h / 2); $('surfcap').textContent = 'Pick a south-pole site to stand on the surface. The sky chart shows the horizon for any site.'; return; }
+    if (!can) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the terrain around the site…', w / 2, h / 2); return; }
+    const c = S.cur, m = siteMask(S.site), mask = m.mask, dpr = Math.min(window.devicePixelRatio || 1, 2), tStart = performance.now();
+    if (VW.az === null) { const sepA = wrap180(c.earthAz - c.sunAz); VW.az = Math.abs(sepA) <= 0.86 * VW.fov ? c.sunAz + sepA / 2 : c.sunAz + VW.fov * 0.24; }
+    const fast = S.playing || VW.drag, Wc = Math.min(2600, Math.round(w * (fast ? Math.min(dpr, 1) * 0.6 : dpr))), Hc = Math.round(Wc * h / w);
+    const fovH = VW.fov, fovV = fovH * Hc / Wc, elC = -0.02 * fovV;
+    const lam = S.site.lon * D2R, nx = Math.sin(lam), ny = Math.cos(lam), ex = Math.cos(lam), ey = -Math.sin(lam);
+    const rho0 = 2 * RM * Math.tan((90 + Math.max(-89.999, S.site.lat)) / 2 * D2R), x0 = rho0 * nx, y0 = rho0 * ny, hEye = m.h0 + S.eye;
+    const sa = c.sunAz * D2R, ux = nx * Math.cos(sa) + ex * Math.sin(sa), uy = ny * Math.cos(sa) + ey * Math.sin(sa), E = TER.elevXYsmooth;
+    // shadows: fine near the site, coarser farther out, then the polar shadow map
+    // while playing, shadows are recomputed every 30 minutes of mission time instead of every frame
     const key = [S.site.lat, S.site.lon, fast ? Math.round(S.t / 1800e3) : S.t, fast ? 1 : 0].join('|');
-    if (VW.litKey === key) return;
-    VW.litKey = key; sunRaster();
-    VW.fine = fast ? null : litGrid(P.x0, P.y0, P.ux, P.uy, P.c.sunEl, 0.01, 300, 12);
-    VW.near = litGrid(P.x0, P.y0, P.ux, P.uy, P.c.sunEl, fast ? 0.12 : 0.04, fast ? 100 : 300, 40);
-    VW.far = litGrid(P.x0, P.y0, P.ux, P.uy, P.c.sunEl, fast ? 0.6 : 0.2, fast ? 100 : 300, 160);
-  }
-  // One render of the terrain image, column by column. run(until) works until that time and can be resumed, so the
-  // full-resolution image is built over several frames without freezing the page.
-  function surfJob(P, full) {
-    const t0 = performance.now(), dpr = Math.min(window.devicePixelRatio || 1, 2), c = P.c, mask = P.mask;
-    const Wc = Math.min(2600, Math.round(P.w * (full ? dpr : Math.min(dpr, 1) * 0.45))), Hc = Math.round(Wc * P.h / P.w);
-    surfGrids(P, !full);
-    const { nx, ny, ex, ey, x0, y0, hEye, sa, ux, uy, fovH, fovV, elC } = P, E = TER.elevXYsmooth;
+    if (VW.litKey !== key) {
+      VW.litKey = key; sunRaster();
+      VW.fine = fast ? null : litGrid(x0, y0, ux, uy, c.sunEl, 0.01, 300, 12);
+      VW.near = litGrid(x0, y0, ux, uy, c.sunEl, fast ? 0.12 : 0.04, fast ? 100 : 300, 40);
+      VW.far = litGrid(x0, y0, ux, uy, c.sunEl, fast ? 0.6 : 0.2, fast ? 100 : 300, 160);
+    }
     const litAt = (x, y) => {
       let v = VW.fine ? litAtGrid(VW.fine, x, y) : NaN; if (v === v) return v;
       v = litAtGrid(VW.near, x, y); if (v === v) return v;
       v = litAtGrid(VW.far, x, y); if (v === v) return v;
       const px = Math.floor(x / PXKM + PS / 2), py = Math.floor(PS / 2 - y / PXKM); return px >= 0 && py >= 0 && px < PS && py < PS ? sunF[py * PS + px] : 1;
     };
-    const off = full ? VW.off : VW.offF; if (off.width !== Wc || off.height !== Hc) { off.width = Wc; off.height = Hc; }
+    const off = VW.off; if (off.width !== Wc || off.height !== Hc) { off.width = Wc; off.height = Hc; }
     const og = off.getContext('2d'), im = og.createImageData(Wc, Hc), buf = new Uint32Array(im.data.buffer);
     const Y = el => (0.5 - (el - elC) / fovV) * Hc, expo = 1 / (6 * Math.sin(Math.max(0.6, c.sunEl) * D2R));
     const mix = (c1, c2, f) => 0xff000000 | (((c1 >> 16 & 255) * f + (c2 >> 16 & 255) * (1 - f)) << 16) | (((c1 >> 8 & 255) * f + (c2 >> 8 & 255) * (1 - f)) << 8) | ((c1 & 255) * f + (c2 & 255) * (1 - f));
-    const stepK = full ? 1 : 2, rowsPerDeg = Hc / fovV;
-    let col = 0, ms = performance.now() - t0;
-    return { P, off, run(until) {
-      const ts = performance.now();
-      for (; col < Wc; col++) {
-        if ((col & 7) === 0 && performance.now() > until) { ms += performance.now() - ts; return false; }
-        const az = P.az + ((col + 0.5) / Wc - 0.5) * fovH, a = az * D2R, dx = nx * Math.cos(a) + ex * Math.sin(a), dy = ny * Math.cos(a) + ey * Math.sin(a), toSun = Math.cos(a - sa);
-        let yb = Hc, last = 0xff0a0a0a, lastV = -1, pr = -1, pf = 0, pc = 0;
-        for (let d = 0.003; d < 300 && yb > 0;) {
-          const res = TER.resAt(d), x = x0 + dx * d, y = y0 + dy * d, hh = E(x, y), pyF = Y(Math.atan((hh - hEye) / (1000 * d) - d / (2 * RM)) * R2D), py = Math.floor(pyF);
-          // step: fine enough for the terrain at this distance, and no more than about one pixel row on screen
-          const rowsPerKm = (Math.abs(hh - hEye) / 1000 / (d * d) + 1 / (2 * RM)) * R2D * rowsPerDeg;
-          d += stepK * Math.min(Math.max(res * 0.5, d * (d > 25 ? 0.0035 : 0.006)), Math.max(0.00002, 1.1 / rowsPerKm));
-          if (py >= yb) { lastV = -1; continue; }   // hidden behind nearer ground: never blend across a silhouette
-          const dl = Math.min(0.25, Math.max(0.006, d * 0.012)), gx = (E(x + dl, y) - E(x - dl, y)) / (2000 * dl), gy = (E(x, y + dl) - E(x, y - dl)) / (2000 * dl);
-          const elL = (c.sunEl + (d / RM) * toSun * R2D) * D2R, chh = Math.cos(elL), lam2 = Math.max(0, (-gx * ux * chh - gy * uy * chh + Math.sin(elL)) / Math.sqrt(1 + gx * gx + gy * gy));
-          const q = litAt(x, y) * lam2 * expo * 1.7 * regolith(x, y, d), v = 6 + 249 * Math.pow(q / (1 + q), 0.72);
-          last = 0xff000000 | ((v * 0.9) << 16) | ((v * 0.96) << 8) | v;
-          if (pr >= 0) buf[pr * Wc + col] = mix(pc, last, pf);
-          // fill the rows down to the previous sample, blending toward its brightness, so steps never show as bands
-          const span = yb - (py + 1), contiguous = lastV >= 0 && span <= 6;
-          for (let r = Math.max(0, py + 1); r < yb; r++) {
-            const vv = contiguous ? v + (lastV - v) * ((r - py) / (span + 1)) : v;
-            buf[r * Wc + col] = 0xff000000 | ((vv * 0.9) << 16) | ((vv * 0.96) << 8) | vv;
-          }
-          if (py >= 0) { buf[py * Wc + col] = last; pr = py; pf = py + 1 - pyF; pc = last; } else pr = -1;
-          yb = py; lastV = v;
+    const stepK = fast ? 2 : 1;
+    for (let col = 0; col < Wc; col++) {
+      const az = VW.az + ((col + 0.5) / Wc - 0.5) * fovH, a = az * D2R, dx = nx * Math.cos(a) + ex * Math.sin(a), dy = ny * Math.cos(a) + ey * Math.sin(a), toSun = Math.cos(a - sa);
+      let yb = Hc, last = 0xff0a0a0a, lastV = -1, pr = -1, pf = 0, pc = 0;
+      const rowsPerDeg = Hc / fovV;
+      for (let d = 0.003; d < 300 && yb > 0;) {
+        const res = TER.resAt(d), x = x0 + dx * d, y = y0 + dy * d, hh = E(x, y), pyF = Y(Math.atan((hh - hEye) / (1000 * d) - d / (2 * RM)) * R2D), py = Math.floor(pyF);
+        // step: fine enough for the terrain at this distance, and no more than about one pixel row on screen
+        const rowsPerKm = (Math.abs(hh - hEye) / 1000 / (d * d) + 1 / (2 * RM)) * R2D * rowsPerDeg;
+        d += stepK * Math.min(Math.max(res * 0.5, d * (d > 25 ? 0.0035 : 0.006)), Math.max(0.00002, 1.1 / rowsPerKm));
+        if (py >= yb) { lastV = -1; continue; }   // hidden behind nearer ground: never blend across a silhouette
+        // ground normal at a scale tied to distance, so the 5 m and 10 m detail near the site shows without banding
+        const dl = Math.min(0.25, Math.max(0.006, d * 0.012)), gx = (E(x + dl, y) - E(x - dl, y)) / (2000 * dl), gy = (E(x, y + dl) - E(x, y - dl)) / (2000 * dl);
+        const elL = (c.sunEl + (d / RM) * toSun * R2D) * D2R, chh = Math.cos(elL), lam2 = Math.max(0, (-gx * ux * chh - gy * uy * chh + Math.sin(elL)) / Math.sqrt(1 + gx * gx + gy * gy));
+        const q = litAt(x, y) * lam2 * expo * 1.7 * regolith(x, y, d), v = 6 + 249 * Math.pow(q / (1 + q), 0.72);
+        last = 0xff000000 | ((v * 0.9) << 16) | ((v * 0.96) << 8) | v;
+        if (pr >= 0) buf[pr * Wc + col] = mix(pc, last, pf);
+        // fill the rows down to the previous sample, blending toward its brightness, so steps never show as bands
+        const span = yb - (py + 1), contiguous = lastV >= 0 && span <= 6;
+        for (let r = Math.max(0, py + 1); r < yb; r++) {
+          const vv = contiguous ? v + (lastV - v) * ((r - py) / (span + 1)) : v;
+          buf[r * Wc + col] = 0xff000000 | ((vv * 0.9) << 16) | ((vv * 0.96) << 8) | vv;
         }
-        // the painted horizon agrees exactly with the server's horizon used for every number on the page
-        const ymF = Math.max(0, Math.min(Hc, Y(maskAt(mask, az)))), ym = Math.floor(ymF);
-        if (yb > ym) for (let r = ym; r < Math.min(Hc, yb); r++) buf[r * Wc + col] = last; else for (let r = Math.max(0, yb); r < ym; r++) buf[r * Wc + col] = 0;
-        if (ym >= 0 && ym < Hc) buf[ym * Wc + col] = (buf[ym * Wc + col] & 0x00ffffff) | (Math.round(255 * (ym + 1 - ymF)) << 24);
+        if (py >= 0) { buf[py * Wc + col] = last; pr = py; pf = py + 1 - pyF; pc = last; } else pr = -1;
+        yb = py; lastV = v;
       }
-      og.putImageData(im, 0, 0); ms += performance.now() - ts;
-      if (DEBUG) console.log('surface view: ' + Wc + ' columns in ' + Math.round(ms) + ' ms' + (full ? '' : ' (fast)'));
-      return true;
-    } };
-  }
-  // Sky, Sun, Earth, the terrain image and the labels onto the visible canvas
-  function surfCompose(j) {
-    const { g, w, h } = prep($('surf')), P = j.P, c = P.c, fovH = P.fovH, fovV = P.fovV, elC = P.elC, az0 = P.az;
-    g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
-    const X = az => (wrap180(az - az0) / fovH + 0.5) * w, Yc = el => (0.5 - (el - elC) / fovV) * h, ppd = w / fovH;
+      // the painted horizon agrees exactly with the server's horizon used for every number on the page
+      const ymF = Math.max(0, Math.min(Hc, Y(maskAt(mask, az)))), ym = Math.floor(ymF);
+      if (yb > ym) for (let r = ym; r < Math.min(Hc, yb); r++) buf[r * Wc + col] = last; else for (let r = Math.max(0, yb); r < ym; r++) buf[r * Wc + col] = 0;
+      if (ym >= 0 && ym < Hc) buf[ym * Wc + col] = (buf[ym * Wc + col] & 0x00ffffff) | (Math.round(255 * (ym + 1 - ymF)) << 24);
+    }
+    og.putImageData(im, 0, 0);
+    if (DEBUG) console.log('surface view: ' + Wc + ' columns in ' + Math.round(performance.now() - tStart) + ' ms' + (fast ? ' (fast)' : ''));
+    const X = az => (wrap180(az - VW.az) / fovH + 0.5) * w, Yc = el => (0.5 - (el - elC) / fovV) * h, ppd = w / fovH;
     const sep = Math.acos(Math.max(-1, Math.min(1, Math.sin(c.sunEl * D2R) * Math.sin(c.earthEl * D2R) + Math.cos(c.sunEl * D2R) * Math.cos(c.earthEl * D2R) * Math.cos((c.sunAz - c.earthAz) * D2R)))), k = (1 - Math.cos(sep)) / 2;
     const exs = X(c.earthAz), eys = Yc(c.earthEl), re = Math.max(3, c.earthRad * ppd), sxs = X(c.sunAz), sys = Yc(c.sunEl), rs = Math.max(1.6, c.sunRad * ppd);
     g.save(); g.translate(exs, eys); g.rotate(Math.atan2(-(c.sunEl - c.earthEl), wrap180(c.sunAz - c.earthAz) * Math.cos(c.earthEl * D2R)));
@@ -799,7 +797,7 @@ import { createTerrain } from './js/terrain.js';
     g.fillStyle = '#5b9cf0'; g.beginPath(); g.arc(0, 0, re, -Math.PI / 2, Math.PI / 2, false); g.ellipse(0, 0, Math.abs(1 - 2 * k) * re, re, 0, Math.PI / 2, -Math.PI / 2, k < 0.5); g.closePath(); g.fill(); g.restore();
     const gl = g.createRadialGradient(sxs, sys, rs, sxs, sys, Math.max(26, rs * 7)); gl.addColorStop(0, 'rgba(255,240,205,0.9)'); gl.addColorStop(0.25, 'rgba(255,225,160,0.28)'); gl.addColorStop(1, 'rgba(255,220,150,0)');
     g.fillStyle = gl; g.beginPath(); g.arc(sxs, sys, Math.max(26, rs * 7), 0, 7); g.fill(); g.fillStyle = '#fffaf0'; g.beginPath(); g.arc(sxs, sys, rs, 0, 7); g.fill();
-    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(j.off, 0, 0, w, h);
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(off, 0, 0, w, h);
     g.font = FONTC(13); g.textBaseline = 'middle';
     const tag = (t, x, y, col, hidden, r) => {
       if (x < -20 || x > w + 20) return; if (hidden) { g.setLineDash([3, 3]); g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, Math.max(6, r), 0, 7); g.stroke(); g.setLineDash([]); }
@@ -809,44 +807,11 @@ import { createTerrain } from './js/terrain.js';
     tag(c.sunClr > 0 ? 'Sun' : 'Sun, behind the terrain', sxs, sys, '#ffd98a', c.sunClr <= 0, rs);
     g.font = FONT(10); g.fillStyle = 'rgba(255,255,255,0.75)'; g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
     const stepA = fovH > 70 ? 15 : fovH > 40 ? 10 : 5;
-    for (let a = Math.ceil((az0 - fovH / 2) / stepA) * stepA; a <= az0 + fovH / 2; a += stepA) { const x = (a - az0) / fovH * w + w / 2, aa = ((a % 360) + 360) % 360; g.beginPath(); g.moveTo(x, h - 4); g.lineTo(x, h - 9); g.stroke(); g.fillText(aa % 90 === 0 ? ['N', 'E', 'S', 'W'][aa / 90] : aa + '°', Math.max(12, Math.min(w - 12, x)), h - 12); }
+    for (let a = Math.ceil((VW.az - fovH / 2) / stepA) * stepA; a <= VW.az + fovH / 2; a += stepA) { const x = (a - VW.az) / fovH * w + w / 2, aa = ((a % 360) + 360) % 360; g.beginPath(); g.moveTo(x, h - 4); g.lineTo(x, h - 9); g.stroke(); g.fillText(aa % 90 === 0 ? ['N', 'E', 'S', 'W'][aa / 90] : aa + '°', Math.max(12, Math.min(w - 12, x)), h - 12); }
     g.textAlign = 'left'; g.textBaseline = 'middle'; const stepE = fovV > 30 ? 5 : fovV > 12 ? 2 : 1;
     for (let e = Math.ceil((elC - fovV / 2) / stepE) * stepE; e <= elC + fovV / 2; e += stepE) { const y = Yc(e); if (y < 10 || y > h - 26) continue; g.beginPath(); g.moveTo(0, y); g.lineTo(5, y); g.stroke(); g.fillText((e > 0 ? '+' : e < 0 ? '−' : '') + Math.abs(e) + '°', 8, y); }
     const rg = cache.get('rings|' + S.site.lat.toFixed(5) + ',' + S.site.lon.toFixed(5)), tier = rg && rg.v ? rg.v.tier : '';
     $('surfcap').textContent = 'The view from ' + S.eye + ' m above the ground at ' + short(S.site) + ', ' + fmtDT(S.t) + ', ' + Math.round(fovH) + '° wide. Terrain and shadows from NASA\'s LOLA height maps (' + (tier || 'LOLA') + ' at the site); the Sun and Earth are drawn at their true sizes and nothing is stretched. There is no air, so far hills look as sharp as near ones. Texture finer than the height map is illustrative. Drag sideways to look around.';
-  }
-  // A quick low-resolution image straight away; when nothing is moving, the full-resolution one follows a few
-  // columns per frame (any newer request cancels it) and replaces it when done.
-  function drawSurface() {
-    const cv = $('surf'); if (!shown(cv)) return;
-    const can = riskOk() && TER.ready() && TER.rings && siteMask(S.site) && S.now && S.cur;
-    cv.style.height = (riskOk() ? Math.round(Math.max(220, Math.min(560, cv.clientWidth * (cv.clientWidth < 520 ? 0.66 : 0.42)))) : 96) + 'px';
-    if (!riskOk() || !can) {
-      cancelAnimationFrame(VW.raf); VW.jobKey = '';
-      const { g, w, h } = prep(cv); g.fillStyle = '#000'; g.fillRect(0, 0, w, h); g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center';
-      if (!riskOk()) { g.fillText('The surface view needs the polar terrain, which covers 80°S to the south pole.', w / 2, h / 2); $('surfcap').textContent = 'Pick a south-pole site to stand on the surface. The sky chart shows the horizon for any site.'; }
-      else g.fillText('Loading the terrain around the site…', w / 2, h / 2);
-      return;
-    }
-    const c = S.cur, m = siteMask(S.site), w = cv.clientWidth, h = cv.clientHeight;
-    if (VW.az === null) { const sepA = wrap180(c.earthAz - c.sunAz); VW.az = Math.abs(sepA) <= 0.86 * VW.fov ? c.sunAz + sepA / 2 : c.sunAz + VW.fov * 0.24; }
-    const fast = S.playing || S.scrubbing || VW.drag, fovH = VW.fov, fovV = fovH * h / w;
-    const key = [S.site.lat, S.site.lon, S.eye, S.t, VW.az, fovH, w, h, c.sunEl, c.sunAz, c.earthEl, c.earthAz, TER.rings.length, m.mask.length].join('|');
-    if (!fast && VW.jobKey === key) return;   // that image is on screen or on its way
-    cancelAnimationFrame(VW.raf); VW.raf = 0; VW.jobKey = fast ? '' : key;
-    const lam = S.site.lon * D2R, nx = Math.sin(lam), ny = Math.cos(lam), ex = Math.cos(lam), ey = -Math.sin(lam);
-    const rho0 = 2 * RM * Math.tan((90 + Math.max(-89.999, S.site.lat)) / 2 * D2R), sa = c.sunAz * D2R;
-    const P = { c, mask: m.mask, w, h, az: VW.az, fovH, fovV, elC: -0.02 * fovV, nx, ny, ex, ey, x0: rho0 * nx, y0: rho0 * ny, hEye: m.h0 + S.eye, sa,
-                ux: nx * Math.cos(sa) + ex * Math.sin(sa), uy: ny * Math.cos(sa) + ey * Math.sin(sa) };
-    const pv = surfJob(P, false); pv.run(Infinity); surfCompose(pv);
-    if (fast) return;
-    let j = null;
-    const step = () => {
-      VW.raf = 0; if (!shown(cv)) { VW.jobKey = ''; return; }
-      if (!j) j = surfJob(P, true);
-      if (j.run(performance.now() + 12)) surfCompose(j); else VW.raf = requestAnimationFrame(step);
-    };
-    VW.raf = requestAnimationFrame(step);
   }
   function polarXY(lat, lon, R, cx, cy) { const rho = 2 * RM * Math.tan((90 + lat) / 2 * D2R) / RHO * R; return [cx + rho * Math.sin(lon * D2R), cy - rho * Math.cos(lon * D2R)]; }
   let mapGeom = null;
