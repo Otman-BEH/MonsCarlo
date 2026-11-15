@@ -27,7 +27,7 @@ import { createTerrain } from './js/terrain.js';
   const t0 = Math.round(Date.now() / 60000) * 60000;
   const S = { site: null, custom: null, t: t0, eye: 2, span: 30, anchor: floorDay(t0), calAnchor: floorDay(t0), view: 'explore',
               cmp: ['mala', 'ridge'], mapTab: 'pole', layer: 'sun', playing: false, plan: null, slip: 14, flex: 21, scope: 'pole', acc: 500, tjit: 6, sig: { power: 5, load: 5, cap: 3, terrain: 0.15, slope: 12, corr: false, seed: 20261114 },
-              cfg: { days: 10, peakW: 400, loadSun: 180, loadDark: 60, capWh: 2000, minSoc: 0.2, tracking: true, needEarth: true, maxGapH: 12, margin: 0.3, chargeEff: 0.9, fault: { kind: 'none', day: 3 }, safe: false, autonomyH: 6 } };
+              cfg: { days: 10, peakW: 400, loadSun: 180, loadDark: 60, capWh: 2000, minSoc: 0.2, tracking: true, needEarth: true, maxGapH: 12, margin: 0.3, chargeEff: 0.9, fault: { kind: 'none', day: 3 }, safe: false, autonomyH: 6, strict: false } };
 
   // ---------- theme and canvas ----------
   let C = {};
@@ -104,11 +104,14 @@ import { createTerrain } from './js/terrain.js';
   function lander() {
     const c = S.cfg;
     return { base: 'reference', id: 'web', name: 'Lander from the web page', source: 'illustrative',
-             power: { array: { type: c.tracking ? 'tracking' : 'horizontal', peak_w: c.peakW, height_m: S.eye }, battery: { capacity_wh: c.capWh, min_soc: c.minSoc, charge_eff: c.chargeEff },
+             power: { array: { type: c.tracking ? 'tracking' : 'horizontal', peak_w: c.peakW, height_m: S.eye, ...(c.strict ? { incidence_loss: true } : {}) },
+                      battery: { capacity_wh: c.capWh, min_soc: c.minSoc, charge_eff: c.chargeEff, ...(c.strict ? { discharge_eff: 0.95 } : {}) },
                       loads: { sunlit_w: c.loadSun, dark_w: c.loadDark }, safe_mode: c.safe },
              comms: { antenna_height_m: S.eye }, landing: { accuracy_m_3sigma: S.acc, max_slope_deg: S.sig.slope } };
   }
-  function missionSpec() { const c = S.cfg; return { duration_days: c.days, needs_earth: c.needEarth, max_gap_h: c.maxGapH, autonomy_h: c.autonomyH, terrain_margin_deg: c.margin, fault: { kind: c.fault.kind, day: c.fault.day } }; }
+  function missionSpec() { const c = S.cfg; return { duration_days: c.days, needs_earth: c.needEarth, max_gap_h: c.maxGapH, autonomy_h: c.autonomyH, terrain_margin_deg: c.margin, fault: { kind: c.fault.kind, day: c.fault.day },
+    // stricter physics (off by default): the whole Earth disc must clear the terrain, and the Sun is dimmer at its edge
+    ...(c.strict ? { link_min_clearance_deg: 0.95, limb_darkening: 0.6 } : {}) }; }
   const landingTime = () => floorHour(S.t);
   const sumOf = x => x && { ok: x.ok, fails: x.fails, minSoc: x.min_soc, kMin: x.min_soc_at_h, kFail: x.below_reserve_at_h === null ? -1 : x.below_reserve_at_h, maxGapH: x.longest_link_gap_h,
     maxDarkH: x.longest_dark_h, linkPct: x.link_pct, litPct: x.lit_pct, battNeedWh: x.battery_needed_wh === null ? Infinity : x.battery_needed_wh, n: x.hours_simulated, safeH: x.safe_mode_hours,
@@ -1078,7 +1081,7 @@ import { createTerrain } from './js/terrain.js';
     const c = S.cfg, q = new URLSearchParams();
     if (S.site.id === 'custom') { q.set('lat', S.site.lat.toFixed(4)); q.set('lon', S.site.lon.toFixed(4)); } else q.set('site', S.site.id);
     q.set('t', new Date(S.t).toISOString().slice(0, 16)); q.set('mast', S.eye); if (S.cmp.length) q.set('cmp', S.cmp.join('_'));
-    q.set('m', MKEYS.map(k => k[1](c)).join('_')); q.set('f', (c.tracking ? 1 : 0) + '_' + (c.needEarth ? 1 : 0)); if (c.fault.kind !== 'none' || c.safe) q.set('x', c.fault.kind + '_' + c.fault.day + '_' + (c.safe ? 1 : 0));
+    q.set('m', MKEYS.map(k => k[1](c)).join('_')); q.set('f', (c.tracking ? 1 : 0) + '_' + (c.needEarth ? 1 : 0)); if (c.fault.kind !== 'none' || c.safe || c.strict) q.set('x', c.fault.kind + '_' + c.fault.day + '_' + (c.safe ? 1 : 0) + '_' + (c.strict ? 1 : 0));
     return location.href.split('#')[0] + '#' + S.view + '?' + q.toString();
   }
   function applyLink() {
@@ -1088,7 +1091,7 @@ import { createTerrain } from './js/terrain.js';
     const m = (q.get('m') || '').split('_'); if (m.length === MKEYS.length && m.every(x => isFinite(parseFloat(x)))) MKEYS.forEach((kk, i) => { $(kk[0]).value = m[i]; });
     const f = (q.get('f') || '').split('_'); if (f.length === 2) { $('m-array').value = f[0] === '0' ? 'flat' : 'track'; $('m-dte').checked = f[1] !== '0'; }
     const x = (q.get('x') || 'none_3_0').split('_'), kinds = ['none', 'array', 'load', 'battery', 'antenna'];
-    $('m-fault').value = kinds.includes(x[0]) ? x[0] : 'none'; $('m-fday').value = isFinite(parseFloat(x[1])) ? x[1] : 3; $('m-safe').checked = x[2] === '1';
+    $('m-fault').value = kinds.includes(x[0]) ? x[0] : 'none'; $('m-fday').value = isFinite(parseFloat(x[1])) ? x[1] : 3; $('m-safe').checked = x[2] === '1'; $('m-strict').checked = x[3] === '1';
     readCfg();
     const eye = parseFloat(q.get('mast')); if (isFinite(eye)) { S.eye = Math.max(0, Math.min(100, eye)); $('eye').value = S.eye; }
     if (q.has('cmp')) S.cmp = q.get('cmp').split('_').filter(id => SITES.some(s => s.id === id)).slice(0, 4);
@@ -1106,7 +1109,7 @@ import { createTerrain } from './js/terrain.js';
     const c = S.cfg; c.days = Math.round(num('m-days', 1, 60, 10)); c.peakW = num('m-peak', 0, 1e5, 400); c.tracking = $('m-array').value === 'track'; c.loadSun = num('m-lsun', 0, 1e5, 180); c.loadDark = num('m-ldark', 0, 1e5, 60);
     c.capWh = num('m-cap', 1, 1e6, 2000); c.minSoc = num('m-res', 0, 90, 20) / 100; c.needEarth = $('m-dte').checked; c.maxGapH = num('m-gap', 0, 2000, 12); c.margin = num('m-margin', 0, 3, 0.3);
     c.autonomyH = num('m-auto', 0, 72, 6);
-    c.fault = { kind: $('m-fault').value, day: num('m-fday', 0, 60, 3) }; c.safe = $('m-safe').checked; $('m-fday').disabled = c.fault.kind === 'none';
+    c.fault = { kind: $('m-fault').value, day: num('m-fday', 0, 60, 3) }; c.safe = $('m-safe').checked; c.strict = $('m-strict').checked; $('m-fday').disabled = c.fault.kind === 'none';
     $('m-gap').disabled = !c.needEarth; render();
   }
 
@@ -1147,7 +1150,7 @@ import { createTerrain } from './js/terrain.js';
   document.querySelectorAll('[data-span]').forEach(b => b.addEventListener('click', () => { S.span = +b.dataset.span; if (S.t > S.anchor + S.span * DAY) S.anchor = floorDay(S.t); syncInputs(); render(); }));
   document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
   window.addEventListener('hashchange', () => { if (location.hash.includes('?') && applyLink()) { fillSelects(); syncInputs(); render(); return; } const v = hashView(); if (v && v !== S.view) setView(v); });
-  ['m-days', 'm-peak', 'm-array', 'm-lsun', 'm-ldark', 'm-cap', 'm-res', 'm-dte', 'm-gap', 'm-margin', 'm-auto', 'm-fault', 'm-fday', 'm-safe'].forEach(id => $(id).addEventListener('change', readCfg));
+  ['m-days', 'm-peak', 'm-array', 'm-lsun', 'm-ldark', 'm-cap', 'm-res', 'm-dte', 'm-gap', 'm-margin', 'm-auto', 'm-fault', 'm-fday', 'm-safe', 'm-strict'].forEach(id => $(id).addEventListener('change', readCfg));
   $('s-sun').addEventListener('click', () => { if (S.cur) { VW.az = S.cur.sunAz; drawSurface(); } });
   $('s-earth').addEventListener('click', () => { if (S.cur) { VW.az = S.cur.earthAz; drawSurface(); } });
   $('s-zoom').addEventListener('click', () => { VW.fov = VW.fov === 75 ? 40 : VW.fov === 40 ? 20 : 75; drawSurface(); });

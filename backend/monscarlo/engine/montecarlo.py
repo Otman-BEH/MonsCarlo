@@ -214,6 +214,7 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
     capNow = cap.astype(np.float64).copy()
     safe = np.zeros(T, bool)
     eff = cfg["chargeEff"]
+    limb, link_min, dis = cfg.get("limb") or 0.0, cfg.get("linkMin") or 0.0, cfg.get("dischargeEff") or 1.0
     sunClr, sunRad, irr, eclr = se["sunClr"], se.get("sunRad"), se["irr"], se["earthClr"]
     per_trial_shape = (shape.ndim == 2) if row is None else shape_per_trial
     rows = np.arange(T)
@@ -230,6 +231,8 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
             d = (g(sunClr, i) - margin) / (g(sunRad, i) if sunRad is not None else M.SUNR)
             dc = np.clip(d, -1, 1)
             f = np.where(d >= 1, 1.0, np.where(d <= -1, 0.0, 1 - (np.arccos(dc) - dc * np.sqrt(1 - dc * dc)) / math.pi))
+            if limb:
+                f = M.lit_share(d, limb)
             on = k >= fk
             p = peak * g(irr, i) * f * gs(i) * (0.7 if (on and fkind == "array") else 1)
             if on and fkind == "battery" and k == fk:
@@ -244,14 +247,14 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
             if on and fkind == "load":
                 load = load + 100
             net = p - load
-            dE = np.where(net > 0, net * eff, net)
+            dE = np.where(net > 0, net * eff, net / dis)
             En = np.minimum(capNow, E + dE)
             E = np.where(act, En, E)
             minE = np.where(act & (E < minE), E, minE)
             dn = np.minimum(0.0, draw + dE)
             draw = np.where(act, dn, draw)
             maxDraw = np.where(act & (-draw > maxDraw), -draw, maxDraw)
-            L = (g(eclr, i) - margin > 0) & (not (on and fkind == "antenna" and k < fk + 24))
+            L = (g(eclr, i) - margin > link_min) & (not (on and fkind == "antenna" and k < fk + 24))
             gap = np.where(act, np.where(L, 0, gap + 1), gap)
             maxGap = np.maximum(maxGap, gap)
         # failure checks in main's order; cause of the first one
@@ -265,12 +268,14 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
         d0 = (g(sunClr, i0c) - margin) / (g(sunRad, i0c) if sunRad is not None else M.SUNR)
         dc0 = np.clip(d0, -1, 1)
         f0 = np.where(d0 >= 1, 1.0, np.where(d0 <= -1, 0.0, 1 - (np.arccos(dc0) - dc0 * np.sqrt(1 - dc0 * dc0)) / math.pi))
+        if limb:
+            f0 = M.lit_share(d0, limb)
         first((n > 0) & (f0 <= 0.5), 0)
         if cfg["needEarth"]:
-            first((n > 0) & ~(g(eclr, i0c) - margin > 0), 1)
+            first((n > 0) & ~(g(eclr, i0c) - margin > link_min), 1)
         first(~np.isfinite(E) | ~np.isfinite(minE), 5)
         first(minE < floor, 2)
-        autoWh = (cfg.get("autonomyH") or 0) * ldark
+        autoWh = (cfg.get("autonomyH") or 0) * ldark / dis
         first((autoWh > 0) & (minE >= floor) & (minE - floor < autoWh), 2)
         if cfg["needEarth"]:
             first(maxGap > cfg["maxGapH"], 3)
