@@ -43,6 +43,7 @@ button { font: inherit; font-weight: 500; font-size: 14px; color: var(--ink); ba
 button:hover { border-color: var(--muted); }
 button.primary { background: var(--sun); color: #1a1205; border-color: var(--sun); font-weight: 600; }
 button.primary:hover { filter: brightness(1.08); }
+:root[data-theme="light"] button.primary { color: #fff; }
 button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 button:disabled { opacity: 0.4; cursor: default; }
 :is(button, select, input, canvas, summary, a):focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
