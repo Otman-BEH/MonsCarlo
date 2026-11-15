@@ -48,7 +48,8 @@ included) and the frontend on any static host; see [Hosting](#hosting).
 - **Share and export**: "Copy link to this scenario" puts the site or custom coordinates, time, mast height, compared sites and mission needs in the address, so a colleague opens the same view. The time series (CSV) and the mission report (Markdown) can be copied or saved as files.
 
 ## Layout
-- `web/`        the frontend: `index.html`, `style.css`, `app.js` (asks the API and draws), `config.js` (the API address)
+- `web/`        the frontend: `index.html`, `style.css`, `config.js` (the API address), `app.js` (the views: state, panels,
+                drawing) and `js/` (`api.js` requests and caching, `terrain.js` terrain for drawing, `geo.js`, `format.js`)
 - `backend/`    the backend: data preparation (`skyline/prep`), the engine (`skyline/engine`), the API (`skyline/api`),
                 tests and the NASA data manifest; see [backend/README.md](backend/README.md)
 - `serve_web.py`   a small static server for the frontend

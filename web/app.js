@@ -1,61 +1,19 @@
 /* Lunar Skyline web page. Every number comes from the Lunar Skyline server (backend/, FastAPI): positions, skylines,
    series, verdicts, design lab, rescue, calendar, landing risk. This file only fetches, interpolates between hourly
    values for smooth playback, and draws. The server's API is documented at /docs. */
+import { DAY, HOUR, D2R, R2D, RM, SYNODIC, discFrac, subPoint, maskAt, lerpAz, wrap180 } from './js/geo.js';
+import { MON, p2, fmtDate, fmtDM, fmtDT, fmtDur, fmtH, fmtWh, sg, fmtLat, fmtLon, compass, STN, STL, cap1 } from './js/format.js';
+import { createServer } from './js/api.js';
+import { createTerrain } from './js/terrain.js';
+
 (async function () {
   const $ = id => document.getElementById(id);
-  const DAY = 86400e3, HOUR = 3600e3, D2R = Math.PI / 180, R2D = 180 / Math.PI, RM = 1737.4;
-  const SYNODIC = 29.530589, VIEWS = ['plan', 'explore', 'compare', 'learn', 'method'];
+  const VIEWS = ['plan', 'explore', 'compare', 'learn', 'method'];
   // Where the Lunar Skyline API runs: ?api=... in the address wins, then web/config.js, then the page's own server.
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const API = (new URLSearchParams(location.search).get('api') || window.LUNAR_SKYLINE_API || '').replace(/\/$/, '');
-
-  // ---------- talking to the server ----------
-  async function api(path, body, signal) {
-    const r = await fetch(API + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal } : { signal });
-    if (!r.ok) { let d = null; try { d = (await r.json()).detail; } catch (_) {} throw new Error(typeof d === 'string' ? d : 'the server answered ' + r.status); }
-    return r;
-  }
-  const getJSON = async (path, body, signal) => (await api(path, body, signal)).json();
-  const qs = o => Object.entries(o).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');
-  const iso = ms => new Date(ms).toISOString().slice(0, 19) + 'Z';
-  // One cache for everything fetched: a value appears when its request returns, then the page redraws.
-  const cache = new Map();
-  let lastErr = null;
-  function need(key, fn) {
-    let e = cache.get(key);
-    if (!e) {
-      if (cache.size > 400) cache.clear();
-      e = { v: undefined, err: null }; cache.set(key, e);
-      fn().then(v => { e.v = v; renderSoon(); }, err => { e.err = err; lastErr = err; console.error(err); renderSoon(); });
-    }
-    return e.v;
-  }
-  const failed = key => { const e = cache.get(key); return e && e.err ? e.err.message : null; };
-  // For the expensive questions (mission, design lab, landing risk, rescue, calendar): one request slot per panel.
-  // Nothing is asked while time is playing or being dragged; once the inputs settle (250 ms) the newest question is sent
-  // and any older one still running is cancelled. Until the answer arrives the panel keeps showing the last one.
-  const slots = {};
-  function latest(slot, key, fn, delay) {
-    const s = slots[slot] || (slots[slot] = { want: null, timer: 0, ctrl: null, last: undefined, lastKey: null });
-    const hit = cache.get(key);
-    if (hit && hit.v !== undefined) { s.last = hit.v; s.lastKey = key; return { v: hit.v, fresh: true }; }
-    if (hit && hit.err) return { v: s.last, fresh: false, err: hit.err.message };
-    if (s.want !== key && !S.playing && !S.scrubbing) {
-      s.want = key; clearTimeout(s.timer); if (s.ctrl) { s.ctrl.abort(); s.ctrl = null; }
-      s.timer = setTimeout(() => {
-        const ctrl = new AbortController(), e = { v: undefined, err: null }; s.ctrl = ctrl; cache.set(key, e);
-        fn(ctrl.signal).then(v => { e.v = v; if (s.ctrl === ctrl) s.ctrl = null; renderSoon(); },
-          err => { if (err.name === 'AbortError') { cache.delete(key); return; } e.err = err; lastErr = err; console.error(err); renderSoon(); });
-      }, delay === undefined ? 250 : delay);
-    }
-    return { v: s.last, fresh: false };
-  }
-
-  // ---------- small geometry used for drawing ----------
-  function discFrac(el, r, hz) { const d = (el - hz) / r; if (d >= 1) return 1; if (d <= -1) return 0; return 1 - (Math.acos(d) - d * Math.sqrt(1 - d * d)) / Math.PI; }
-  function subPoint(v) { const d = Math.hypot(v[0], v[1], v[2]); return { lat: Math.asin(v[2] / d) * R2D, lon: Math.atan2(v[1], v[0]) * R2D }; }
-  function maskAt(mask, az) { const n = mask.length, x = (((az % 360) + 360) % 360) * n / 360; const i = Math.floor(x) % n, f = x - Math.floor(x); return mask[i] * (1 - f) + mask[(i + 1) % n] * f; }
-  const lerpAz = (a, b, f) => { let d = b - a; if (d > 180) d -= 360; if (d < -180) d += 360; return ((a + d * f) % 360 + 360) % 360; };
+  const srv = createServer({ base: API, onData: () => renderSoon(), isBusy: () => S.playing || S.scrubbing });
+  const { api, getJSON, qs, iso, cache, need, failed, latest } = srv;
 
   // ---------- sites (from the server) ----------
   let SITES = [];
@@ -69,27 +27,6 @@
   const S = { site: null, custom: null, t: t0, eye: 2, span: 30, anchor: floorDay(t0), calAnchor: floorDay(t0), view: 'explore',
               cmp: ['mala', 'ridge'], mapTab: 'pole', layer: 'sun', playing: false, plan: null, slip: 14, flex: 21, scope: 'pole', acc: 500, tjit: 6, sig: { power: 5, load: 5, cap: 3, terrain: 0.15, slope: 12, corr: false, seed: 20261114 },
               cfg: { days: 10, peakW: 400, loadSun: 180, loadDark: 60, capWh: 2000, minSoc: 0.2, tracking: true, needEarth: true, maxGapH: 12, margin: 0.3, chargeEff: 0.9, fault: { kind: 'none', day: 3 }, safe: false, autonomyH: 6 } };
-
-  // ---------- formatting ----------
-  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const p2 = n => String(n).padStart(2, '0');
-  function fmtDate(ms) { const d = new Date(ms); return d.getUTCDate() + ' ' + MON[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); }
-  function fmtDM(ms) { const d = new Date(ms); return d.getUTCDate() + ' ' + MON[d.getUTCMonth()]; }
-  function fmtDT(ms) { const d = new Date(ms); return fmtDate(ms) + ' ' + p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()) + ' UTC'; }
-  function fmtDur(ms) {
-    const h = ms / HOUR;
-    if (h < 1) return Math.max(1, Math.round(ms / 60000)) + ' min';
-    if (h < 48) return Math.floor(h) + ' h ' + p2(Math.round((h - Math.floor(h)) * 60) % 60) + ' min';
-    const d = Math.floor(h / 24); return d + ' d ' + Math.round(h - d * 24) + ' h';
-  }
-  const fmtH = h => h >= 48 ? (h / 24).toFixed(1) + ' d' : Math.round(h) + ' h';
-  const fmtWh = w => w === null || !isFinite(w) ? 'No size is enough' : w >= 1000 ? (w / 1000).toFixed(w >= 10000 ? 0 : 1) + ' kWh' : Math.round(w) + ' Wh';
-  const sg = (v, n) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(n) + '°';
-  const fmtLat = v => Math.abs(v).toFixed(2) + '°' + (v < 0 ? 'S' : 'N');
-  const fmtLon = v => { let l = ((v + 180) % 360 + 360) % 360 - 180; return Math.abs(l).toFixed(2) + '°' + (l < 0 ? 'W' : 'E'); };
-  const compass = az => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(az / 45) % 8];
-  const STN = ['Fails', 'Marginal', 'Passes'], STL = ['Does not meet the needs', 'Marginal: sensitive to terrain', 'Meets the needs'];
-  const cap1 = s => s.charAt(0).toUpperCase() + s.slice(1);
 
   // ---------- theme and canvas ----------
   let C = {};
@@ -700,72 +637,7 @@
     if (cal && d >= 0 && d < nd) $('calread').textContent = 'Land on ' + fmtDate(S.calAnchor + d * DAY) + ' for ' + S.cfg.days + ' days: ' + rs.map(s => { const c = cal[siteKey(s)]; if (!c) return short(s) + ' …'; const v = c.state[d]; return short(s) + ' ' + (v === 2 ? 'passes' : v === 1 ? 'is marginal' : 'fails, ' + c.cause[d]); }).join(' · ') + '.';
   }
 
-  // ---------- terrain for drawing (server: /terrain/polar400 and /terrain/patch) ----------
-  // The surface view, the shadow map and the risk map's relief are drawn from these height grids.
-  // Height rings around the site (server: /terrain/rings): 10 m within 1.5 km, 40 m within 6 km, 160 m within 30 km,
-  // then the 400 m polar raster (server: /terrain/polar400). Map coordinates are south polar stereographic, in km.
-  const TER = {
-    polar: null, rings: null,
-    ready: () => !!TER.polar,
-    // both terrain files arrive row-delta coded: each value is the change from the previous one in its row
-    undelta: (a, n) => { for (let r = 0; r < n; r++) { let acc = 0; for (let c = 0, i = r * n; c < n; c++, i++) { acc = (acc + a[i]) << 16 >> 16; a[i] = acc; } } return a; },
-    loadPolar: async () => { const r = await api('/terrain/polar400'), n = +r.headers.get('X-Size'), buf = await r.arrayBuffer(); TER.polar = { n, km: 0.4, half: n * 0.2, a: TER.undelta(new Int16Array(buf), n) }; },
-    ringsFor(site) {
-      if (site.lat > -79.9) return null;
-      const key = 'rings|' + site.lat.toFixed(5) + ',' + site.lon.toFixed(5);
-      return need(key, async () => {
-        const r = await api('/terrain/rings?' + qs({ lat: site.lat, lon: site.lon })), buf = await r.arrayBuffer(), dv = new DataView(buf);
-        let o = 0; const count = dv.getUint32(o, true); o += 4; const rings = [];
-        for (let k = 0; k < count; k++) {
-          const n = dv.getUint32(o, true), cell = dv.getFloat32(o + 4, true) / 1000, x0 = dv.getFloat64(o + 8, true) / 1000, y0 = dv.getFloat64(o + 16, true) / 1000, base = dv.getFloat32(o + 24, true), sc = dv.getFloat32(o + 28, true);
-          o += 32; const q = TER.undelta(new Int16Array(buf.slice(o, o + n * n * 2)), n), a = new Float32Array(n * n); o += n * n * 2;
-          for (let i = 0; i < a.length; i++) a[i] = base + q[i] * sc;
-          rings.push({ n, km: cell, x: x0, y: y0, a, half: (n - 1) / 2 * cell, cx: x0 + (n - 1) / 2 * cell, cy: y0 - (n - 1) / 2 * cell });
-        }
-        return { rings, tier: r.headers.get('X-Tier') };
-      });
-    },
-    // bicubic (Catmull-Rom) sample of one ring; NaN outside it
-    cubic(q, x, y) {
-      const c = (x - q.x) / q.km, r = (q.y - y) / q.km, c0 = Math.floor(c), r0 = Math.floor(r), n = q.n;
-      if (c0 < 1 || r0 < 1 || c0 > n - 3 || r0 > n - 3) return NaN;
-      const fc = c - c0, fr = r - r0, a = q.a;
-      const cr = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
-      let i = (r0 - 1) * n + c0 - 1;
-      const v0 = cr(a[i], a[i + 1], a[i + 2], a[i + 3], fc); i += n; const v1 = cr(a[i], a[i + 1], a[i + 2], a[i + 3], fc); i += n;
-      const v2 = cr(a[i], a[i + 1], a[i + 2], a[i + 3], fc); i += n; const v3 = cr(a[i], a[i + 1], a[i + 2], a[i + 3], fc);
-      return cr(v0, v1, v2, v3, fr);
-    },
-    linear(q, x, y) {
-      const c = (x - q.x) / q.km, r = (q.y - y) / q.km; if (c < 0 || r < 0 || c > q.n - 1.001 || r > q.n - 1.001) return NaN;
-      const c0 = Math.floor(c), r0 = Math.floor(r), fc = c - c0, fr = r - r0, a = q.a, i = r0 * q.n + c0;
-      return (a[i] * (1 - fc) + a[i + 1] * fc) * (1 - fr) + (a[i + q.n] * (1 - fc) + a[i + q.n + 1] * fc) * fr;
-    },
-    polarXY(x, y) {
-      const P = TER.polar; let c = (x + P.half) / P.km - 0.5, r = (P.half - y) / P.km - 0.5;
-      if (c < 0) c = 0; if (r < 0) r = 0; if (c > P.n - 1.001) c = P.n - 1.001; if (r > P.n - 1.001) r = P.n - 1.001;
-      const c0 = Math.floor(c), r0 = Math.floor(r), fc = c - c0, fr = r - r0, a = P.a, i = r0 * P.n + c0;
-      return (a[i] * (1 - fc) + a[i + 1] * fc) * (1 - fr) + (a[i + P.n] * (1 - fc) + a[i + P.n + 1] * fc) * fr;
-    },
-    // height (m) at map point (km): the finest ring that covers it, blended into the next one over the outer 15% of
-    // each ring so no seam shows, then the polar raster
-    sample(x, y, fine) {
-      const R = TER.rings;
-      if (R) for (let k = 0; k < R.length; k++) {
-        const q = R[k], u = Math.max(Math.abs(x - q.cx), Math.abs(y - q.cy)) / q.half;
-        if (u >= 0.97) continue;
-        const v = fine ? TER.cubic(q, x, y) : TER.linear(q, x, y); if (v !== v) continue;
-        if (u <= 0.82) return v;
-        const w = (u - 0.82) / 0.15, nx = k + 1 < R.length ? (fine ? TER.cubic(R[k + 1], x, y) : TER.linear(R[k + 1], x, y)) : TER.polarXY(x, y);
-        return nx === nx ? v * (1 - w) + nx * w : v;
-      }
-      return TER.polarXY(x, y);
-    },
-    elevXY: (x, y) => TER.sample(x, y, false),
-    elevXYsmooth: (x, y) => TER.sample(x, y, true),
-    // grid cell size (km) of the terrain at distance d (km) from the site
-    resAt: d => d < 1.2 ? 0.01 : d < 4.9 ? 0.04 : d < 24 ? 0.16 : 0.4,
-  };
+  const TER = createTerrain({ api, need, qs });
 
   // ---------- maps ----------
   const PS = 400, CAP = -80, RHO = 2 * RM * Math.tan((90 + CAP) / 2 * D2R), PXKM = 2 * RHO / PS;
@@ -811,7 +683,6 @@
 
   // ---------- explore: first-person surface view ----------
   const VW = { az: null, fov: 90, off: document.createElement('canvas'), litKey: '', fine: null, near: null, far: null, drag: false };
-  const wrap180 = a => ((a + 540) % 360) - 180;
   // Which ground is in sunlight: for each cell of a grid around the site, march toward the Sun over the terrain and
   // keep the steepest rise; the share of the solar disc above it is the light that cell gets.
   function litGrid(x0, y0, ux, uy, sunEl, cell, n, tmax) {
@@ -1218,7 +1089,7 @@
     else if (S.view === 'explore') { if (S.cur) { drawSurface(); drawSky(); } else { waiting($('surf'), 'Loading the sky…'); waiting($('sky'), 'Loading the sky…'); } drawTimeline(); drawMap(); }
     else if (S.view === 'learn') drawLearn();
     else { drawCmpSky(); drawCompare(); drawCalendar(); }
-    if (lastErr && !$('srverr')) { const p = document.createElement('p'); p.id = 'srverr'; p.className = 'tag'; p.style.color = 'var(--bad)'; p.textContent = 'Some data could not be loaded from the server: ' + lastErr.message + '.'; $('siteinfo').after(p); }
+    if (srv.lastErr && !$('srverr')) { const p = document.createElement('p'); p.id = 'srverr'; p.className = 'tag'; p.style.color = 'var(--bad)'; p.textContent = 'Some data could not be loaded from the server: ' + srv.lastErr.message + '.'; $('siteinfo').after(p); }
   }
   function renderSoon() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
 
@@ -1349,7 +1220,7 @@
     $('boot').querySelector('p').textContent = 'Loading the polar terrain and the ephemeris from the server…';
     texImg = new Image(); texImg.onload = () => { try { const c = document.createElement('canvas'); c.width = texImg.naturalWidth; c.height = texImg.naturalHeight; const cg = c.getContext('2d'); cg.drawImage(texImg, 0, 0); const d = cg.getImageData(0, 0, c.width, c.height).data, a = new Uint8Array(c.width * c.height); for (let i = 0; i < a.length; i++) a[i] = d[i * 4]; GL.tex = a; GL.tw = c.width; GL.th = c.height; } catch (_) {} if (ready && S.mapTab !== 'pole') drawMap(); };
     texImg.src = API + '/terrain/moon.jpg';
-    TER.loadPolar().then(() => { buildPolar(); renderSoon(); }, err => { lastErr = err; renderSoon(); });
+    TER.loadPolar().then(() => { buildPolar(); renderSoon(); }, err => { srv.lastErr = err; renderSoon(); });
     const hv = hashView(); if (VIEWS.includes(hv)) S.view = hv;
     ensureTab();
     // default plan: the middle of the first run of landing days at the default site that meet the needs
