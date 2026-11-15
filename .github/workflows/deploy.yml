@@ -1,5 +1,5 @@
 # Deploy to Fly.io on every push to main: one app serves the web page and the API (https://mons-carlo.fly.dev).
-# Needs the repo secret FLY_API_TOKEN (a deploy token: fly tokens create deploy -a mons-carlo).
+# Needs the repo secret FLY_TOKEN (a deploy token: fly tokens create deploy -a mons-carlo).
 name: Deploy
 
 on:
@@ -19,4 +19,4 @@ jobs:
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - run: flyctl deploy --remote-only --wait-timeout 15m
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_API_TOKEN: ${{ secrets.FLY_TOKEN }}
