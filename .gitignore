@@ -1,6 +1,8 @@
-# Raw input data (large, public NASA/NAIF files): see README.md "Data"
+# Raw input data, if you download it to rebuild build/data.json
 /data/
-__pycache__/
-*.pyc
 node_modules/
 dist/
+__pycache__/
+*.pyc
+.DS_Store
+.scratch/
