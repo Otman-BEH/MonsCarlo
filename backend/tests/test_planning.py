@@ -4,12 +4,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conftest import arr
-from skyline.api.app import app
-from skyline.engine import design as D
-from skyline.engine import mission as M
-from skyline.engine import planning as P
-from skyline.engine import visibility as V
-from skyline.prep import spice
+from monscarlo.api.app import app
+from monscarlo.engine import design as D
+from monscarlo.engine import mission as M
+from monscarlo.engine import planning as P
+from monscarlo.engine import visibility as V
+from monscarlo.prep import spice
 from test_api import _have_ephemeris
 from test_parity_core import view_from_golden
 
@@ -71,7 +71,7 @@ def c():
 @api
 def test_series_and_ephemeris(c):
     s = c.get("/series", params={"site": "shack", "start": T, "hours": 48}).json()
-    assert s["n"] == 49 and len(s["series"]["sunEl"]) == 49 and len(s["skyline"]["sun"]) == 720
+    assert s["n"] == 49 and len(s["series"]["sunEl"]) == 49 and len(s["horizon"]["sun"]) == 720
     e = c.get("/ephemeris", params={"start": T, "hours": 48}).json()
     assert e["n"] == 49 and len(e["sun_km"][0]) == 3
     assert c.get("/series", params={"site": "shack", "hours": 99999}).status_code == 422
@@ -123,7 +123,7 @@ def test_heavy_results_are_reused(c):
 
 
 def test_readonly_blocks_lander_changes(c, monkeypatch):
-    from skyline.api import routes
+    from monscarlo.api import routes
     monkeypatch.setattr(routes, "READONLY", True)
     assert c.post("/landers", json={"base": "reference", "id": "ro-test", "name": "x"}).status_code == 403
     assert c.delete("/landers/anything").status_code == 403

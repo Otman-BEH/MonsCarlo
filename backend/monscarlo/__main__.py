@@ -1,10 +1,10 @@
 """Command line: the same endpoints and parameter names as the HTTP API.
 
-    python -m skyline report site=shack
-    python -m skyline sky site=mala time=2026-12-01T06:00:00Z
-    python -m skyline mission site=shack landing_time=2026-12-14T00:00:00Z battery_wh=3000 risk=true
-    python -m skyline windows lat=-85.4 lon=31.6 format=csv > windows.csv
-    python -m skyline --url http://127.0.0.1:8000 report site=ridge     # ask a running server instead
+    python -m monscarlo report site=shack
+    python -m monscarlo sky site=mala time=2026-12-01T06:00:00Z
+    python -m monscarlo mission site=shack landing_time=2026-12-14T00:00:00Z battery_wh=3000 risk=true
+    python -m monscarlo windows lat=-85.4 lon=31.6 format=csv > windows.csv
+    python -m monscarlo --url http://127.0.0.1:8000 report site=ridge     # ask a running server instead
 
 Runs the engine in-process unless --url is given. Prints JSON (or CSV for format=csv); for report, --text prints only
 the summary sentence.
@@ -19,7 +19,7 @@ ENDPOINTS = ("report", "sky", "windows", "mission", "horizon", "sites", "landers
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m skyline", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="python -m monscarlo", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("endpoint", choices=ENDPOINTS)
     ap.add_argument("params", nargs="*", help="key=value query parameters, as in the API")
     ap.add_argument("--url", help="base URL of a running server (default: run in-process)")

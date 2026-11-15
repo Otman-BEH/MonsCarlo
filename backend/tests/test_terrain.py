@@ -1,10 +1,10 @@
-"""Terrain: skylines in 80m mode against main's precomputed profiles, custom points against main's in-browser ray cast,
+"""Terrain: horizons in 80m mode against main's precomputed profiles, custom points against main's in-browser ray cast,
 physical sanity checks, and the 5 m tier. Tests that need the raw DEMs skip when they are not on disk."""
 import numpy as np
 import pytest
 
 from conftest import arr
-from skyline.engine.terrain import Terrain, ll_to_xy, mask_at, schedule_main_coarse, xy_to_ll
+from monscarlo.engine.terrain import Terrain, ll_to_xy, mask_at, schedule_main_coarse, xy_to_ll
 
 T = Terrain()
 needs_80 = pytest.mark.skipif(T.r80 is None, reason="LDEM_80S_80MPP_ADJ.TIF not in the data directory")
@@ -33,11 +33,11 @@ def test_custom_point_off_the_pole_matches_main_exactly(golden):
 
 @needs_80
 @pytest.mark.parametrize("sid", ["shack", "ridge", "gerl", "ce7", "mala", "viper", "im2", "im1", "pole"])
-def test_site_skylines_80m_parity(golden, sid):
+def test_site_horizons_80m_parity(golden, sid):
     """Python's 80m mode against main's build/hires.py profiles: within 0.05 deg at mast heights 2, 5 and 10 m.
-    At eye height 0 the skyline is set by terrain 30 m away, where a few centimetres of height rounding moves the
+    At eye height 0 the horizon is set by terrain 30 m away, where a few centimetres of height rounding moves the
     angle by about 0.1 deg; main's profiles carry that rounding, so 0 m is only checked loosely.
-    im1 sits 30 km from the edge of the 80 m square, so its far skyline comes from the coarse grid: main's build/hires.py
+    im1 sits 30 km from the edge of the 80 m square, so its far horizon comes from the coarse grid: main's build/hires.py
     used ssa-data-lunar's 1/8 x 1/8 deg grid there, the backend uses main's packed grid (1/8 deg x 1/4 deg), worth
     0.051 deg at one azimuth."""
     s = golden["sites"][sid]
@@ -66,7 +66,7 @@ def test_physical_sanity(golden):
     floor = T.horizon(-89.67, 129.2, [2], 360, "best")               # Shackleton crater floor
     assert floor.mask_deg[0].min() > 5
     hm = T.horizon(-86.0, 2.7, [0, 100], 360, "best")
-    assert np.all(hm.mask_deg[1] <= hm.mask_deg[0] + 1e-9)           # a taller mast never raises the skyline
+    assert np.all(hm.mask_deg[1] <= hm.mask_deg[0] + 1e-9)           # a taller mast never raises the horizon
 
 
 @needs_tiles

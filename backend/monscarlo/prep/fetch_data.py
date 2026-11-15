@@ -3,11 +3,11 @@
 Per entry: missing -> download (stream to .part, then rename) -> check size and sha256 (two tries, then fail loudly).
 Present -> check size; a full sha256 runs on first verification or with --full, and is recorded in SQLite.
 
-    python -m skyline.prep.fetch_data              # required files
-    python -m skyline.prep.fetch_data --all        # also the optional ones
-    python -m skyline.prep.fetch_data --full       # re-hash everything present
-    python -m skyline.prep.fetch_data --hash       # print manifest entries with sha256 computed from local copies
-    python -m skyline.prep.fetch_data --write-hashes   # fill empty sha256 fields in manifest.json from local copies
+    python -m monscarlo.prep.fetch_data              # required files
+    python -m monscarlo.prep.fetch_data --all        # also the optional ones
+    python -m monscarlo.prep.fetch_data --full       # re-hash everything present
+    python -m monscarlo.prep.fetch_data --hash       # print manifest entries with sha256 computed from local copies
+    python -m monscarlo.prep.fetch_data --write-hashes   # fill empty sha256 fields in manifest.json from local copies
 """
 from __future__ import annotations
 

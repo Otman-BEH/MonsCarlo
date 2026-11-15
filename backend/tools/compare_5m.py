@@ -1,4 +1,4 @@
-"""What the 5 m PGDA tiles change: skyline difference (best vs 80m mode, at 2 m) and the change in sunlit and Earth-in-view
+"""What the 5 m PGDA tiles change: horizon difference (best vs 80m mode, at 2 m) and the change in sunlit and Earth-in-view
 time over a window, for every listed site a 5 m tile covers. Prints a Markdown table.
 
     python tools/compare_5m.py [--start 2026-12-01T00:00:00Z] [--days 30]
@@ -10,9 +10,9 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from skyline.engine import landers as LD  # noqa: E402
-from skyline.engine import sites as SI  # noqa: E402
-from skyline.engine.service import Engine, parse_time  # noqa: E402
+from monscarlo.engine import landers as LD  # noqa: E402
+from monscarlo.engine import sites as SI  # noqa: E402
+from monscarlo.engine.service import Engine, parse_time  # noqa: E402
 
 
 def main():
@@ -24,7 +24,7 @@ def main():
     t0 = parse_time(a.start)
     ld = LD.resolve("reference")
     print(f"Window: {a.days:g} days from {a.start}, mast 2 m, reference lander\n")
-    print("| Site | 5 m tile | skyline diff max (deg) | skyline diff RMS (deg) | sunlit % 80m -> 5m | Earth in view % 80m -> 5m |")
+    print("| Site | 5 m tile | horizon diff max (deg) | horizon diff RMS (deg) | sunlit % 80m -> 5m | Earth in view % 80m -> 5m |")
     print("|---|---|---|---|---|---|")
     for s in SI.catalogue():
         loc = SI.resolve(s["id"])

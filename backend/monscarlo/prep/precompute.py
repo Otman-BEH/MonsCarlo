@@ -4,9 +4,9 @@ Products (in derived/):
   polar400.npy                         the 80 m DEM averaged to 400 m (5 x 5 blocks, as main's build/hires.py did for the
                                        browser): the web page's shadow map, and a stand-in if the 80 m DEM is missing
   <DEM>.npy + <DEM>.geo.npy            only when a regional GeoTIFF is compressed (fast memory-mapping)
-  skylines/<site>_<mode>.npy + skylines/index.json   site skylines, 720 azimuths x heights [0, 2, 5, 10, 20, 50, 100] m
+  horizon_masks/<site>_<mode>.npy + horizon_masks/index.json   site horizons, 720 azimuths x heights [0, 2, 5, 10, 20, 50, 100] m
 
-    python -m skyline.prep.precompute [--force]
+    python -m monscarlo.prep.precompute [--force]
 """
 from __future__ import annotations
 
@@ -89,9 +89,9 @@ def _convert_compressed(log) -> None:
         _save_npy(config.DERIVED_DIR / f"{stem}.geo.npy", np.array([r.x0, r.y0, r.px]))
 
 
-def build_skylines(log=print) -> dict:
+def build_horizon_masks(log=print) -> dict:
     from ..engine.terrain import Terrain
-    out_dir = config.DERIVED_DIR / "skylines"
+    out_dir = config.DERIVED_DIR / "horizon_masks"
     out_dir.mkdir(parents=True, exist_ok=True)
     T = Terrain()
     index = {"eyes_m": config.EYES_M, "naz": config.NAZ, "sites": {}}
@@ -108,7 +108,7 @@ def build_skylines(log=print) -> dict:
             hm = T.horizon(lat, lon, config.EYES_M, config.NAZ, mode, use_cache=False)
             _save_npy(out_dir / f"{s['id']}_{mode}.npy", hm.mask_deg.astype(np.float32))
             rec["modes"][mode] = {"ground_m": hm.ground_m, "tiers": hm.tiers, "file": f"{s['id']}_{mode}.npy"}
-            log(f"  skyline {s['id']:6s} {mode:4s} ground {hm.ground_m:8.1f} m  tiers {', '.join(hm.tiers)}  ({time.time() - t0:.1f} s)")
+            log(f"  horizon {s['id']:6s} {mode:4s} ground {hm.ground_m:8.1f} m  tiers {', '.join(hm.tiers)}  ({time.time() - t0:.1f} s)")
         if rec["modes"]:
             index["sites"][s["id"]] = rec
     (out_dir / "index.json").write_text(json.dumps(index, indent=1))
@@ -122,15 +122,15 @@ def run(force: bool = False, store: Store | None = None, log=print) -> bool:
     ih = inputs_hash(store)
     st = store.stamp(STEP)
     if not force and st and st["inputs_hash"] == ih and st["code_version"] == config.CODE_VERSION \
-            and (config.DERIVED_DIR / "skylines" / "index.json").exists():
+            and (config.DERIVED_DIR / "horizon_masks" / "index.json").exists():
         log(f"precompute: up to date (stamp {st['done_utc']})")
         return False
     t0 = time.time()
     _convert_compressed(log)
     log("precompute: 400 m polar raster")
     build_polar400(log)
-    log("precompute: site skylines")
-    build_skylines(log)
+    log("precompute: site horizons")
+    build_horizon_masks(log)
     store.put_stamp(STEP, ih, config.CODE_VERSION)
     log(f"precompute: done in {time.time() - t0:.0f} s")
     return True
@@ -139,7 +139,7 @@ def run(force: bool = False, store: Store | None = None, log=print) -> bool:
 def stamp_ok(store: Store | None = None) -> bool:
     store = store or default_store()
     st = store.stamp(STEP)
-    return bool(st and st["code_version"] == config.CODE_VERSION and (config.DERIVED_DIR / "skylines" / "index.json").exists())
+    return bool(st and st["code_version"] == config.CODE_VERSION and (config.DERIVED_DIR / "horizon_masks" / "index.json").exists())
 
 
 def main(argv=None) -> int:

@@ -1,4 +1,4 @@
-/* Lunar Skyline web page. Every number comes from the Lunar Skyline server (backend/, FastAPI): positions, skylines,
+/* Mons Carlo web page. Every number comes from the Mons Carlo server (backend/, FastAPI): positions, horizons,
    series, verdicts, design lab, rescue, calendar, landing risk. This file only fetches, interpolates between hourly
    values for smooth playback, and draws. The server's API is documented at /docs. */
 import { DAY, HOUR, D2R, R2D, RM, SYNODIC, discFrac, subPoint, maskAt, lerpAz, wrap180 } from './js/geo.js';
@@ -9,10 +9,10 @@ import { createTerrain } from './js/terrain.js';
 (async function () {
   const $ = id => document.getElementById(id);
   const VIEWS = ['plan', 'explore', 'compare', 'learn', 'method'];
-  // Where the Lunar Skyline API runs: ?api=... in the address wins, then web/config.js, then the page's own server.
+  // Where the Mons Carlo API runs: ?api=... in the address wins, then web/config.js, then the page's own server.
   const DEBUG = new URLSearchParams(location.search).has('debug');
   if (DEBUG) { window.__dbg = []; const cl = console.log.bind(console); console.log = (...a) => { window.__dbg.push(a.join(' ')); cl(...a); }; }
-  const API = (new URLSearchParams(location.search).get('api') || window.LUNAR_SKYLINE_API || '').replace(/\/$/, '');
+  const API = (new URLSearchParams(location.search).get('api') || window.MONS_CARLO_API || '').replace(/\/$/, '');
   const srv = createServer({ base: API, onData: () => renderSoon(), isBusy: () => S.playing || S.scrubbing });
   const { api, getJSON, qs, iso, cache, need, failed, latest } = srv;
 
@@ -55,13 +55,13 @@ import { createTerrain } from './js/terrain.js';
     TAB.t0 = S.calAnchor; TAB.days = days; TAB.n = days * 24;
   }
   const idx = t => Math.round((t - TAB.t0) / HOUR);
-  // Hourly Sun and Earth series plus the skyline for one site (server: /series)
+  // Hourly Sun and Earth series plus the horizon for one site (server: /series)
   function ser(site) {
     const key = 'ser|' + siteKey(site) + '|' + S.eye + '|' + TAB.t0 + '|' + TAB.n;
     return need(key, async () => {
       const j = await getJSON('/series?' + qs({ ...loc(site), start: iso(TAB.t0), hours: TAB.n - 1, array_height_m: S.eye, antenna_height_m: S.eye }));
       const o = { n: j.n }; for (const k in j.series) o[k] = Float32Array.from(j.series[k]);
-      const sk = j.skyline; o.mask = Float32Array.from(sk.sun); o.emask = Float32Array.from(sk.earth); o.h0 = sk.ground_m; o.tiers = sk.tiers; o.lo = sk.lo_deg; o.hi = sk.hi_deg;
+      const sk = j.horizon; o.mask = Float32Array.from(sk.sun); o.emask = Float32Array.from(sk.earth); o.h0 = sk.ground_m; o.tiers = sk.tiers; o.lo = sk.lo_deg; o.hi = sk.hi_deg;
       o.sources = j.meta && j.meta.sources; return o;
     });
   }
@@ -378,7 +378,7 @@ import { createTerrain } from './js/terrain.js';
   }
   function drawSiteInfo() {
     const m = siteMask(S.site);
-    $('siteinfo').textContent = S.site.name + ' · ' + fmtLat(S.site.lat) + ', ' + fmtLon(S.site.lon) + (m ? ' · terrain height ' + (m.h0 >= 0 ? '+' : '−') + Math.abs(Math.round(m.h0)).toLocaleString('en-US') + ' m · ' + tierText(m) + ', from ' + sg(m.lo, 1) + ' to ' + sg(m.hi, 1) + '. ' : ' · loading the skyline… ') + (S.site.note || '');
+    $('siteinfo').textContent = S.site.name + ' · ' + fmtLat(S.site.lat) + ', ' + fmtLon(S.site.lon) + (m ? ' · terrain height ' + (m.h0 >= 0 ? '+' : '−') + Math.abs(Math.round(m.h0)).toLocaleString('en-US') + ' m · ' + tierText(m) + ', from ' + sg(m.lo, 1) + ' to ' + sg(m.hi, 1) + '. ' : ' · loading the horizon… ') + (S.site.note || '');
   }
 
   // ---------- explore: sky panorama ----------
@@ -393,7 +393,7 @@ import { createTerrain } from './js/terrain.js';
     const padL = 34, padR = 8, padT = 10, padB = 22, pw = w - padL - padR, ph = h - padT - padB;
     const se = ser(site), mm = siteMask(site);
     g.fillStyle = '#0a0c11'; g.fillRect(0, 0, w, h);
-    if (!se || !c) { g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = FONT(13); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('Loading the skyline…', w / 2, h / 2); return; }
+    if (!se || !c) { g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = FONT(13); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('Loading the horizon…', w / 2, h / 2); return; }
     const { yMin, yMax } = range || skyRange(site), m = mm.mask;
     const X = az => padL + az / 360 * pw, Y = el => padT + (yMax - el) / (yMax - yMin) * ph;
     let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -782,7 +782,7 @@ import { createTerrain } from './js/terrain.js';
         if (py >= 0) { buf[py * Wc + col] = last; pr = py; pf = py + 1 - pyF; pc = last; } else pr = -1;
         yb = py; lastV = v;
       }
-      // the painted skyline agrees exactly with the server's skyline used for every number on the page
+      // the painted horizon agrees exactly with the server's horizon used for every number on the page
       const ymF = Math.max(0, Math.min(Hc, Y(maskAt(mask, az)))), ym = Math.floor(ymF);
       if (yb > ym) for (let r = ym; r < Math.min(Hc, yb); r++) buf[r * Wc + col] = last; else for (let r = Math.max(0, yb); r < ym; r++) buf[r * Wc + col] = 0;
       if (ym >= 0 && ym < Hc) buf[ym * Wc + col] = (buf[ym * Wc + col] & 0x00ffffff) | (Math.round(255 * (ym + 1 - ymF)) << 24);
@@ -964,7 +964,7 @@ import { createTerrain } from './js/terrain.js';
   // ---------- report ----------
   function reportText() {
     const c = S.cfg, m = siteMask(S.site) || { h0: 0, lo: 0, hi: 0, tiers: [] }, mv = S.mv && !S.mv.pending ? S.mv : null, rq = rescueNow(), r = rq.r, L = [];
-    L.push('# Lunar Skyline mission report', '', 'Generated ' + fmtDT(Date.now()) + '.', '');
+    L.push('# Mons Carlo mission report', '', 'Generated ' + fmtDT(Date.now()) + '.', '');
     L.push('## Scenario', '- Site: ' + S.site.name + ' (' + fmtLat(S.site.lat) + ', ' + fmtLon(S.site.lon) + '), terrain height ' + Math.round(m.h0) + ' m, mast ' + S.eye + ' m', '- Terrain: ' + tierText(m) + ', ' + sg(m.lo, 1) + ' to ' + sg(m.hi, 1), mv ? '- Landing: ' + fmtDT(mv.t) : '- Landing: ' + fmtDT(landingTime()), '- Surface mission: ' + c.days + ' days', '');
     L.push('## Mission needs', '- Solar array: ' + c.peakW + ' W in full Sun, ' + (c.tracking ? 'sun-tracking' : 'fixed horizontal'), '- Load: ' + c.loadSun + ' W in sunlight, ' + c.loadDark + ' W in darkness', '- Battery: ' + c.capWh + ' Wh, reserve ' + Math.round(c.minSoc * 100) + '%, charge efficiency ' + Math.round(c.chargeEff * 100) + '%',
       '- Direct Earth link: ' + (c.needEarth ? 'required, longest gap ' + c.maxGapH + ' h' : 'not required'), '- Terrain margin: ' + c.margin + '° added to every horizon', '');
@@ -990,8 +990,8 @@ import { createTerrain } from './js/terrain.js';
       r.alternatives.slice(0, 8).forEach((a, k2) => L.push('| ' + (k2 + 1) + ' | ' + a.location.name.split(',')[0] + ' | ' + (a.state ? fmtDT(Date.parse(a.landing_time)).replace(' UTC', '') : 'none') + ' | ' + (a.state ? '+' + a.extra_wait_days.toFixed(2) + ' d' : 'n/a') + ' | ' + STN[a.state] + ' | ' + Math.round(a.nominal.min_soc * 100) + '% | ' + fmtH(a.nominal.longest_link_gap_h) + ' | ' + (a.terrain || '') + ' |'));
       L.push('');
     }
-    L.push('## Method and limits', '- Sun and Earth positions: JPL Horizons (fetched month by month and cached by the Lunar Skyline server; JPL SPICE DE440 kernels when Horizons is unreachable); checked against JPL DE421 through SPICE to 0.00002°.',
-      '- Terrain: NASA LOLA elevation models: 5 m site maps where they exist, the 80 m south-pole model from 80°S, the 240 m model from 60°S, and a coarse LOLA grid elsewhere. Skylines are ray-cast on the server, 720 directions out to 330 km.',
+    L.push('## Method and limits', '- Sun and Earth positions: JPL Horizons (fetched month by month and cached by the Mons Carlo server; JPL SPICE DE440 kernels when Horizons is unreachable); checked against JPL DE421 through SPICE to 0.00002°.',
+      '- Terrain: NASA LOLA elevation models: 5 m site maps where they exist, the 80 m south-pole model from 80°S, the 240 m model from 60°S, and a coarse LOLA grid elsewhere. HorizonMasks are ray-cast on the server, 720 directions out to 330 km.',
       '- Power is geometric: array output in full Sun times the visible fraction of the solar disc, scaled for Sun distance. Thermal effects, dust and pointing limits are not modelled.',
       '- Earth contact is line of sight to Earth\'s centre. Antenna pointing, link margin and ground-station scheduling are not modelled.', '- Hourly sampling; rise and set times refined to seconds.');
     return L.join('\n');
@@ -1079,10 +1079,10 @@ import { createTerrain } from './js/terrain.js';
     const exact = skyExact(), lerped = stateAt(ser(S.site), S.t);
     if (exact) {
       const sn = exact.sun, ea = exact.earth;
-      S.cur = { sunEl: sn.elevation_deg, sunAz: sn.azimuth_deg, sunRad: sn.angular_radius_deg, sunHz: sn.skyline_deg, sunClr: sn.clearance_deg, sunFrac: sn.visible_share,
-                earthEl: ea.elevation_deg, earthAz: ea.azimuth_deg, earthRad: ea.angular_radius_deg, earthHz: ea.skyline_deg, earthClr: ea.clearance_deg, h0: exact.heights.ground_m, irr: sn.irradiance_factor };
+      S.cur = { sunEl: sn.elevation_deg, sunAz: sn.azimuth_deg, sunRad: sn.angular_radius_deg, sunHz: sn.horizon_deg, sunClr: sn.clearance_deg, sunFrac: sn.visible_share,
+                earthEl: ea.elevation_deg, earthAz: ea.azimuth_deg, earthRad: ea.angular_radius_deg, earthHz: ea.horizon_deg, earthClr: ea.clearance_deg, h0: exact.heights.ground_m, irr: sn.irradiance_factor };
       S.now = { sun: exact.vectors_km.sun, earth: exact.vectors_km.earth };
-      S.ev = { sun: evOf(sn.above_skyline ? sn.next_sunset : sn.next_sunrise), earth: evOf(ea.above_skyline ? ea.next_earthset : ea.next_earthrise) }; S.evAt = S.t; S.dsn = exact.dsn;
+      S.ev = { sun: evOf(sn.above_horizon ? sn.next_sunset : sn.next_sunrise), earth: evOf(ea.above_horizon ? ea.next_earthset : ea.next_earthrise) }; S.evAt = S.t; S.dsn = exact.dsn;
     } else {
       S.cur = lerped;
       if (S.ev && S.evAt !== S.t) { const keep = ev => ev && ev.t > S.t ? ev : null; S.ev = { sun: keep(S.ev.sun), earth: keep(S.ev.earth) }; }
@@ -1171,7 +1171,7 @@ import { createTerrain } from './js/terrain.js';
   function download(name, text, type) {
     const a = document.createElement('a'), url = URL.createObjectURL(new Blob([text], { type })); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
-  const fileStem = () => 'lunar-skyline-' + (S.site.id === 'custom' ? 'custom' : S.site.id) + '-' + new Date(S.t).toISOString().slice(0, 10);
+  const fileStem = () => 'mons-carlo-' + (S.site.id === 'custom' ? 'custom' : S.site.id) + '-' + new Date(S.t).toISOString().slice(0, 10);
   $('csv').addEventListener('click', async () => { try { const t = await csvText(); copy(t, 'csvmsg', 'Copied ' + (t.trim().split('\n').length - 1) + ' rows for ' + S.site.name + '.'); } catch (err) { $('csvmsg').textContent = 'Could not get the data: ' + err.message; } });
   $('csvdl').addEventListener('click', async () => { try { const t = await csvText(); download(fileStem() + '.csv', t, 'text/csv'); $('csvmsg').textContent = 'Saved ' + (t.trim().split('\n').length - 1) + ' rows for ' + S.site.name + '.'; } catch (err) { $('csvmsg').textContent = 'Could not get the data: ' + err.message; } });
   $('reportdl').addEventListener('click', () => { download(fileStem() + '-report.md', reportText() + '\n', 'text/markdown'); $('reportmsg').textContent = 'Report saved as a Markdown file.'; });
@@ -1251,7 +1251,7 @@ import { createTerrain } from './js/terrain.js';
     render();
     window.__ready = true;
   } catch (err) {
-    $('boot').innerHTML = '<p>The Lunar Skyline API could not be reached at <code>' + (API || location.origin) + '</code> (' + (err && err.message ? err.message : err) + '). Start it with <code>python run.py</code> in the <code>backend</code> folder, or set its address in <code>web/config.js</code>, then reload.</p>';
+    $('boot').innerHTML = '<p>The Mons Carlo API could not be reached at <code>' + (API || location.origin) + '</code> (' + (err && err.message ? err.message : err) + '). Start it with <code>python run.py</code> in the <code>backend</code> folder, or set its address in <code>web/config.js</code>, then reload.</p>';
     throw err;
   }
 })();

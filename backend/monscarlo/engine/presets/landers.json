@@ -4,7 +4,7 @@
     {
       "id": "reference",
       "name": "Reference small lander",
-      "source": "Lunar Skyline default (main's S.cfg in src/app.js)",
+      "source": "Mons Carlo default (main's S.cfg in src/app.js)",
       "illustrative": true,
       "power": {
         "array": {"type": "tracking", "peak_w": 400, "faces": null, "heading_deg": 0, "height_m": 2},

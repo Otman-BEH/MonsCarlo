@@ -7,10 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conftest import arr
-from skyline.api.app import app
-from skyline.engine import ephemeris as EP
-from skyline.prep import spice
-from skyline.prep.store import default_store
+from monscarlo.api.app import app
+from monscarlo.engine import ephemeris as EP
+from monscarlo.prep import spice
+from monscarlo.prep.store import default_store
 
 T = "2026-12-01T06:00:00Z"
 
@@ -65,10 +65,10 @@ def test_sky_events_and_heights(c):
         ev = r["sun"][k]
         if ev["time"]:
             assert ev["in_hours"] > 0
-    # the two skylines really differ: a taller antenna never sees a higher skyline
+    # the two horizons really differ: a taller antenna never sees a higher horizon
     lo = c.get("/sky", params={"site": "mala", "time": T}).json()
-    assert r["earth"]["skyline_deg"] <= lo["earth"]["skyline_deg"] + 1e-9
-    assert r["sun"]["skyline_deg"] == lo["sun"]["skyline_deg"]
+    assert r["earth"]["horizon_deg"] <= lo["earth"]["horizon_deg"] + 1e-9
+    assert r["sun"]["horizon_deg"] == lo["sun"]["horizon_deg"]
 
 
 def test_windows_json_and_csv(c):

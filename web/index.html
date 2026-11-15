@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lunar Skyline · landing site navigator</title>
+<title>Mons Carlo · landing site navigator</title>
 <meta name="description" content="Compare lunar landing sites and dates: the Sun and Earth against the real terrain horizon, power and radio windows, and whether a lander survives.">
 <meta name="theme-color" content="#07090d">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23d8d6cc'/%3E%3Ccircle cx='21' cy='12' r='14' fill='%2307090d'/%3E%3C/svg%3E">
@@ -16,7 +16,7 @@
 <header class="appbar">
   <div class="brand">
     <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="#d8d6cc"/><circle cx="21" cy="12" r="13" fill="var(--bg)"/><path d="M2 25 Q9 20 15 23 T30 22" stroke="var(--sun)" stroke-width="2" fill="none"/></svg>
-    <div><b>Lunar Skyline</b><span>Landing site navigator</span></div>
+    <div><b>Mons Carlo</b><span>Landing site navigator</span></div>
   </div>
   <nav class="views" aria-label="Views">
     <button id="v-explore" type="button" data-view="explore">Site</button>
@@ -36,7 +36,7 @@
   <div class="intro-text">
     <button type="button" id="intro-x" class="icon close" aria-label="Hide this introduction" title="Hide">×</button>
     <h1>Where are the Sun and Earth, and will the lander make it?</h1>
-    <p>Pick a landing site and a date. Lunar Skyline shows the Sun and Earth against the real terrain horizon, when power and radio windows open and close, and whether a lander survives its mission. Every number is computed from NASA's LOLA terrain and JPL Horizons positions.</p>
+    <p>Pick a landing site and a date. Mons Carlo shows the Sun and Earth against the real terrain horizon, when power and radio windows open and close, and whether a lander survives its mission. Every number is computed from NASA's LOLA terrain and JPL Horizons positions.</p>
   </div>
   <div class="intro-actions">
     <button type="button" class="primary" data-intro="tour">Take the 60-second tour</button>
@@ -83,7 +83,7 @@
   <div class="g link"><div class="k">Direct link to Earth</div><div class="v" id="g-link">…</div><div class="s" id="g-link-s"></div></div>
 </section>
 
-<div id="boot" class="boot"><div class="spin" aria-hidden="true"></div><p>Connecting to the Lunar Skyline server…</p></div>
+<div id="boot" class="boot"><div class="spin" aria-hidden="true"></div><p>Connecting to the Mons Carlo server…</p></div>
 
 <main class="grid" id="app" hidden>
   <!-- SITE -->
@@ -322,16 +322,16 @@
         <tbody>
           <tr><td>Sun and Earth directions (SPICE path)</td><td>JPL DE421 ephemeris, 3,166 epochs at 6 sites</td><td>largest difference 0.00002°</td></tr>
           <tr><td>Sun and Earth directions (Horizons path)</td><td>JPL SPICE DE440, one month at 4 sites</td><td>largest difference 0.00001°</td></tr>
-          <tr><td>Skylines, 80 m mode, mast 2 to 10 m</td><td>the original 80 m skylines of this app, 9 sites</td><td>within 0.05°</td></tr>
+          <tr><td>Horizons, 80 m mode, mast 2 to 10 m</td><td>the original 80 m horizons of this app, 9 sites</td><td>within 0.05°</td></tr>
           <tr><td>Mission verdicts, battery traces, failure messages</td><td>the original in-browser engine, 48 cases</td><td>identical</td></tr>
           <tr><td>Monte Carlo random numbers, design-lab results</td><td>the original in-browser engine</td><td>bit for bit / identical</td></tr>
           <tr><td>What the 5 m maps change</td><td>80 m terrain, 12 months, 2 m mast</td><td>Shackleton rim sunlit 86% → 82%; at the pole Earth in view 29% → 18%</td></tr>
         </tbody></table></div>
       <div class="cols">
         <div><h3>Positions</h3>
-          <p>Sun and Earth positions come from NASA's JPL Horizons service, fetched by the Lunar Skyline server one month at a time and cached (JPL's SPICE DE440 kernels stand in if Horizons cannot be reached). They are Moon-fixed vectors, so lunar libration and the parallax between the Moon's centre and the site are included. Checked against JPL's DE421 ephemeris through SPICE (3,166 epochs at six sites): the largest difference is 0.00002°. Rise and set times are refined to a few seconds after an hourly search.</p></div>
+          <p>Sun and Earth positions come from NASA's JPL Horizons service, fetched by the Mons Carlo server one month at a time and cached (JPL's SPICE DE440 kernels stand in if Horizons cannot be reached). They are Moon-fixed vectors, so lunar libration and the parallax between the Moon's centre and the site are included. Checked against JPL's DE421 ephemeris through SPICE (3,166 epochs at six sites): the largest difference is 0.00002°. Rise and set times are refined to a few seconds after an hourly search.</p></div>
         <div><h3>Terrain</h3>
-          <p>Tiers, named beside every site. The server ray-casts every skyline (720 directions, out to 330 km) from NASA's LOLA elevation models: the 5 m site maps where they exist (Shackleton rim, the connecting ridge, de Gerlache rim, the Chang'e 7 target and the pole), the 80 m south-pole model from 80°S, the 240 m model from 60°S, and a 1/8° to 1/4° LOLA grid elsewhere. The same terrain draws the surface view and the shadow map.</p></div>
+          <p>Tiers, named beside every site. The server ray-casts every horizon (720 directions, out to 330 km) from NASA's LOLA elevation models: the 5 m site maps where they exist (Shackleton rim, the connecting ridge, de Gerlache rim, the Chang'e 7 target and the pole), the 80 m south-pole model from 80°S, the 240 m model from 60°S, and a 1/8° to 1/4° LOLA grid elsewhere. The same terrain draws the surface view and the shadow map.</p></div>
         <div><h3>Limits</h3>
           <ul>
             <li>Power is geometry: array output in full Sun times the visible fraction of the solar disc, scaled for Sun distance. Temperature, dust, array pointing limits and degradation are not modelled.</li>
@@ -345,7 +345,7 @@
             <li>Coordinates of planned missions are published targets and may change.</li>
           </ul></div>
       </div>
-      <p>Data: NASA GSFC PGDA LOLA elevation models (Barker et al., products 78 and 90), LOLA global grid and Moon mosaic from the LLNL <code>ssa-data-lunar</code> package; ephemeris from <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a> and JPL NAIF SPICE kernels. Every number on this page comes from the Lunar Skyline server; its API is documented at <a href="docs">/docs</a>. Reference tools: <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a>, <a href="https://quickmap.lroc.asu.edu/">LROC Quickmap</a>, <a href="https://trek.nasa.gov/moon/">Moon Trek</a>. Code and text were drafted with an AI assistant (Claude).</p>
+      <p>Data: NASA GSFC PGDA LOLA elevation models (Barker et al., products 78 and 90), LOLA global grid and Moon mosaic from the LLNL <code>ssa-data-lunar</code> package; ephemeris from <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a> and JPL NAIF SPICE kernels. Every number on this page comes from the Mons Carlo server; its API is documented at <a href="docs">/docs</a>. Reference tools: <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a>, <a href="https://quickmap.lroc.asu.edu/">LROC Quickmap</a>, <a href="https://trek.nasa.gov/moon/">Moon Trek</a>.</p>
     </section>
 </main>
 

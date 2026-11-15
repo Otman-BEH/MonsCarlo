@@ -1,21 +1,21 @@
 # Fly.io deployment (one option; any host that runs a Docker container with a persistent disk works).
 #   fly launch --no-deploy --copy-config        (pick a unique app name)
-#   fly volumes create skyline_data --size 3    (GB, same region as the app)
+#   fly volumes create mons_carlo_data --size 3    (GB, same region as the app)
 #   fly deploy
 # The first start downloads the NASA data (about 620 MB) and takes a few minutes; /health shows progress.
-app = "lunar-skyline"
+app = "mons-carlo"
 primary_region = "lhr"
 
 [build]
   dockerfile = "Dockerfile"
 
 [env]
-  SKYLINE_DATA = "/data"
-  SKYLINE_READONLY = "1"        # public demo: saving and deleting landers is turned off
-  SKYLINE_HEAVY_JOBS = "2"      # at most two simulations at once
+  MONS_CARLO_DATA = "/data"
+  MONS_CARLO_READONLY = "1"        # public demo: saving and deleting landers is turned off
+  MONS_CARLO_HEAVY_JOBS = "2"      # at most two simulations at once
 
 [mounts]
-  source = "skyline_data"
+  source = "mons_carlo_data"
   destination = "/data"
 
 [http_service]
