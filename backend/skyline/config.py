@@ -11,12 +11,13 @@ RAW_DIR = DATA_DIR / "raw"
 DERIVED_DIR = DATA_DIR / "derived"
 DB_PATH = DATA_DIR / "skyline.db"
 MANIFEST_PATH = BACKEND_DIR / "manifest.json"
-# main's packed terrain (coarse global LOLA grid, built by build/pack.py from ssa-data-lunar). Read once by precompute.
-MAIN_DATA_JSON = REPO_DIR / "build" / "data.json"
+# small files shipped with the code: the coarse global LOLA grid (1/4 deg, polar caps 1/8 deg by 1/4 deg, metres, int16)
+# and the Moon mosaic used by the web page's globe. Both were derived from the LLNL ssa-data-lunar package.
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
 API_VERSION = "0.1.0"
 # Bump when precompute logic or the site list changes: the stamp then no longer matches and precompute reruns.
-CODE_VERSION = "3"
+CODE_VERSION = "4"
 
 # Geometry (km), as in main's src/engine.js
 RM = 1737.4

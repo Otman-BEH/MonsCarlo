@@ -87,8 +87,6 @@ class Skylines:
         if not loc.id:
             return None
         rec = self._index()["sites"].get(loc.id, {}).get("modes", {}).get(mode)
-        if rec is None and mode == "80m" and self.terrain.r80 is None:
-            return self._main_profile(loc)
         if rec is None:
             return None
         key = (loc.id, mode)
@@ -101,18 +99,6 @@ class Skylines:
                                  mask_deg=m, ground_m=rec["ground_m"], tiers=rec["tiers"], mode=mode, lat=loc.lat, lon=loc.lon)
                 self._mem[key] = hm
             return hm
-
-    def _main_profile(self, loc: Location) -> HorizonMask | None:
-        p = config.DERIVED_DIR / "main_profiles.npz"
-        if not p.exists():
-            return None
-        z = np.load(p)
-        if loc.id not in z.files:
-            return None
-        meta = z[loc.id + "__meta"]
-        m = z[loc.id].astype(np.float64)
-        return HorizonMask(az_deg=np.arange(m.shape[1]) * 360.0 / m.shape[1], heights_m=[float(e) for e in z["eyes"]], mask_deg=m,
-                           ground_m=float(meta[2]), tiers=["LOLA 80 m (main's precomputed skyline)"], mode="80m", lat=loc.lat, lon=loc.lon)
 
     def get(self, loc: Location, heights: list[float], mode: str = "best", naz: int = config.NAZ) -> tuple[HorizonMask, dict[float, np.ndarray]]:
         """Skyline and the mask at each requested height."""

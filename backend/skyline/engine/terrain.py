@@ -282,12 +282,8 @@ class Terrain:
     def coarse(self) -> Coarse:
         with self._lock:
             if self._coarse is None:
-                p = self.derived_dir / "coarse.npz"
-                if not p.exists():
-                    from ..prep.precompute import build_main_derived
-                    build_main_derived(self.derived_dir)
-                z = np.load(p)
-                self._coarse = Coarse(g=z["g"], s=z["s"], n=z["n"])
+                z = np.load(config.ASSETS_DIR / "coarse_lola.npz")
+                self._coarse = Coarse(g=z["g"].astype(np.float32), s=z["s"].astype(np.float32), n=z["n"].astype(np.float32))
             return self._coarse
 
     def _load_reg(self, fname: str, tier: str) -> Raster | None:
@@ -318,16 +314,17 @@ class Terrain:
 
     @property
     def p400(self) -> Raster | None:
-        """main's packed 400 m polar raster (fallback when the 80 m DEM is not on disk)."""
+        """The 80 m DEM averaged to 400 m (as main's build/hires.py made it for the browser). Built by precompute; the web
+        page draws its shadow map from it, and it stands in for the 80 m DEM if that file is missing."""
         with self._lock:
             if self._p400 is None:
-                p = self.derived_dir / "main_polar400.npz"
-                if not p.exists():
-                    from ..prep.precompute import build_main_derived
-                    build_main_derived(self.derived_dir)
-                z = np.load(p)
-                self._p400 = Raster("main 400 m polar raster", "LOLA 400 m (main's packed raster)", z["a"].astype(np.float32),
-                                    -float(z["half"]) * 1000, float(z["half"]) * 1000, float(z["km"]) * 1000, clamp=True)
+                p = self.derived_dir / "polar400.npy"
+                if p.exists():
+                    a = np.load(p)
+                    half = a.shape[0] * 200.0
+                    self._p400 = Raster("polar400", "LOLA 400 m", a.astype(np.float32), -half, half, 400.0, clamp=True)
+                else:
+                    self._p400 = False
             return self._p400 or None
 
     @property
@@ -348,8 +345,8 @@ class Terrain:
     def available(self) -> dict:
         return {"tiles_5m": sorted(self.tiles), "dem_80m": self.r80 is not None, "dem_240m": self.r240 is not None}
 
-    def polar(self) -> Raster:
-        """The polar raster main's '80m' logic uses: the 80 m DEM, else main's 400 m fallback."""
+    def polar(self) -> Raster | None:
+        """The polar raster main's '80m' logic uses: the 80 m DEM, else the 400 m average, else none (coarse grid only)."""
         return self.r80 or self.p400
 
     def tile_for(self, lat: float, lon: float, margin_m: float = 200.0) -> Raster | None:
@@ -390,7 +387,7 @@ class Terrain:
                     out[todo] = r.sample(x[todo], y[todo])
         else:
             P = self.polar()
-            todo = lat <= CAPLAT
+            todo = (lat <= CAPLAT) if P is not None else np.zeros(lat.shape, bool)
             if todo.any():
                 out[todo] = P.sample_main(x[todo], y[todo])
         todo = np.isnan(out)
@@ -409,7 +406,7 @@ class Terrain:
         for r in (self.r80, self.r240):
             if r is not None and bool(r.contains(x, y)):
                 return r.tier
-        if lat <= CAPLAT and self.r80 is None:
+        if lat <= CAPLAT and self.r80 is None and self.p400 is not None:
             return self.p400.tier
         return "LOLA coarse grid (" + ("1/8 deg" if abs(lat) > 75 else "1/4 deg") + ")"
 
@@ -458,7 +455,7 @@ class Terrain:
         if mode == "80m":
             P = self.polar()
             x, y = ll_to_xy(lat, lon)
-            if lat <= CAPLAT or bool(P.contains(x, y)):
+            if P is not None and (lat <= CAPLAT or bool(P.contains(x, y))):
                 rng = schedule_main_hires() if P is self.r80 else schedule_main_400()
                 half = -P.x0
                 margin = P.px
@@ -482,7 +479,7 @@ class Terrain:
             tiers.append((lambda qx, qy, qz, t=t: t.sample(*q_to_xy(qx, qy, qz)), np.arange(1, int(reach / t.px) + 1) * t.px, t.tier))
         if self.r80 is not None:
             tiers.append((lambda qx, qy, qz, r=self.r80: r.sample(*q_to_xy(qx, qy, qz)), np.arange(1, 751) * 80.0, self.r80.tier))
-        elif lat <= CAPLAT:
+        elif lat <= CAPLAT and self.p400 is not None:
             p = self.p400
             tiers.append((lambda qx, qy, qz, r=p: np.where(r.contains(*q_to_xy(qx, qy, qz)), r.sample(*q_to_xy(qx, qy, qz)), np.nan),
                           schedule_main_400(), p.tier))

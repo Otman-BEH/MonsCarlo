@@ -93,7 +93,7 @@ def test_manifest_is_complete():
 def test_precompute_stamp(tmp_path, monkeypatch):
     st = Store(tmp_path / "s.db")
     calls = []
-    monkeypatch.setattr(PC, "build_main_derived", lambda *a, **k: calls.append("main"))
+    monkeypatch.setattr(PC, "build_polar400", lambda *a, **k: calls.append("p400"))
     monkeypatch.setattr(PC, "_convert_compressed", lambda log: None)
 
     def fake_skylines(log=print):
@@ -109,13 +109,11 @@ def test_precompute_stamp(tmp_path, monkeypatch):
     assert calls.count("sky") == 2
 
 
-def test_main_packing_roundtrip(tmp_path):
-    PC.build_main_derived(tmp_path)
+def test_coarse_asset():
     import numpy as np
-    z = np.load(tmp_path / "coarse.npz")
-    assert z["g"].shape == (720, 1440) and z["s"].shape == (120, 1440)
-    pr = np.load(tmp_path / "main_profiles.npz")
-    assert pr["shack"].shape == (7, 720)
+    z = np.load(config.ASSETS_DIR / "coarse_lola.npz")
+    assert z["g"].shape == (720, 1440) and z["s"].shape == (120, 1440) and z["n"].shape == (120, 1440)
+    assert (config.ASSETS_DIR / "moon.jpg").stat().st_size > 50000
 
 
 def test_store_landers(tmp_path):

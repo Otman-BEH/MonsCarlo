@@ -30,7 +30,7 @@ def _diff(a, b):
 
 @needs_kernels
 def test_spice_matches_main_truth():
-    tr = json.loads((config.REPO_DIR / "build" / "truth.json").read_text())
+    tr = json.loads((FIX / "truth.json").read_text())      # main's build/truth.py: SPICE DE421, 6-hourly
     t = tr["t0"] + np.arange(len(tr["rows"])) * tr["step"]
     s, e = spice.vectors(t)
     rows = np.array(tr["rows"])

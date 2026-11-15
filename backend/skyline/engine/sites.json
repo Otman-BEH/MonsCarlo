@@ -1,5 +1,5 @@
 {
-  "about": "Site catalogue copied from main src/app.js SITES. snapped = coordinates main uses for its precomputed 80 m skylines (build/data.json hz.sites).",
+  "about": "Site catalogue copied from main src/app.js SITES. snapped = the highest ground within 600 m of the nominal point on the 80 m DEM (as main's build/hires.py placed them).",
   "sites": [
     {
       "id": "shack",

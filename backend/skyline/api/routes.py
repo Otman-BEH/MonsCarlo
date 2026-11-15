@@ -47,8 +47,8 @@ CITATIONS = {
     "LOLA 5 m": "Barker et al. 2021, PSS 203, 105119, PGDA product 78, https://pgda.gsfc.nasa.gov/products/78",
     "LOLA 80 m": "Barker et al. 2021, LOLA south polar DEMs, PGDA product 90, https://pgda.gsfc.nasa.gov/products/90",
     "LOLA 240 m": "Barker et al. 2021, LOLA south polar DEMs, PGDA product 90, https://pgda.gsfc.nasa.gov/products/90",
-    "LOLA coarse grid": "LOLA global grid as packed in main's build/data.json (build/pack.py, ssa-data-lunar)",
-    "LOLA 400 m": "LOLA 80 m DEM averaged to 400 m in main's build/data.json (PGDA product 90)",
+    "LOLA coarse grid": "LOLA global grid, 1/4 deg (LLNL ssa-data-lunar package), shipped in skyline/assets",
+    "LOLA 400 m": "LOLA 80 m DEM averaged to 400 m (PGDA product 90)",
 }
 
 
