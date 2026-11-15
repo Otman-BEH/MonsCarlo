@@ -105,6 +105,5 @@ def test_terrain_files_and_page(c):
         n = int(r.headers["X-Size"])
         assert len(r.content) == n * n * 2
     assert c.get("/terrain/moon.jpg").headers["content-type"] == "image/jpeg"
-    page = c.get("/")
-    assert page.status_code == 200 and "app.js" in page.text
+    assert c.get("/").json()["docs"] == "/docs"         # API only: the page is served separately
     assert c.get("/sky", params={"site": "mala", "time": T}).json()["vectors_km"]["sun"]

@@ -13,8 +13,9 @@ Two packages in one FastAPI service:
   landers, the mission simulation and Monte Carlo. Ported from main's `src/engine.js`, `src/terrain.js`,
   `src/analysis.js` and `src/app.js`, and checked against them (see Validation).
 
-The same server also serves the web page (`../web/`) at `/`: the page fetches every number from the endpoints below and
-only draws. The original single-file app, with its own in-browser engine, was retired (git history, commit `afd9e78`);
+This is the backend only. The web page (`../web/`) is a separate static frontend that calls these endpoints for every
+number and only draws; it is served on its own (`python serve_web.py` in the repo root). The API allows cross-origin
+calls; set `SKYLINE_CORS_ORIGINS` (comma list) to limit them to the page's address when hosted. The original single-file app, with its own in-browser engine, was retired (git history, commit `afd9e78`);
 the engine here was ported from it and checked against it.
 
 ## Install
@@ -44,7 +45,7 @@ This runs, in order, and every step skips work already done:
    modes). About 10 s on an Apple M1, then skipped while the stamp matches.
 3. **Ephemeris**: pre-fetches 14 months of hourly Sun and Earth vectors from JPL Horizons (28 requests, about 40 s).
    If Horizons cannot be reached, those months come from SPICE and are replaced by Horizons data on a later run.
-4. **Server** on http://127.0.0.1:8000: the web page at `/`, interactive API documentation at `/docs`.
+4. **API** on http://127.0.0.1:8000, interactive documentation at `/docs`.
 
 Flags: `--skip-fetch`, `--skip-prefetch`, `--all-data` (also the optional files: illumination maps, hillshade, extra
 5 m tiles), `--port`, `--no-serve`. The data directory is `backend/data/` unless `SKYLINE_DATA` points elsewhere.

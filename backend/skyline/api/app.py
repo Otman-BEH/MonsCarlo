@@ -1,11 +1,13 @@
 """FastAPI app: routes, error handlers. Run with `python run.py` (prepares the data first) or
-`uvicorn skyline.api.app:app --port 8000` when the data is already prepared."""
+`uvicorn skyline.api.app:app --port 8000` when the data is already prepared. API only: the web page in web/ is served
+separately and calls this API."""
 from __future__ import annotations
+
+import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -28,8 +30,11 @@ Ephemeris: JPL Horizons API, cached by month in SQLite (SPICE DE440 fallback). T
 """
 
 app = FastAPI(title="Lunar Skyline API", version=config.API_VERSION, description=DESCRIPTION)
-# local use by the web app and other tools on this machine
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "DELETE"], allow_headers=["*"])
+# The web page is served from its own origin, so the API allows cross-origin calls. SKYLINE_CORS_ORIGINS (comma list)
+# narrows that to the page's address when hosted; the default allows any origin.
+_origins = [o.strip() for o in os.environ.get("SKYLINE_CORS_ORIGINS", "*").split(",") if o.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["GET", "POST", "DELETE"], allow_headers=["*"],
+                   expose_headers=["X-Size", "X-Cell-Km", "X-Half-Km"])
 app.add_middleware(GZipMiddleware, minimum_size=2000)
 app.include_router(router)
 
@@ -73,13 +78,9 @@ async def _value(_: Request, ex: ValueError):
     return _err(422, str(ex))
 
 
+@app.get("/", include_in_schema=False)
 @app.get("/api", include_in_schema=False)
 def api_root():
     return {"name": "Lunar Skyline API", "version": config.API_VERSION, "docs": "/docs",
-            "try": ["/report?site=shack", "/sky?site=mala", "/sites", "/landers"]}
-
-
-# the web page (repo folder web/): the same server answers the API and serves the page that uses it
-WEB_DIR = config.REPO_DIR / "web"
-if WEB_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
+            "try": ["/report?site=shack", "/sky?site=mala", "/sites", "/landers"],
+            "web_page": "served separately from the web/ folder (see the root README)"}

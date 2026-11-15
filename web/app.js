@@ -5,15 +5,16 @@
   const $ = id => document.getElementById(id);
   const DAY = 86400e3, HOUR = 3600e3, D2R = Math.PI / 180, R2D = 180 / Math.PI, RM = 1737.4;
   const SYNODIC = 29.530589, TAB_DAYS = 428, VIEWS = ['plan', 'explore', 'compare', 'learn'];
-  const API = (new URLSearchParams(location.search).get('api') || '').replace(/\/$/, '');
+  // Where the Lunar Skyline API runs: ?api=... in the address wins, then web/config.js, then the page's own server.
+  const API = (new URLSearchParams(location.search).get('api') || window.LUNAR_SKYLINE_API || '').replace(/\/$/, '');
 
   // ---------- talking to the server ----------
-  async function api(path, body) {
-    const r = await fetch(API + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined);
+  async function api(path, body, signal) {
+    const r = await fetch(API + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal } : { signal });
     if (!r.ok) { let d = null; try { d = (await r.json()).detail; } catch (_) {} throw new Error(typeof d === 'string' ? d : 'the server answered ' + r.status); }
     return r;
   }
-  const getJSON = async (path, body) => (await api(path, body)).json();
+  const getJSON = async (path, body, signal) => (await api(path, body, signal)).json();
   const qs = o => Object.entries(o).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');
   const iso = ms => new Date(ms).toISOString().slice(0, 19) + 'Z';
   // One cache for everything fetched: a value appears when its request returns, then the page redraws.
@@ -29,6 +30,25 @@
     return e.v;
   }
   const failed = key => { const e = cache.get(key); return e && e.err ? e.err.message : null; };
+  // For the expensive questions (mission, design lab, landing risk, rescue, calendar): one request slot per panel.
+  // Nothing is asked while time is playing or being dragged; once the inputs settle (250 ms) the newest question is sent
+  // and any older one still running is cancelled. Until the answer arrives the panel keeps showing the last one.
+  const slots = {};
+  function latest(slot, key, fn, delay) {
+    const s = slots[slot] || (slots[slot] = { want: null, timer: 0, ctrl: null, last: undefined, lastKey: null });
+    const hit = cache.get(key);
+    if (hit && hit.v !== undefined) { s.last = hit.v; s.lastKey = key; return { v: hit.v, fresh: true }; }
+    if (hit && hit.err) return { v: s.last, fresh: false, err: hit.err.message };
+    if (s.want !== key && !S.playing && !S.scrubbing) {
+      s.want = key; clearTimeout(s.timer); if (s.ctrl) { s.ctrl.abort(); s.ctrl = null; }
+      s.timer = setTimeout(() => {
+        const ctrl = new AbortController(), e = { v: undefined, err: null }; s.ctrl = ctrl; cache.set(key, e);
+        fn(ctrl.signal).then(v => { e.v = v; if (s.ctrl === ctrl) s.ctrl = null; renderSoon(); },
+          err => { if (err.name === 'AbortError') { cache.delete(key); return; } e.err = err; lastErr = err; console.error(err); renderSoon(); });
+      }, delay === undefined ? 250 : delay);
+    }
+    return { v: s.last, fresh: false };
+  }
 
   // ---------- small geometry used for drawing ----------
   function discFrac(el, r, hz) { const d = (el - hz) / r; if (d >= 1) return 1; if (d <= -1) return 0; return 1 - (Math.acos(d) - d * Math.sqrt(1 - d * d)) / Math.PI; }
@@ -129,7 +149,7 @@
   function skyExact() {
     const key = 'sky|' + siteKey(S.site) + '|' + S.eye + '|' + S.t, e = cache.get(key);
     if (e && e.v) return e.v;
-    if (!S.playing && skyWant !== key) { skyWant = key; clearTimeout(skyTimer); skyTimer = setTimeout(() => need(key, () => getJSON('/sky?' + qs({ ...loc(S.site), time: iso(S.t), array_height_m: S.eye, antenna_height_m: S.eye }))), 120); }
+    if (!S.playing && !S.scrubbing && skyWant !== key) { skyWant = key; clearTimeout(skyTimer); skyTimer = setTimeout(() => need(key, () => getJSON('/sky?' + qs({ ...loc(S.site), time: iso(S.t), array_height_m: S.eye, antenna_height_m: S.eye }))), 120); }
     return null;
   }
   const evOf = ev => ev && ev.time ? { t: Date.parse(ev.time) } : null;
@@ -154,10 +174,10 @@
     faultK: x.fault_starts_at_h === null ? -1 : x.fault_starts_at_h };
   function missionNow() {
     const body = { location: loc(S.site), landing_time: iso(landingTime()), lander: lander(), mission: missionSpec(), include: ['trace'] }, key = 'mis|' + JSON.stringify(body);
-    const r = need(key, () => getJSON('/mission', body)); if (!r) return { pending: true, err: failed(key) };
+    const q = latest('mission', key, sig => getJSON('/mission', body, sig)), r = q.v; if (!r) return { pending: true, err: q.err };
     const nom = sumOf(r.nominal), rob = sumOf(r.with_terrain_margin), st = { meets: 2, marginal: 1, fails: 0 }[r.verdict];
     nom.soc = r.trace.state_of_charge; nom.sun = r.trace.sun_share; nom.link = r.trace.earth_link; nom.safeArr = r.trace.safe_mode; rob.soc = r.trace.state_of_charge_with_margin;
-    return { nom, rob, st, t: Date.parse(r.landing_time), stress: r.stress || null, reasons: r.reasons };
+    return { nom, rob, st, t: Date.parse(r.landing_time), stress: r.stress || null, reasons: r.reasons, stale: !q.fresh, err: q.err };
   }
 
   // ---------- plan: mission verdict and survival timeline ----------
@@ -165,7 +185,7 @@
     const mv = missionNow(), cfg = S.cfg;
     if (mv.pending) { S.mv = null; $('mv-pill').innerHTML = '<span class="pill big off">' + (mv.err ? 'Server error' : 'Simulating…') + '</span>'; $('mv-say').textContent = mv.err || ''; waiting($('surv'), mv.err ? ' ' : 'Simulating the mission…'); return; }
     S.mv = mv; const { nom, rob, st } = mv;
-    $('mv-pill').innerHTML = '<span class="pill big ' + ['bad', 'warn', 'go'][st] + '">' + STL[st] + '</span>';
+    $('mv-pill').innerHTML = mv.stale ? '<span class="pill big off">' + (mv.err ? 'Server error' : 'Updating…') + '</span>' : '<span class="pill big ' + ['bad', 'warn', 'go'][st] + '">' + STL[st] + '</span>';
     const where = short(S.site) + ', landing ' + fmtDT(mv.t) + ', ' + cfg.days + '-day mission: ';
     $('mv-say').textContent = where + (st === 2 ? 'power and Earth contact hold for the whole mission, even with every horizon raised by ' + cfg.margin + '°.'
       : st === 1 ? 'it works on the modelled terrain, but with horizons raised by ' + cfg.margin + '° ' + rob.fails.join(' and ') + '.'
@@ -218,18 +238,19 @@
   function labNow() {
     const body = { location: loc(S.site), landing_time: iso(landingTime()), lander: lander(), mission: missionSpec(), array_w_per_kg: LAB.wkg, battery_wh_per_kg: LAB.whkg,
                    atlas_start: iso(Math.max(TAB.t0, floorDay(S.t) - 5 * DAY)) }, key = 'lab|' + JSON.stringify(body);
-    return { r: need(key, () => getJSON('/design', body)), err: failed(key) };
+    const q = latest('design', key, sig => getJSON('/design', body, sig)); return { r: q.v, err: q.err, stale: !q.fresh };
   }
   function drawLab() {
     const cv = $('dfront'); if (!shown(cv)) return;
     const q = labNow(), R = q.r, cfg = S.cfg;
-    if (!R || !S.mv) { $('d-pill').innerHTML = '<span class="pill big off">' + (q.err ? 'Server error' : 'Searching designs…') + '</span>'; waiting(cv, q.err || 'Searching array and battery sizes…'); waiting($('dab'), ' '); waiting($('datlas'), ' '); return; }
+    if (!R || !S.mv || S.mv.pending) { $('d-pill').innerHTML = '<span class="pill big off">' + (q.err ? 'Server error' : 'Searching designs…') + '</span>'; waiting(cv, q.err || 'Searching array and battery sizes…'); waiting($('dab'), ' '); waiting($('datlas'), ' '); return; }
     LAB.res = R; LAB.F = R.frontier; const F = R.frontier, b = F.best, st = S.mv.st, mc = labMass(cfg.peakW, cfg.capWh);
+    if (q.stale || S.mv.stale) { $('d-pill').innerHTML = '<span class="pill big off">' + (q.err ? 'Server error' : 'Updating…') + '</span>'; }
     $('d-apply').hidden = !b;
     if (b) { $('d-best').textContent = fmtW(b.peakW) + ' + ' + fmtCap(b.capWh); $('d-best-s').textContent = 'About ' + fmtKg(b.mass) + ' of array and battery. A screening figure from the W per kg and Wh per kg above.'; }
     else { $('d-best').textContent = 'None'; $('d-best-s').textContent = 'No array and battery pass at this landing time, because ' + (R.why_none || 'the needs cannot be met') + '. Try another time in the atlas below.'; }
     $('d-cur').textContent = STN[st]; $('d-cur-s').textContent = fmtW(cfg.peakW) + ' + ' + fmtCap(cfg.capWh) + ', about ' + fmtKg(mc) + (b ? (st === 2 ? (mc - b.mass > 0.05 ? ' · ' + fmtKg(mc - b.mass) + ' more than the lightest' : ' · as light as it gets') : ' · the lightest passing design is ' + fmtKg(b.mass)) : '');
-    $('d-pill').innerHTML = !b ? '<span class="pill big bad">No hardware works at this time</span>' : st === 2 ? '<span class="pill big go">' + ((mc - b.mass) / b.mass < 0.15 ? 'Lean design' : 'Passes, with mass to spare') + '</span>' : '<span class="pill big ' + (st === 1 ? 'warn">Marginal: needs more hardware' : 'bad">Fails: needs more hardware') + '</span>';
+    if (!(q.stale || S.mv.stale)) $('d-pill').innerHTML = !b ? '<span class="pill big bad">No hardware works at this time</span>' : st === 2 ? '<span class="pill big go">' + ((mc - b.mass) / b.mass < 0.15 ? 'Lean design' : 'Passes, with mass to spare') + '</span>' : '<span class="pill big ' + (st === 1 ? 'warn">Marginal: needs more hardware' : 'bad">Fails: needs more hardware') + '</span>';
     const alts = [];
     if (b) {
       const pa = R.min_array_at_your_battery_w, cb = R.min_battery_at_your_array_wh;
@@ -300,9 +321,9 @@
   let riskLast = null, riskMemo = { key: null, r: null };
   function riskNow() {
     if (!riskOk()) return null;
-    const key = riskKey(), j = need(key, () => getJSON('/mission', riskBody()));
+    const key = riskKey(), body = riskBody(), q = latest('risk', key, sig => getJSON('/mission', body, sig), 600), j = q.fresh ? q.v : null;
     if (j && riskMemo.key === key) return riskMemo.r;
-    if (!j) return riskLast && riskLast.site === siteKey(S.site) ? Object.assign({}, riskLast, { stale: true, err: failed(key) }) : { pending: true, err: failed(key) };
+    if (!j) return riskLast && riskLast.site === siteKey(S.site) ? Object.assign({}, riskLast, { stale: true, err: q.err }) : { pending: true, err: q.err };
     const k = j.risk, gd = k.grid, n = gd.n, sp = gd.spacing_m / 1000, W = gd.half_width_m / 1000, c = (n - 1) / 2;
     const rho0 = 2 * RM * Math.tan((90 + Math.max(-89.999, S.site.lat)) / 2 * D2R);
     let bi = 0, bd = 1e9; gd.lat.forEach((la, q) => { const d = Math.hypot(la - k.best_aim.lat, (gd.lon[q] - k.best_aim.lon) * Math.cos(la * D2R)); if (d < bd) { bd = d; bi = q; } });
@@ -360,7 +381,7 @@
   function rows() { return [S.site].concat(S.cmp.filter(id => id !== S.site.id).map(byId).filter(Boolean)).slice(0, 5); }
   function rescueNow() {
     const body = { plan: loc(S.plan.site), plan_time: iso(S.plan.t), sites: S.scope === 'cmp' ? rows().map(loc) : S.scope, slip_days: S.slip, flex_days: S.flex, lander: lander(), mission: missionSpec() };
-    const key = 'res|' + JSON.stringify(body); return { r: need(key, () => getJSON('/rescue', body)), err: failed(key) };
+    const key = 'res|' + JSON.stringify(body), q = latest('rescue', key, sig => getJSON('/rescue', body, sig)); return { r: q.v, err: q.err, stale: !q.fresh };
   }
   function drawRescue() {
     $('r-slipv').textContent = S.slip + (S.slip === 1 ? ' day' : ' days');
@@ -517,9 +538,9 @@
   function scrub(cv, padL, padR, setter) {
     let down = false;
     const at = e => { const r = cv.getBoundingClientRect(), f = Math.max(0, Math.min(1, (e.clientX - r.left - padL) / (r.width - padL - padR))); setter(S.anchor + f * S.span * DAY); };
-    cv.addEventListener('pointerdown', e => { down = true; try { cv.setPointerCapture(e.pointerId); } catch (_) {} at(e); });
+    cv.addEventListener('pointerdown', e => { down = true; S.scrubbing = true; try { cv.setPointerCapture(e.pointerId); } catch (_) {} at(e); });
     cv.addEventListener('pointermove', e => { if (down) at(e); });
-    ['pointerup', 'pointercancel'].forEach(n => cv.addEventListener(n, () => { down = false; }));
+    ['pointerup', 'pointercancel'].forEach(n => cv.addEventListener(n, () => { if (down) { down = false; S.scrubbing = false; renderSoon(); } }));
   }
   // window statistics (server: /windows)
   function statsFor(site, t0, days) {
@@ -613,7 +634,7 @@
   // ---------- compare ----------
   function calNow() {
     const rs = rows(), body = { locations: rs.map(loc), start: iso(S.calAnchor), days: 366, lander: lander(), mission: missionSpec() }, key = 'cal|' + JSON.stringify(body);
-    const j = need(key, () => getJSON('/calendar', body)); if (!j) return null;
+    const q = latest('calendar', key, sig => getJSON('/calendar', body, sig)), j = q.v; if (!j) return null;
     const out = {}; j.sites.forEach((s, k) => { out[siteKey(rs[k])] = s; }); return out;
   }
   function drawCompare() {
@@ -977,7 +998,7 @@
 
   // ---------- report ----------
   function reportText() {
-    const c = S.cfg, m = siteMask(S.site) || { h0: 0, lo: 0, hi: 0, tiers: [] }, mv = S.mv, rq = rescueNow(), r = rq.r, L = [];
+    const c = S.cfg, m = siteMask(S.site) || { h0: 0, lo: 0, hi: 0, tiers: [] }, mv = S.mv && !S.mv.pending ? S.mv : null, rq = rescueNow(), r = rq.r, L = [];
     L.push('# Lunar Skyline mission report', '', 'Generated ' + fmtDT(Date.now()) + '.', '');
     L.push('## Scenario', '- Site: ' + S.site.name + ' (' + fmtLat(S.site.lat) + ', ' + fmtLon(S.site.lon) + '), terrain height ' + Math.round(m.h0) + ' m, mast ' + S.eye + ' m', '- Terrain: ' + tierText(m) + ', ' + sg(m.lo, 1) + ' to ' + sg(m.hi, 1), mv ? '- Landing: ' + fmtDT(mv.t) : '- Landing: ' + fmtDT(landingTime()), '- Surface mission: ' + c.days + ' days', '');
     L.push('## Mission needs', '- Solar array: ' + c.peakW + ' W in full Sun, ' + (c.tracking ? 'sun-tracking' : 'fixed horizontal'), '- Load: ' + c.loadSun + ' W in sunlight, ' + c.loadDark + ' W in darkness', '- Battery: ' + c.capWh + ' Wh, reserve ' + Math.round(c.minSoc * 100) + '%, charge efficiency ' + Math.round(c.chargeEff * 100) + '%',
@@ -1100,8 +1121,8 @@
       S.cur = lerped;
       if (S.ev && S.evAt !== S.t) { const keep = ev => ev && ev.t > S.t ? ev : null; S.ev = { sun: keep(S.ev.sun), earth: keep(S.ev.earth) }; }
     }
-    drawSiteInfo(); drawMission();
-    if (S.view === 'plan') { drawLab(); drawRescue(); drawRisk(); }
+    drawSiteInfo();
+    if (S.view === 'plan') { drawMission(); drawLab(); drawRescue(); drawRisk(); }
     else if (S.view === 'explore') { if (S.cur) { drawSurface(); drawStatus(); drawSky(); } else { waiting($('surf'), 'Loading the sky…'); waiting($('sky'), 'Loading the sky…'); } drawTimeline(); drawMap(); }
     else if (S.view === 'learn') drawLearn();
     else { drawCmpSky(); drawCompare(); drawCalendar(); }
@@ -1227,6 +1248,7 @@
   // ---------- boot ----------
   try {
     readTheme();
+    document.querySelectorAll('a[href="docs"]').forEach(a => { a.href = (API || '') + '/docs'; });
     const sj = await getJSON('/sites');
     SITES = sj.sites.map(s => ({ id: s.id, g: s.group, name: s.name, lat: s.lat, lon: s.lon, note: s.note }));
     S.site = SITES[0];
@@ -1250,7 +1272,7 @@
     render();
     window.__ready = true;
   } catch (err) {
-    $('boot').innerHTML = 'The Lunar Skyline server could not be reached (' + (err && err.message ? err.message : err) + '). Start it with <code>python run.py</code> in the <code>backend</code> folder, then open <a href="http://127.0.0.1:8000/">http://127.0.0.1:8000/</a>.';
+    $('boot').innerHTML = 'The Lunar Skyline API could not be reached at <code>' + (API || location.origin) + '</code> (' + (err && err.message ? err.message : err) + '). Start it with <code>python run.py</code> in the <code>backend</code> folder, or set its address in <code>web/config.js</code>, then reload.';
     throw err;
   }
 })();
