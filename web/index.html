@@ -317,6 +317,16 @@
   <!-- METHOD -->
   <section class="panel span2 about" data-v="method" aria-label="Method and accuracy">
       <div class="phead"><h2>Method, accuracy and limits</h2></div>
+      <div class="tblwrap"><table class="valid">
+        <thead><tr><th>Check</th><th>Against</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>Sun and Earth directions (SPICE path)</td><td>JPL DE421 ephemeris, 3,166 epochs at 6 sites</td><td>largest difference 0.00002°</td></tr>
+          <tr><td>Sun and Earth directions (Horizons path)</td><td>JPL SPICE DE440, one month at 4 sites</td><td>largest difference 0.00001°</td></tr>
+          <tr><td>Skylines, 80 m mode, mast 2 to 10 m</td><td>the original 80 m skylines of this app, 9 sites</td><td>within 0.05°</td></tr>
+          <tr><td>Mission verdicts, battery traces, failure messages</td><td>the original in-browser engine, 48 cases</td><td>identical</td></tr>
+          <tr><td>Monte Carlo random numbers, design-lab results</td><td>the original in-browser engine</td><td>bit for bit / identical</td></tr>
+          <tr><td>What the 5 m maps change</td><td>80 m terrain, 12 months, 2 m mast</td><td>Shackleton rim sunlit 86% → 82%; at the pole Earth in view 29% → 18%</td></tr>
+        </tbody></table></div>
       <div class="cols">
         <div><h3>Positions</h3>
           <p>Sun and Earth positions come from NASA's JPL Horizons service, fetched by the Lunar Skyline server one month at a time and cached (JPL's SPICE DE440 kernels stand in if Horizons cannot be reached). They are Moon-fixed vectors, so lunar libration and the parallax between the Moon's centre and the site are included. Checked against JPL's DE421 ephemeris through SPICE (3,166 epochs at six sites): the largest difference is 0.00002°. Rise and set times are refined to a few seconds after an hourly search.</p></div>

@@ -196,6 +196,8 @@ th:first-child, td:first-child { text-align: left; position: sticky; left: 0; ba
 th:first-child { background: var(--panel-2); }
 tbody tr:hover td { background: var(--panel-2); }
 td.best { font-weight: 700; color: var(--go); }
+table.valid td, table.valid th { text-align: left; white-space: normal; }
+table.valid td:last-child { font-variant-numeric: tabular-nums; color: var(--go); font-weight: 500; }
 td .st { font-weight: 600; font-size: 12.5px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line-2); }
 td .st.s2 { color: var(--go); border-color: color-mix(in srgb, var(--go) 45%, var(--line)); } td .st.s1 { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); } td .st.s0 { color: var(--muted); }
 #r-tbl td:last-child, #r-tbl th:last-child { text-align: left; white-space: normal; min-width: 220px; }
