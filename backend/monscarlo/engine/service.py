@@ -127,7 +127,7 @@ class Engine:
             "vectors_km": {"sun": [float(x) for x in s_vec], "earth": [float(x) for x in e_vec], "frame": "Moon-fixed (body-fixed), from the Moon's centre"},
             "subsolar": {"lat": float(sp_lat), "lon": float(sp_lon)}, "subearth": {"lat": float(se_lat), "lon": float(se_lon)},
             "dsn": dsn,
-            "sun": {**body("sun", st["sunFrac"]), "irradiance_factor": f(st["irr"]),
+            "sun": {**body("sun", st["sunFrac"]), "irradiance_factor": f(st["irr"]), "share_not_eclipsed_by_earth": f(st["sunEcl"]),
                     "next_sunset": events["sunset"], "next_sunrise": events["sunrise"]},
             "earth": {**body("earth", st["earthFrac"]), "next_earthset": events["earthset"], "next_earthrise": events["earthrise"]},
             "heights": {"array_m": v.array_h, "antenna_m": v.antenna_h, "ground_m": v.ground_m},

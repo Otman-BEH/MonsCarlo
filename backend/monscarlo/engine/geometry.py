@@ -55,9 +55,28 @@ def disc_frac(el, r, hz):
     return np.where(d >= 1, 1.0, np.where(d <= -1, 0.0, f))
 
 
+def disc_cover(sep, r, big):
+    """Share of a disc of angular radius r that a disc of radius big covers when their centres are sep apart
+    (same units, small angles, big >= r): 0 when apart, 1 when the small disc is wholly behind the big one."""
+    sep, r, big = (np.asarray(a, dtype=np.float64) for a in (sep, r, big))
+    d = np.clip(sep, np.abs(big - r) + 1e-12, big + r)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        lens = (r * r * np.arccos(np.clip((d * d + r * r - big * big) / (2 * d * r), -1, 1))
+                + big * big * np.arccos(np.clip((d * d + big * big - r * r) / (2 * d * big), -1, 1))
+                - 0.5 * np.sqrt(np.maximum(0.0, (-d + r + big) * (d + r - big) * (d - r + big) * (d + r + big))))
+    return np.where(sep >= big + r, 0.0, np.where(sep <= big - r, 1.0, lens / (np.pi * r * r)))
+
+
+def separation(el1, az1, el2, az2):
+    """Angle (deg) between two sky directions given as elevation and azimuth (deg)."""
+    a, b = np.asarray(el1) * D2R, np.asarray(el2) * D2R
+    c = np.sin(a) * np.sin(b) + np.cos(a) * np.cos(b) * np.cos((np.asarray(az1) - np.asarray(az2)) * D2R)
+    return np.arccos(np.clip(c, -1, 1)) * R2D
+
+
 def irradiance(sun_dist_km):
     """Solar irradiance factor relative to 1 AU."""
     return (AU_KM / np.asarray(sun_dist_km)) ** 2
 
 
-__all__ = ["Basis", "site_basis", "look", "sub_point", "disc_frac", "irradiance", "RM", "RSUN", "REARTH", "D2R", "R2D"]
+__all__ = ["Basis", "site_basis", "look", "sub_point", "disc_frac", "disc_cover", "separation", "irradiance", "RM", "RSUN", "REARTH", "D2R", "R2D"]

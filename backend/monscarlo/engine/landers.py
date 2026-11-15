@@ -50,6 +50,7 @@ class Battery(BaseModel):
     min_soc: float = Field(default=0.2, ge=0, lt=1)
     charge_eff: float = Field(default=0.9, gt=0, le=1)
     discharge_eff: float = Field(default=1.0, gt=0, le=1, description="share of the energy drawn from the battery that reaches the loads")
+    initial_soc: float = Field(default=1.0, gt=0, le=1, description="state of charge at touchdown")
 
 
 class Loads(BaseModel):
@@ -77,6 +78,29 @@ class Landing(BaseModel):
     max_slope_deg: float = Field(default=12, gt=0, le=60)
 
 
+class Thermal(BaseModel):
+    """A one-node heat balance for the lander body. Leave it out (the default) and no heat is modelled.
+
+    The body gains the electrical power it uses, which all ends up as heat, plus the sunlight it absorbs. It loses heat
+    by radiation to cold surroundings. Thermostatic heaters hold it at keep_above_c, and their power is added to the
+    electrical load, so a long dark spell costs battery energy even when the equipment is asleep. Above keep_below_c a
+    radiator is assumed to shed the excess: the hot side is not a failure case here."""
+    model_config = ConfigDict(extra="forbid")
+    radiating_area_m2: float = Field(default=0.3, gt=0, le=50, description="emissivity times area of the insulated body: its heat leak. 0.3 m2 leaks 68 W at -20 C")
+    sun_area_m2: float = Field(default=0.15, ge=0, le=50, description="absorptivity times the area the body shows to the Sun")
+    heat_capacity_j_per_k: float = Field(default=60000, gt=0, le=1e8, description="thermal mass; 60 kJ/K is about 65 kg of equipment")
+    keep_above_c: float = Field(default=-20, ge=-150, le=60, description="heaters hold the body at this temperature")
+    keep_below_c: float = Field(default=40, ge=-100, le=120, description="a radiator sheds heat above this temperature")
+    surroundings_k: float = Field(default=100, ge=3, le=400, description="effective temperature of the ground and sky the body radiates to")
+    start_c: float = Field(default=20, ge=-150, le=120, description="body temperature at touchdown")
+
+    @model_validator(mode="after")
+    def _order(self):
+        if self.keep_below_c <= self.keep_above_c:
+            raise ValueError("keep_below_c must be above keep_above_c")
+        return self
+
+
 class Mass(BaseModel):
     model_config = ConfigDict(extra="forbid")
     array_w_per_kg: Optional[float] = Field(default=None, gt=0)
@@ -97,6 +121,7 @@ class Lander(BaseModel):
     comms: Comms = Comms()
     landing: Landing = Landing()
     mass: Mass = Mass()
+    thermal: Optional[Thermal] = Field(default=None, description="heat balance and heater power; omitted means not modelled")
 
     @field_validator("id")
     @classmethod
