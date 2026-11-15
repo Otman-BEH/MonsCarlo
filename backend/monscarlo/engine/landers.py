@@ -32,6 +32,7 @@ class Array(BaseModel):
     faces: Optional[list[Face]] = Field(default=None, description="vertical only")
     heading_deg: float = Field(default=0.0, ge=-360, le=360, description="vertical only: lander yaw from true north")
     height_m: float = Field(default=2.0, ge=0, le=100, description="array height above ground: sets the Sun horizon")
+    incidence_loss: bool = Field(default=False, description="fixed panels only: also lose the light the cover glass reflects at a slant (Fresnel, n = 1.5)")
 
     @model_validator(mode="after")
     def _check(self):
@@ -48,6 +49,7 @@ class Battery(BaseModel):
     capacity_wh: float = Field(gt=0)
     min_soc: float = Field(default=0.2, ge=0, lt=1)
     charge_eff: float = Field(default=0.9, gt=0, le=1)
+    discharge_eff: float = Field(default=1.0, gt=0, le=1, description="share of the energy drawn from the battery that reaches the loads")
 
 
 class Loads(BaseModel):
