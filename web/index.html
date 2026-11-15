@@ -146,10 +146,10 @@
 
   <!-- PLAN -->
   <nav class="panel span2 subnav" data-v="plan" aria-label="Plan sections">
-    <a href="#sec-verdict">Verdict</a><a href="#sec-cont">Contingencies</a><a href="#sec-design">Mission design</a><a href="#sec-risk">Landing risk</a><a href="#sec-rescue">Launch slip</a>
+    <a href="#sec-verdict">Verdict</a><a href="#sec-risk">Landing risk</a><a href="#sec-cont">Contingencies</a><a href="#sec-design">Mission design</a><a href="#sec-rescue">Launch slip</a>
     <span class="hint">Each result is simulated hour by hour for your lander.</span>
   </nav>
-  <section class="panel" data-v="plan" aria-label="Mission needs">
+  <section class="panel lander" data-v="plan" aria-label="Mission needs">
       <div class="phead"><h2>Lander and mission</h2></div>
       <label class="fl" for="m-lander">Lander<select id="m-lander"></select></label>
       <div class="lspec" id="m-lspec"></div>
@@ -177,20 +177,66 @@
       </div>
     </section>
 
-  <section id="sec-verdict" class="panel" data-v="plan" aria-label="Mission verdict">
-      <div class="phead"><h2>If you land here at this time</h2>
-        <ul class="legend"><li><i class="key" style="border-color:var(--ink);border-top-width:3px"></i>Battery, mapped terrain</li><li><i class="key dash" style="border-color:var(--muted)"></i><span>Battery, terrain <span id="mv-mlab">0.3</span>° higher</span></li></ul></div>
-      <div class="verdict" id="mv-ban"><div class="vbig" id="mv-ic"></div><div><h3 id="mv-pill">Simulating…</h3><p id="mv-say"></p></div></div>
-      <div class="facts">
-        <div class="fact"><span class="lab">Lowest battery</span><b id="mv-soc"></b><span class="cap" id="mv-soc-s"></span></div>
-        <div class="fact"><span class="lab">Longest night</span><b id="mv-lit"></b><span class="cap" id="mv-lit-s"></span></div>
-        <div class="fact"><span class="lab">Longest link gap</span><b id="mv-gap"></b><span class="cap" id="mv-gap-s"></span></div>
-        <div class="fact"><span class="lab">Battery needed</span><b id="mv-need"></b><span class="cap" id="mv-need-s"></span></div>
-      </div>
-      <canvas id="surv" role="img" aria-label="Mission survival timeline: sunlight, Earth contact and battery level for each mission day"></canvas>
-      <p class="cap">The battery charges in sunlight and drains through each night. The mission fails if the line enters the red reserve band. Orange shading marks hours in safe mode.</p>
-      <div class="row"><button id="report" type="button">Copy mission report</button><button id="reportdl" type="button">Download report</button><span class="readout" id="reportmsg"></span></div>
-    </section>
+  <!-- results column beside the lander form: verdict, then landing risk -->
+  <div class="pstack" data-v="plan">
+    <section id="sec-verdict" class="panel" aria-label="Mission verdict">
+        <div class="phead"><h2>If you land here at this time</h2>
+          <ul class="legend"><li><i class="key" style="border-color:var(--ink);border-top-width:3px"></i>Battery, mapped terrain</li><li><i class="key dash" style="border-color:var(--muted)"></i><span>Battery, terrain <span id="mv-mlab">0.3</span>° higher</span></li></ul></div>
+        <div class="verdict" id="mv-ban"><div class="vbig" id="mv-ic"></div><div><h3 id="mv-pill">Simulating…</h3><p id="mv-say"></p></div></div>
+        <div class="facts">
+          <div class="fact"><span class="lab">Lowest battery</span><b id="mv-soc"></b><span class="cap" id="mv-soc-s"></span></div>
+          <div class="fact"><span class="lab">Longest night</span><b id="mv-lit"></b><span class="cap" id="mv-lit-s"></span></div>
+          <div class="fact"><span class="lab">Longest link gap</span><b id="mv-gap"></b><span class="cap" id="mv-gap-s"></span></div>
+          <div class="fact"><span class="lab">Battery needed</span><b id="mv-need"></b><span class="cap" id="mv-need-s"></span></div>
+        </div>
+        <canvas id="surv" role="img" aria-label="Mission survival timeline: sunlight, Earth contact and battery level for each mission day"></canvas>
+        <p class="cap">The battery charges in sunlight and drains through each night. The mission fails if the line enters the red reserve band. Orange shading marks hours in safe mode.</p>
+        <div class="row"><button id="report" type="button">Copy mission report</button><button id="reportdl" type="button">Download report</button><span class="readout" id="reportmsg"></span></div>
+      </section>
+
+    <section id="sec-risk" class="panel" aria-label="Landing risk">
+        <div class="phead"><h2>Landing risk</h2><div class="pills" id="k-pill"></div></div>
+        <p class="cap">Landers never touch down exactly on target. This simulates a few thousand landings around your aim point, each a little off in position and timing, with small errors in solar output, power use and the terrain map. Landing on ground steeper than the safe slope counts as a loss. The share that still completes the mission is the chance of success.</p>
+        <div class="row">
+          <label class="fl" for="k-acc">Landing accuracy, m <span class="fh">almost all landings fall within this</span><input id="k-acc" type="number" min="200" max="5000" step="100" value="500"></label>
+          <label class="fl" for="k-slope">Safe slope, °<input id="k-slope" type="number" min="1" max="45" step="1" value="12"></label>
+          <label class="fl" for="k-level">How uncertain<select id="k-level"><option value="low">Low</option><option value="typical" selected>Typical</option><option value="high">High</option><option value="custom" hidden>Custom</option></select></label>
+          <button id="k-new" type="button">Run again</button>
+          <span class="readout" id="k-msg"></span>
+        </div>
+        <details id="k-assume"><summary>Fine-tune the uncertainties</summary>
+          <div class="row" style="margin-top:10px">
+            <label class="fl" for="k-time">Landing time, ± h<input id="k-time" type="number" min="0" max="72" step="1" value="6"></label>
+            <label class="fl" for="k-sp">Solar output, ± %<input id="k-sp" type="number" min="0" max="50" step="1" value="5"></label>
+            <label class="fl" for="k-sl">Power use, ± %<input id="k-sl" type="number" min="0" max="50" step="1" value="5"></label>
+            <label class="fl" for="k-sb">Battery capacity, ± %<input id="k-sb" type="number" min="0" max="50" step="1" value="3"></label>
+            <label class="fl" for="k-st">Terrain map, ± °<input id="k-st" type="number" min="0" max="2" step="0.05" value="0.15"></label>
+            <label class="fl" for="k-seed">Random seed <span class="fh">same seed, same result</span><input id="k-seed" type="number" min="1" max="2000000000" step="1" value="20261114"></label>
+            <label class="chk" for="k-corr"><input id="k-corr" type="checkbox"> Cold case: power use runs high and the battery runs low at the same time</label>
+          </div>
+          <p class="cap">Landing time is a 3σ spread; the others are 1σ.</p>
+        </details>
+        <p class="say" id="k-say" aria-live="polite"></p>
+        <div class="risk">
+          <div>
+            <canvas id="risk" role="img" aria-label="Map of the landing area coloured by the chance of mission success at each touchdown point"></canvas>
+          </div>
+          <div class="riskl">
+            <div><span class="lab">Chance the mission succeeds</span><div class="bignum" id="k-p">…</div><p class="cap" id="k-p-s"></p></div>
+            <div><span class="lab">Chance of success at each touchdown point</span><div class="ramp"><i style="background:var(--seq-1)"></i><i style="background:var(--seq-2)"></i><i style="background:var(--seq-3)"></i><i style="background:var(--seq-4)"></i><i style="background:var(--seq-5)"></i><i style="background:var(--seq-6)"></i></div><div class="rl"><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span><span>95%+</span></div>
+              <ul class="legend" style="margin-top:8px"><li><i class="key dash" style="border-color:var(--ink)"></i>Where the lander may come down</li><li><i style="background:repeating-linear-gradient(135deg,var(--bad) 0 2px,transparent 2px 5px)"></i>Too steep</li></ul></div>
+            <div class="tiles">
+              <div class="tile"><div class="k">With a perfect landing</div><div class="v" id="k-det">…</div><div class="s" id="k-det-s"></div></div>
+              <div class="tile"><div class="k">Better aim point nearby</div><div class="v" id="k-best">…</div><div class="s" id="k-best-s"></div>
+                <div class="row" style="margin-top:8px"><button id="k-go" type="button">Aim there</button></div></div>
+            </div>
+            <div class="bars" id="k-causes"></div>
+            <div class="bars" id="k-drivers"></div>
+          </div>
+        </div>
+        <p class="cap" id="k-cap"></p>
+      </section>
+  </div>
 
   <section id="sec-cont" class="panel span2" data-v="plan" aria-label="Contingency planning">
       <div class="phead"><h2>Contingency planning</h2><div class="pills" id="c-pill"></div></div>
@@ -235,49 +281,6 @@
       <p class="cap">For a landing every 12 hours over the next 60 days: the battery your lander would need with the solar panels it has. The dashed line is your battery. Bars under the line are dates your lander already handles; hatched bars are marginal. Grey means no battery is big enough, usually because the landing would be in the dark or out of contact. Click to move the landing date.</p>
       <canvas id="datlas" role="img" aria-label="Battery needed for each landing time with your solar panels"></canvas>
       <div class="tblwrap"><table id="d-tbl"></table></div>
-    </section>
-
-  <section id="sec-risk" class="panel span2" data-v="plan" aria-label="Landing risk">
-      <div class="phead"><h2>Landing risk</h2><div class="pills" id="k-pill"></div></div>
-      <p class="cap">Landers never touch down exactly on target. This simulates a few thousand landings around your aim point, each a little off in position and timing, with small errors in solar output, power use and the terrain map. Landing on ground steeper than the safe slope counts as a loss. The share that still completes the mission is the chance of success.</p>
-      <div class="row">
-        <label class="fl" for="k-acc">Landing accuracy, m <span class="fh">almost all landings fall within this</span><input id="k-acc" type="number" min="200" max="5000" step="100" value="500"></label>
-        <label class="fl" for="k-slope">Safe slope, °<input id="k-slope" type="number" min="1" max="45" step="1" value="12"></label>
-        <label class="fl" for="k-level">How uncertain<select id="k-level"><option value="low">Low</option><option value="typical" selected>Typical</option><option value="high">High</option><option value="custom" hidden>Custom</option></select></label>
-        <button id="k-new" type="button">Run again</button>
-        <span class="readout" id="k-msg"></span>
-      </div>
-      <details id="k-assume"><summary>Fine-tune the uncertainties</summary>
-        <div class="row" style="margin-top:10px">
-          <label class="fl" for="k-time">Landing time, ± h<input id="k-time" type="number" min="0" max="72" step="1" value="6"></label>
-          <label class="fl" for="k-sp">Solar output, ± %<input id="k-sp" type="number" min="0" max="50" step="1" value="5"></label>
-          <label class="fl" for="k-sl">Power use, ± %<input id="k-sl" type="number" min="0" max="50" step="1" value="5"></label>
-          <label class="fl" for="k-sb">Battery capacity, ± %<input id="k-sb" type="number" min="0" max="50" step="1" value="3"></label>
-          <label class="fl" for="k-st">Terrain map, ± °<input id="k-st" type="number" min="0" max="2" step="0.05" value="0.15"></label>
-          <label class="fl" for="k-seed">Random seed <span class="fh">same seed, same result</span><input id="k-seed" type="number" min="1" max="2000000000" step="1" value="20261114"></label>
-          <label class="chk" for="k-corr"><input id="k-corr" type="checkbox"> Cold case: power use runs high and the battery runs low at the same time</label>
-        </div>
-        <p class="cap">Landing time is a 3σ spread; the others are 1σ.</p>
-      </details>
-      <p class="say" id="k-say" aria-live="polite"></p>
-      <div class="risk">
-        <div>
-          <canvas id="risk" role="img" aria-label="Map of the landing area coloured by the chance of mission success at each touchdown point"></canvas>
-        </div>
-        <div class="riskl">
-          <div><span class="lab">Chance the mission succeeds</span><div class="bignum" id="k-p">…</div><p class="cap" id="k-p-s"></p></div>
-          <div><span class="lab">Chance of success at each touchdown point</span><div class="ramp"><i style="background:var(--seq-1)"></i><i style="background:var(--seq-2)"></i><i style="background:var(--seq-3)"></i><i style="background:var(--seq-4)"></i><i style="background:var(--seq-5)"></i><i style="background:var(--seq-6)"></i></div><div class="rl"><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span><span>95%+</span></div>
-            <ul class="legend" style="margin-top:8px"><li><i class="key dash" style="border-color:var(--ink)"></i>Where the lander may come down</li><li><i style="background:repeating-linear-gradient(135deg,var(--bad) 0 2px,transparent 2px 5px)"></i>Too steep</li></ul></div>
-          <div class="tiles">
-            <div class="tile"><div class="k">With a perfect landing</div><div class="v" id="k-det">…</div><div class="s" id="k-det-s"></div></div>
-            <div class="tile"><div class="k">Better aim point nearby</div><div class="v" id="k-best">…</div><div class="s" id="k-best-s"></div>
-              <div class="row" style="margin-top:8px"><button id="k-go" type="button">Aim there</button></div></div>
-          </div>
-          <div class="bars" id="k-causes"></div>
-          <div class="bars" id="k-drivers"></div>
-        </div>
-      </div>
-      <p class="cap" id="k-cap"></p>
     </section>
 
   <section id="sec-rescue" class="panel span2" data-v="plan" aria-label="Launch slip">

@@ -184,6 +184,12 @@ h3 { font-family: var(--f-display); font-weight: 600; font-size: 15px; line-heig
 .hero .phead { padding: 12px 20px; border-bottom: 1px solid var(--line); }
 .hero canvas { border-radius: 0; }
 .hero .cap { padding: 12px 20px 14px; border-top: 1px solid var(--line); }
+/* Mission planning: the lander form on the left, its results stacked on the right, so neither column leaves a hole */
+.pstack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-content: start; min-width: 0; }
+/* the form stays in view beside the results (under the app bar, site bar and section links) and scrolls on its own if taller than the window */
+@media (min-width: 1000px) {
+  .lander { align-self: start; position: sticky; top: calc(var(--stick-h, 110px) + 60px); max-height: calc(100vh - var(--stick-h, 110px) - 76px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+}
 .subnav { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0 4px; padding: 0 12px; position: sticky; top: var(--stick-h, 110px); z-index: 10; background: var(--panel); }
 .subnav a { text-decoration: none; color: var(--muted); font-size: 14px; font-weight: 500; padding: 10px 8px; border-bottom: 2px solid transparent; }
 .subnav a:hover { color: var(--ink); border-bottom-color: var(--brand); }
@@ -318,8 +324,10 @@ canvas { display: block; width: 100%; border-radius: 4px; }
 @media (max-width: 619px) { #tilt { height: 480px; } }
 .risk { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); align-items: start; }
 @media (min-width: 860px) { .risk { grid-template-columns: minmax(0, 1fr) minmax(0, 440px); } }
+/* landing risk sits in the results column, so it splits by its own width, not the window's */
+#sec-risk { container-type: inline-size; }
 #sec-risk .risk { grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 860px) { #sec-risk .risk { grid-template-columns: minmax(0, 440px) minmax(0, 1fr); } }
+@container (min-width: 760px) { #sec-risk .risk { grid-template-columns: minmax(0, 400px) minmax(0, 1fr); } }
 .riskl { display: grid; gap: 16px; align-content: start; }
 .bignum { font-family: var(--f-mono); font-size: 44px; line-height: 48px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .ramp { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; margin-top: 4px; }
