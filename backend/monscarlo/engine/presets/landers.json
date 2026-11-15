@@ -1,53 +1,605 @@
 {
-  "about": "Built-in lander presets. A preset cites a public source for each number or is marked illustrative.",
+  "about": "Built-in landers. Each input is a published figure unless it is listed under 'assumed'.",
   "landers": [
     {
       "id": "reference",
-      "name": "Reference small lander",
-      "source": "Mons Carlo default (main's S.cfg in src/app.js)",
+      "name": "Generic small lander",
+      "source": "Not a real vehicle: round numbers for a small lander, used as the default.",
       "illustrative": true,
       "power": {
-        "array": {"type": "tracking", "peak_w": 400, "faces": null, "heading_deg": 0, "height_m": 2},
-        "battery": {"capacity_wh": 2000, "min_soc": 0.2, "charge_eff": 0.9},
-        "loads": {"sunlit_w": 180, "dark_w": 60},
+        "array": {
+          "type": "tracking",
+          "peak_w": 400,
+          "faces": null,
+          "heading_deg": 0,
+          "height_m": 2
+        },
+        "battery": {
+          "capacity_wh": 2000,
+          "min_soc": 0.2,
+          "charge_eff": 0.9
+        },
+        "loads": {
+          "sunlit_w": 180,
+          "dark_w": 60
+        },
         "safe_mode": false
       },
-      "comms": {"antenna_height_m": 2},
-      "landing": {"accuracy_m_3sigma": 500, "max_slope_deg": 12},
-      "mass": {"array_w_per_kg": null, "battery_wh_per_kg": null}
+      "comms": {
+        "antenna_height_m": 2
+      },
+      "landing": {
+        "accuracy_m_3sigma": 500,
+        "max_slope_deg": 12
+      },
+      "mass": {
+        "array_w_per_kg": null,
+        "battery_wh_per_kg": null
+      },
+      "operator": "",
+      "status": "",
+      "facts": [],
+      "assumed": []
+    },
+    {
+      "id": "ispace-s1",
+      "name": "ispace Series 1 (HAKUTO-R)",
+      "operator": "ispace, Japan",
+      "status": "Flew on Mission 1 (April 2023) and Mission 2 \"Resilience\" (June 2025). Both were lost during landing.",
+      "source": "ispace spacecraft page: about 2.3 m tall and 2.6 m wide with legs out, 340 kg dry, about 1,000 kg fuelled, up to 30 kg of payload, solar cells on the body panels (Sierra Space). ispace has not published panel output, battery size or loads, so those are estimates.",
+      "illustrative": false,
+      "facts": [
+        "Height about 2.3 m, width 2.6 m",
+        "Dry mass about 340 kg, about 1,000 kg fuelled",
+        "Payload up to 30 kg",
+        "Solar cells on the body panels (Sierra Space)",
+        "Talks to Earth through ESA's Estrack stations and Goonhilly, not the NASA DSN"
+      ],
+      "assumed": [
+        "power.array.faces",
+        "power.battery.capacity_wh",
+        "power.loads.sunlit_w",
+        "power.loads.dark_w",
+        "comms.antenna_height_m",
+        "landing.accuracy_m_3sigma",
+        "landing.max_slope_deg"
+      ],
+      "power": {
+        "array": {
+          "type": "vertical",
+          "peak_w": null,
+          "faces": [
+            {
+              "azimuth_deg": 0,
+              "peak_w": 100
+            },
+            {
+              "azimuth_deg": 90,
+              "peak_w": 100
+            },
+            {
+              "azimuth_deg": 180,
+              "peak_w": 100
+            },
+            {
+              "azimuth_deg": 270,
+              "peak_w": 100
+            }
+          ],
+          "heading_deg": 0,
+          "height_m": 2.0
+        },
+        "battery": {
+          "capacity_wh": 1000,
+          "min_soc": 0.2,
+          "charge_eff": 0.9
+        },
+        "loads": {
+          "sunlit_w": 100,
+          "dark_w": 40
+        },
+        "safe_mode": false
+      },
+      "comms": {
+        "antenna_height_m": 2.3
+      },
+      "landing": {
+        "accuracy_m_3sigma": 3000,
+        "max_slope_deg": 10
+      },
+      "mass": {
+        "array_w_per_kg": null,
+        "battery_wh_per_kg": null
+      }
+    },
+    {
+      "id": "ispace-apex1",
+      "name": "ispace-U.S. APEX 1.0 (Mission 3)",
+      "operator": "ispace-U.S. with Draper",
+      "status": "First flight planned as Mission 3 (NASA CLPS) to Schrödinger basin on the far side, on Falcon 9. Date not fixed.",
+      "source": "ispace-U.S. Mission 3 page: up to 300 kg of payload, two relay satellites for surface operations on the far side. No power or size figures are public, so every simulation input here is an estimate for this payload class.",
+      "illustrative": false,
+      "facts": [
+        "Payload up to 300 kg",
+        "On the far side it talks through ispace's own relay satellites, not straight to Earth"
+      ],
+      "assumed": [
+        "power.array.faces",
+        "power.battery.capacity_wh",
+        "power.loads.sunlit_w",
+        "power.loads.dark_w",
+        "comms.antenna_height_m",
+        "landing.accuracy_m_3sigma",
+        "landing.max_slope_deg"
+      ],
+      "power": {
+        "array": {
+          "type": "vertical",
+          "peak_w": null,
+          "faces": [
+            {
+              "azimuth_deg": 0,
+              "peak_w": 200
+            },
+            {
+              "azimuth_deg": 90,
+              "peak_w": 200
+            },
+            {
+              "azimuth_deg": 180,
+              "peak_w": 200
+            },
+            {
+              "azimuth_deg": 270,
+              "peak_w": 200
+            }
+          ],
+          "heading_deg": 0,
+          "height_m": 2.5
+        },
+        "battery": {
+          "capacity_wh": 3000,
+          "min_soc": 0.2,
+          "charge_eff": 0.9
+        },
+        "loads": {
+          "sunlit_w": 300,
+          "dark_w": 100
+        },
+        "safe_mode": false
+      },
+      "comms": {
+        "antenna_height_m": 3.0
+      },
+      "landing": {
+        "accuracy_m_3sigma": 1000,
+        "max_slope_deg": 10
+      },
+      "mass": {
+        "array_w_per_kg": null,
+        "battery_wh_per_kg": null
+      }
+    },
+    {
+      "id": "nova-c",
+      "name": "Intuitive Machines Nova-C",
+      "operator": "Intuitive Machines, USA",
+      "status": "IM-1 Odysseus landed near Malapert A (Feb 2024) and IM-2 Athena on Mons Mouton (Mar 2025). Both tipped over. IM-3 is planned for early 2027.",
+      "source": "Published Nova-C figures: about 200 W from three solar panels (one on the top deck, two on the body), a 25 Ah battery on a 28 V bus (about 700 Wh), about 3.9 m tall, 1,908 kg at launch, 100 kg payload. How the 200 W splits between panels, the loads and the landing figures are estimates. The top-deck panel is left out because near the pole the Sun sits almost on the horizon.",
+      "illustrative": false,
+      "facts": [
+        "Height about 3.9 m, six legs",
+        "Launch mass 1,908 kg",
+        "Payload about 100 kg",
+        "25 Ah battery, 28 V bus"
+      ],
+      "assumed": [
+        "power.array.faces",
+        "power.loads.sunlit_w",
+        "power.loads.dark_w",
+        "comms.antenna_height_m",
+        "landing.accuracy_m_3sigma",
+        "landing.max_slope_deg"
+      ],
+      "power": {
+        "array": {
+          "type": "vertical",
+          "peak_w": null,
+          "faces": [
+            {
+              "azimuth_deg": 90,
+              "peak_w": 100
+            },
+            {
+              "azimuth_deg": 270,
+              "peak_w": 100
+            }
+          ],
+          "heading_deg": 0,
+          "height_m": 3.0
+        },
+        "battery": {
+          "capacity_wh": 700,
+          "min_soc": 0.2,
+          "charge_eff": 0.9
+        },
+        "loads": {
+          "sunlit_w": 120,
+          "dark_w": 60
+        },
+        "safe_mode": false
+      },
+      "comms": {
+        "antenna_height_m": 3.5
+      },
+      "landing": {
+        "accuracy_m_3sigma": 500,
+        "max_slope_deg": 10
+      },
+      "mass": {
+        "array_w_per_kg": null,
+        "battery_wh_per_kg": null
+      }
+    },
+    {
+      "id": "blue-ghost",
+      "name": "Firefly Blue Ghost",
+      "operator": "Firefly Aerospace, USA",
+      "status": "Mission 1 landed in Mare Crisium (Mar 2025) and ran through the lunar day. Mission 2 to the far side is planned for 2027.",
+      "source": "Firefly and press figures: up to 400 W from two side panels and one top-deck panel, 2 m tall, 3.5 m wide. On Mission 1 the batteries ran down about 5 hours after sunset. Battery size and loads are estimates picked to match that: about 600 Wh usable at a 120 W night load. The top-deck panel is left out for polar use.",
+      "illustrative": false,
+      "facts": [
+        "Height 2 m, width 3.5 m, four legs",
+        "Mission 1 came down within about 100 m of its target",
+        "Batteries lasted about 5 h after sunset on Mission 1"
+      ],
+      "assumed": [
+        "power.array.faces",
+        "power.battery.capacity_wh",
+        "power.loads.sunlit_w",
+        "power.loads.dark_w",
+        "comms.antenna_height_m",
+        "landing.max_slope_deg"
+      ],
+      "power": {
+        "array": {
+          "type": "vertical",
+          "peak_w": null,
+          "faces": [
+            {
+              "azimuth_deg": 90,
+              "peak_w": 200
+            },
+            {
+              "azimuth_deg": 270,
+              "peak_w": 200
+            }
+          ],
+          "heading_deg": 0,
+          "height_m": 1.8
+        },
+        "battery": {
+          "capacity_wh": 750,
+          "min_soc": 0.2,
+          "charge_eff": 0.9
+        },
+        "loads": {
+          "sunlit_w": 250,
+          "dark_w": 120
+        },
+        "safe_mode": false
+      },
+      "comms": {
+        "antenna_height_m": 2.0
+      },
+      "landing": {
+        "accuracy_m_3sigma": 100,
+        "max_slope_deg": 10
+      },
+      "mass": {
+        "array_w_per_kg": null,
+        "battery_wh_per_kg": null
+      }
+    },
+    {
+      "id": "vikram",
+      "name": "ISRO Vikram (Chandrayaan-3)",
+      "operator": "ISRO, India",
+      "status": "Landed at Shiv Shakti point (69°S) in August 2023 and worked for one lunar day.",
+      "source": "ISRO Chandrayaan-3 brochure: 738 W of solar power (solstice, with bias), body 2.0 x 2.0 x 1.17 m, landing zone 4 km x 2.4 km, built for slopes up to 12°. Battery size is taken from the 50 Ah pack quoted for Chandrayaan-2's Vikram. Loads and mast height are estimates.",
+      "illustrative": false,
+      "facts": [
+        "Body 2.0 x 2.0 x 1.17 m",
+        "Landing zone 4 km x 2.4 km",
+        "Built for slopes up to 12°"
+      ],
+      "assumed": [
+        "power.array.faces",
+        "power.battery.capacity_wh",
+        "power.loads.sunlit_w",
+        "power.loads.dark_w",
+        "comms.antenna_height_m"
+      ],
+      "power": {
+        "array": {
+          "type": "vertical",
+          "peak_w": null,
+          "faces": [
+            {
+              "azimuth_deg": 0,
+              "peak_w": 184.5
+            },
+            {
+              "azimuth_deg": 90,
+              "peak_w": 184.5
+            },
+            {
+              "azimuth_deg": 180,
+              "peak_w": 184.5
+            },
+            {
+              "azimuth_deg": 270,
+              "peak_w": 184.5
+            }
+          ],
+          "heading_deg": 0,
+          "height_m": 1.2
+        },
+        "battery": {
+          "capacity_wh": 1400,
+          "min_soc": 0.2,
+          "charge_eff": 0.9
+        },
+        "loads": {
+          "sunlit_w": 250,
+          "dark_w": 80
+        },
+        "safe_mode": false
+      },
+      "comms": {
+        "antenna_height_m": 1.5
+      },
+      "landing": {
+        "accuracy_m_3sigma": 2000,
+        "max_slope_deg": 12
+      },
+      "mass": {
+        "array_w_per_kg": null,
+        "battery_wh_per_kg": null
+      }
+    },
+    {
+      "id": "griffin",
+      "name": "Astrobotic Griffin",
+      "operator": "Astrobotic, USA",
+      "status": "Griffin Mission One is planned for late 2026 or early 2027 on Falcon Heavy, to the south pole.",
+      "source": "Astrobotic: about 625 kg of payload, roughly 4.5 m wide. Power, battery, loads and mast height are not public, so all simulation inputs are estimates for a lander this size.",
+      "illustrative": false,
+      "facts": [
+        "Payload about 625 kg",
+        "About 4.5 m wide, aluminium isogrid structure"
+      ],
+      "assumed": [
+        "power.array.faces",
+        "power.battery.capacity_wh",
+        "power.loads.sunlit_w",
+        "power.loads.dark_w",
+        "comms.antenna_height_m",
+        "landing.accuracy_m_3sigma",
+        "landing.max_slope_deg"
+      ],
+      "power": {
+        "array": {
+          "type": "vertical",
+          "peak_w": null,
+          "faces": [
+            {
+              "azimuth_deg": 0,
+              "peak_w": 250
+            },
+            {
+              "azimuth_deg": 90,
+              "peak_w": 250
+            },
+            {
+              "azimuth_deg": 180,
+              "peak_w": 250
+            },
+            {
+              "azimuth_deg": 270,
+              "peak_w": 250
+            }
+          ],
+          "heading_deg": 0,
+          "height_m": 2.5
+        },
+        "battery": {
+          "capacity_wh": 4000,
+          "min_soc": 0.2,
+          "charge_eff": 0.9
+        },
+        "loads": {
+          "sunlit_w": 350,
+          "dark_w": 120
+        },
+        "safe_mode": true
+      },
+      "comms": {
+        "antenna_height_m": 3.0
+      },
+      "landing": {
+        "accuracy_m_3sigma": 500,
+        "max_slope_deg": 10
+      },
+      "mass": {
+        "array_w_per_kg": null,
+        "battery_wh_per_kg": null
+      }
+    },
+    {
+      "id": "blue-moon-mk1",
+      "name": "Blue Origin Blue Moon MK1",
+      "operator": "Blue Origin, USA",
+      "status": "Pathfinder \"Endurance\" is aimed at the Shackleton connecting ridge. Launch slipped to 2027 after New Glenn was grounded.",
+      "source": "Blue Origin and NASA: about 8 m tall, 3 m across, up to 3 t of payload, 100 m landing precision requirement. Power, battery and loads are not public and are estimates. The antenna is assumed near the top of the vehicle.",
+      "illustrative": false,
+      "facts": [
+        "Height about 8 m, diameter about 3 m",
+        "Payload up to 3,000 kg",
+        "Landing precision requirement 100 m"
+      ],
+      "assumed": [
+        "power.array.faces",
+        "power.battery.capacity_wh",
+        "power.loads.sunlit_w",
+        "power.loads.dark_w",
+        "comms.antenna_height_m",
+        "landing.max_slope_deg"
+      ],
+      "power": {
+        "array": {
+          "type": "vertical",
+          "peak_w": null,
+          "faces": [
+            {
+              "azimuth_deg": 0,
+              "peak_w": 500
+            },
+            {
+              "azimuth_deg": 90,
+              "peak_w": 500
+            },
+            {
+              "azimuth_deg": 180,
+              "peak_w": 500
+            },
+            {
+              "azimuth_deg": 270,
+              "peak_w": 500
+            }
+          ],
+          "heading_deg": 0,
+          "height_m": 5.0
+        },
+        "battery": {
+          "capacity_wh": 10000,
+          "min_soc": 0.2,
+          "charge_eff": 0.9
+        },
+        "loads": {
+          "sunlit_w": 600,
+          "dark_w": 200
+        },
+        "safe_mode": true
+      },
+      "comms": {
+        "antenna_height_m": 7.0
+      },
+      "landing": {
+        "accuracy_m_3sigma": 100,
+        "max_slope_deg": 10
+      },
+      "mass": {
+        "array_w_per_kg": null,
+        "battery_wh_per_kg": null
+      }
     },
     {
       "id": "polar-vertical",
-      "name": "Illustrative polar lander, vertical panels",
+      "name": "Generic polar lander, vertical panels",
       "source": "illustrative: four vertical faces at 90 degree spacing, sized to match the reference lander's daily energy at the pole; not a real vehicle",
       "illustrative": true,
       "power": {
-        "array": {"type": "vertical", "peak_w": null, "faces": [
-          {"azimuth_deg": 0, "peak_w": 200}, {"azimuth_deg": 90, "peak_w": 200},
-          {"azimuth_deg": 180, "peak_w": 200}, {"azimuth_deg": 270, "peak_w": 200}],
-          "heading_deg": 0, "height_m": 3},
-        "battery": {"capacity_wh": 3000, "min_soc": 0.2, "charge_eff": 0.9},
-        "loads": {"sunlit_w": 180, "dark_w": 60},
+        "array": {
+          "type": "vertical",
+          "peak_w": null,
+          "faces": [
+            {
+              "azimuth_deg": 0,
+              "peak_w": 200
+            },
+            {
+              "azimuth_deg": 90,
+              "peak_w": 200
+            },
+            {
+              "azimuth_deg": 180,
+              "peak_w": 200
+            },
+            {
+              "azimuth_deg": 270,
+              "peak_w": 200
+            }
+          ],
+          "heading_deg": 0,
+          "height_m": 3
+        },
+        "battery": {
+          "capacity_wh": 3000,
+          "min_soc": 0.2,
+          "charge_eff": 0.9
+        },
+        "loads": {
+          "sunlit_w": 180,
+          "dark_w": 60
+        },
         "safe_mode": true
       },
-      "comms": {"antenna_height_m": 4},
-      "landing": {"accuracy_m_3sigma": 100, "max_slope_deg": 10},
-      "mass": {"array_w_per_kg": null, "battery_wh_per_kg": null}
+      "comms": {
+        "antenna_height_m": 4
+      },
+      "landing": {
+        "accuracy_m_3sigma": 100,
+        "max_slope_deg": 10
+      },
+      "mass": {
+        "array_w_per_kg": null,
+        "battery_wh_per_kg": null
+      },
+      "operator": "",
+      "status": "",
+      "facts": [],
+      "assumed": []
     },
     {
       "id": "horizontal-deck",
-      "name": "Illustrative lander, horizontal deck array",
+      "name": "Generic lander, flat deck panels",
       "source": "illustrative: the reference lander with its array flat on the deck (main's tracking: false); shows why flat panels fail near the pole",
       "illustrative": true,
       "power": {
-        "array": {"type": "horizontal", "peak_w": 400, "faces": null, "heading_deg": 0, "height_m": 2},
-        "battery": {"capacity_wh": 2000, "min_soc": 0.2, "charge_eff": 0.9},
-        "loads": {"sunlit_w": 180, "dark_w": 60},
+        "array": {
+          "type": "horizontal",
+          "peak_w": 400,
+          "faces": null,
+          "heading_deg": 0,
+          "height_m": 2
+        },
+        "battery": {
+          "capacity_wh": 2000,
+          "min_soc": 0.2,
+          "charge_eff": 0.9
+        },
+        "loads": {
+          "sunlit_w": 180,
+          "dark_w": 60
+        },
         "safe_mode": false
       },
-      "comms": {"antenna_height_m": 2},
-      "landing": {"accuracy_m_3sigma": 500, "max_slope_deg": 12},
-      "mass": {"array_w_per_kg": null, "battery_wh_per_kg": null}
+      "comms": {
+        "antenna_height_m": 2
+      },
+      "landing": {
+        "accuracy_m_3sigma": 500,
+        "max_slope_deg": 12
+      },
+      "mass": {
+        "array_w_per_kg": null,
+        "battery_wh_per_kg": null
+      },
+      "operator": "",
+      "status": "",
+      "facts": [],
+      "assumed": []
     }
   ]
 }

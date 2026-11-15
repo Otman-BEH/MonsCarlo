@@ -24,7 +24,7 @@ from .schemas import CalendarRequest, DesignRequest, MissionRequest, ReportReque
 router = APIRouter()
 
 # ---------------------------------------------------------------- protection for a public deployment
-# MONS_CARLO_READONLY=1 turns off saving and deleting landers. Heavy jobs (landing risk, design lab, rescue, calendar) run
+# MONS_CARLO_READONLY=1 turns off saving and deleting landers. Heavy jobs (landing risk, mission design, rescue, calendar) run
 # at most MONS_CARLO_HEAVY_JOBS at a time (default 2); their results are kept (the inputs fully determine them), so the
 # same question asked again is answered at once.
 import collections
@@ -161,7 +161,7 @@ def health():
 
 
 @router.get("/sites", tags=["catalogue"])
-def sites(group: Optional[str] = Query(None, description="South pole | Past landings | Announced targets")):
+def sites(group: Optional[str] = Query(None, description="South pole | Planned missions | Past landings")):
     eng = engine()
     out = []
     for s in SI.catalogue():
@@ -177,8 +177,8 @@ def sites(group: Optional[str] = Query(None, description="South pole | Past land
 
 
 @router.get("/landers", tags=["landers"])
-def landers_list():
-    return {"landers": LD.list_all(), "meta": meta()}
+def landers_list(full: bool = Query(False, description="include each preset's full specification")):
+    return {"landers": LD.list_all(full=full), "meta": meta()}
 
 
 @router.get("/landers/{lid}", tags=["landers"])
@@ -370,15 +370,22 @@ def ephemeris(start: Optional[str] = Query(None, description="default now"), hou
     return {**_clean(r), "meta": meta({"ephemeris": r["_meta"]["ephemeris"], "terrain": {"tiers": []}})}
 
 
-@router.get("/dsn", tags=["sky"], summary="Moon elevation at the three Deep Space Network complexes")
+@router.get("/dsn", tags=["sky"], summary="Deep Space Network: Moon elevation and antennas at Goldstone, Madrid and Canberra")
 def dsn(time: Optional[str] = Query(None, description="default now")):
+    from ..engine import dsn as DSN
     t = parse_time(time)
-    if not spice.available():
+    if not DSN.available():
         return JSONResponse(status_code=503, content={"detail": "the DSN view needs the SPICE kernels; run python -m monscarlo.prep.fetch_data"})
-    return {"time": iso(t), "stations": spice.dsn_view(t), "meta": meta()}
+    return {"time": iso(t), "elevation_limit_deg": DSN.ELEVATION_LIMIT_DEG, "stations": DSN.view(t), "meta": meta()}
 
 
-@router.post("/design", tags=["mission"], summary="Design lab: the lightest array and battery that pass, and a 60-day atlas")
+@router.get("/dsn/stations", tags=["sky"], summary="The DSN complexes and their antennas")
+def dsn_stations():
+    from ..engine import dsn as DSN
+    return {**DSN.catalogue(), "meta": meta()}
+
+
+@router.post("/design", tags=["mission"], summary="Mission design: smallest array and battery that pass, and how that changes with the landing date")
 def design(req: DesignRequest):
     loc = _loc(req.location.site, req.location.lat, req.location.lon)
     t = parse_time(req.landing_time)
