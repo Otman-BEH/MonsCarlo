@@ -336,7 +336,7 @@ def run_risk(terrain: Terrain, table: np.ndarray, i0: int, lat: float, lon: floa
              unc: Uncertainty, mode: str = "best", naz: int = 180, workers: int = 8) -> dict:
     """Port of main's runRisk. table: hourly (n, 6) window; i0: landing index in it.
 
-    Every cell's skyline is cast (in parallel threads), then all trials of all cells run as one vectorised simulation.
+    Every cell's horizon is cast (in parallel threads), then all trials of all cells run as one vectorised simulation.
     Each cell keeps main's two random streams mix(seed, k, 0) and mix(seed, k, 1), so draws are identical to main's."""
     from concurrent.futures import ThreadPoolExecutor
     n = unc.grid_n

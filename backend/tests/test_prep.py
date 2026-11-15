@@ -4,10 +4,10 @@ import json
 
 import pytest
 
-from skyline import config
-from skyline.prep import fetch_data as FD
-from skyline.prep import precompute as PC
-from skyline.prep.store import Store
+from monscarlo import config
+from monscarlo.prep import fetch_data as FD
+from monscarlo.prep import precompute as PC
+from monscarlo.prep.store import Store
 
 
 class FakeResp:
@@ -96,11 +96,11 @@ def test_precompute_stamp(tmp_path, monkeypatch):
     monkeypatch.setattr(PC, "build_polar400", lambda *a, **k: calls.append("p400"))
     monkeypatch.setattr(PC, "_convert_compressed", lambda log: None)
 
-    def fake_skylines(log=print):
-        (config.DERIVED_DIR / "skylines").mkdir(parents=True, exist_ok=True)
-        (config.DERIVED_DIR / "skylines" / "index.json").write_text("{}")
+    def fake_horizon_masks(log=print):
+        (config.DERIVED_DIR / "horizon_masks").mkdir(parents=True, exist_ok=True)
+        (config.DERIVED_DIR / "horizon_masks" / "index.json").write_text("{}")
         calls.append("sky")
-    monkeypatch.setattr(PC, "build_skylines", fake_skylines)
+    monkeypatch.setattr(PC, "build_horizon_masks", fake_horizon_masks)
     monkeypatch.setattr(config, "DERIVED_DIR", tmp_path / "derived")
     assert PC.run(store=st, log=lambda *a: None) is True
     assert PC.run(store=st, log=lambda *a: None) is False                 # stamp matches: skipped

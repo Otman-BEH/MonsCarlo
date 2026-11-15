@@ -6,10 +6,10 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = BACKEND_DIR.parent
-DATA_DIR = Path(os.environ.get("SKYLINE_DATA", BACKEND_DIR / "data")).resolve()
+DATA_DIR = Path(os.environ.get("MONS_CARLO_DATA", BACKEND_DIR / "data")).resolve()
 RAW_DIR = DATA_DIR / "raw"
 DERIVED_DIR = DATA_DIR / "derived"
-DB_PATH = DATA_DIR / "skyline.db"
+DB_PATH = DATA_DIR / "monscarlo.db"
 MANIFEST_PATH = BACKEND_DIR / "manifest.json"
 # small files shipped with the code: the coarse global LOLA grid (1/4 deg, polar caps 1/8 deg by 1/4 deg, metres, int16)
 # and the Moon mosaic used by the web page's globe. Both were derived from the LLNL ssa-data-lunar package.
@@ -33,7 +33,7 @@ HORIZONS_URL = "https://ssd.jpl.nasa.gov/api/horizons.api"
 HORIZONS_TIMEOUT_S = 10.0
 HORIZONS_PAUSE_S = 1.0
 PREFETCH_MONTHS = 14
-USER_AGENT = "lunar-skyline-backend"
+USER_AGENT = "mons-carlo-backend"
 
 # Horizon masks
 EYES_M = [0, 2, 5, 10, 20, 50, 100]

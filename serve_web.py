@@ -1,4 +1,4 @@
-"""Serve the Lunar Skyline web page (the web/ folder) on http://127.0.0.1:5173/.
+"""Serve the Mons Carlo web page (the web/ folder) on http://127.0.0.1:5173/.
 
 The page calls the API at the address in web/config.js (default http://127.0.0.1:8000), so start the API too:
     cd backend && python run.py

@@ -1,4 +1,4 @@
-"""Start the Lunar Skyline backend:  python run.py
+"""Start the Mons Carlo backend:  python run.py
 
 1. verify or download the raw NASA / JPL files listed in manifest.json
 2. precompute derived products (skipped when the stamp matches)
@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from skyline import config  # noqa: E402
+from monscarlo import config  # noqa: E402
 
 
 def main(argv=None) -> int:
@@ -29,10 +29,10 @@ def main(argv=None) -> int:
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--no-serve", action="store_true", help="prepare the data, then exit")
     a = ap.parse_args(argv)
-    print(f"Lunar Skyline backend {config.API_VERSION}, data in {config.DATA_DIR}")
+    print(f"Mons Carlo backend {config.API_VERSION}, data in {config.DATA_DIR}")
 
     if not a.skip_fetch:
-        from skyline.prep import fetch_data
+        from monscarlo.prep import fetch_data
         t = time.time()
         print("1/3 data files")
         rs = fetch_data.run(include_optional=a.all_data)
@@ -42,12 +42,12 @@ def main(argv=None) -> int:
             print(f"    {len(bad)} file(s) could not be verified; the API will run with what is there (see /health)")
         print(f"    done in {time.time() - t:.0f} s")
 
-    from skyline.prep import precompute
+    from monscarlo.prep import precompute
     print("2/3 precompute")
     precompute.run()
 
     if not a.skip_prefetch:
-        from skyline.engine.ephemeris import default_ephemeris
+        from monscarlo.engine.ephemeris import default_ephemeris
         t = time.time()
         print(f"3/3 ephemeris: {a.months} months from JPL Horizons (cached months are skipped)")
         try:
@@ -61,7 +61,7 @@ def main(argv=None) -> int:
     import uvicorn
     print(f"API on http://{a.host}:{a.port}  (docs: http://{a.host}:{a.port}/docs)")
     print("The web page is separate: python serve_web.py in the repo root, then open http://127.0.0.1:5173/")
-    uvicorn.run("skyline.api.app:app", host=a.host, port=a.port, workers=1, log_level="info")
+    uvicorn.run("monscarlo.api.app:app", host=a.host, port=a.port, workers=1, log_level="info")
     return 0
 
 

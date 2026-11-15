@@ -14,7 +14,7 @@ from . import montecarlo as MC
 from . import visibility as V
 from .ephemeris import Ephemeris, EphemerisError, default_ephemeris
 from .geometry import disc_frac
-from .sites import Location, Skylines, default_skylines
+from .sites import Location, HorizonMasks, default_horizon_masks
 from .terrain import mask_at
 
 HOUR = 3600
@@ -59,9 +59,9 @@ def fmt_dur(hours: float) -> str:
 
 
 class Engine:
-    def __init__(self, eph: Ephemeris | None = None, skylines: Skylines | None = None, store=None):
+    def __init__(self, eph: Ephemeris | None = None, masks: HorizonMasks | None = None, store=None):
         self.eph = eph or default_ephemeris()
-        self.sky = skylines or default_skylines()
+        self.sky = masks or default_horizon_masks()
         self.store = store or self.eph.store
 
     # ---------------------------------------------------------------- building blocks
@@ -107,7 +107,7 @@ class Engine:
         f = float
         body = lambda p, frac: {
             "azimuth_deg": f(st[p + "Az"]), "elevation_deg": f(st[p + "El"]), "angular_radius_deg": f(st[p + "Rad"]),
-            "skyline_deg": f(st[p + "Hz"]), "clearance_deg": f(st[p + "Clr"]), "visible_share": f(frac), "above_skyline": bool(st[p + "Clr"] > 0)}
+            "horizon_deg": f(st[p + "Hz"]), "clearance_deg": f(st[p + "Clr"]), "visible_share": f(frac), "above_horizon": bool(st[p + "Clr"] > 0)}
         from .geometry import sub_point
         from ..prep import spice
         sp_lat, sp_lon = sub_point(s_vec)
@@ -218,7 +218,7 @@ class Engine:
 
     # ---------------------------------------------------------------- data for the web page
     def series_window(self, loc: Location, start: float, hours: int, lander: dict, mode: str = "best", step_h: int = 1,
-                      include_skyline: bool = True) -> dict:
+                      include_horizon: bool = True) -> dict:
         if hours < 1 or hours > 430 * 24:
             raise ValueError("hours must be between 1 and 10320 (430 days)")
         step_h = max(1, int(step_h))
@@ -229,8 +229,8 @@ class Engine:
         out = {"location": loc.as_dict(), "start": iso(t0), "start_unix": t0, "step_h": step_h, "n": se["n"],
                "series": {k: np.round(se[k], 4).tolist() for k in V.SERIES_KEYS},
                "_meta": {"terrain": ter, "ephemeris": self._eph_sources(src)}}
-        if include_skyline:
-            out["skyline"] = {"azimuth_step_deg": 360.0 / len(v.sun_mask), "sun": np.round(v.sun_mask, 4).tolist(),
+        if include_horizon:
+            out["horizon"] = {"azimuth_step_deg": 360.0 / len(v.sun_mask), "sun": np.round(v.sun_mask, 4).tolist(),
                               "earth": np.round(v.earth_mask, 4).tolist(), "ground_m": v.ground_m, "tiers": ter["tiers"],
                               "lo_deg": float(min(v.sun_mask.min(), v.earth_mask.min())), "hi_deg": float(max(v.sun_mask.max(), v.earth_mask.max()))}
         return out

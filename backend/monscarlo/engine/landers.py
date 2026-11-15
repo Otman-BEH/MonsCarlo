@@ -31,7 +31,7 @@ class Array(BaseModel):
     peak_w: Optional[float] = Field(default=None, ge=0, description="total output at 1 AU, Sun normal to the panel (tracking/horizontal)")
     faces: Optional[list[Face]] = Field(default=None, description="vertical only")
     heading_deg: float = Field(default=0.0, ge=-360, le=360, description="vertical only: lander yaw from true north")
-    height_m: float = Field(default=2.0, ge=0, le=100, description="array height above ground: sets the Sun skyline")
+    height_m: float = Field(default=2.0, ge=0, le=100, description="array height above ground: sets the Sun horizon")
 
     @model_validator(mode="after")
     def _check(self):
@@ -66,7 +66,7 @@ class Power(BaseModel):
 
 class Comms(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    antenna_height_m: float = Field(default=2.0, ge=0, le=100, description="sets the Earth skyline")
+    antenna_height_m: float = Field(default=2.0, ge=0, le=100, description="sets the Earth horizon")
 
 
 class Landing(BaseModel):

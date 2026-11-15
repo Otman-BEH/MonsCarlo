@@ -1,5 +1,5 @@
 """FastAPI app: routes, error handlers. Run with `python run.py` (prepares the data first) or
-`uvicorn skyline.api.app:app --port 8000` when the data is already prepared. API only: the web page in web/ is served
+`uvicorn monscarlo.api.app:app --port 8000` when the data is already prepared. API only: the web page in web/ is served
 separately and calls this API."""
 from __future__ import annotations
 
@@ -19,20 +19,20 @@ from ..engine.sites import BadLocation, UnknownSite
 from .routes import Busy, router
 
 DESCRIPTION = """
-Sun and Earth against the real lunar skyline, for any site, date and lander.
+Sun and Earth against the real lunar horizon, for any site, date and lander.
 
 **One call answers the challenge question** (`/report`). Five more give you every number behind it:
 `/sky` (Sun and Earth now), `/windows` (power and radio windows), `/mission` (verdict for a lander, optional Monte Carlo
-landing risk), `/horizon` (the skyline), `/sites` and `/landers`.
+landing risk), `/horizon` (the terrain horizon), `/sites` and `/landers`.
 
 Ephemeris: JPL Horizons API, cached by month in SQLite (SPICE DE440 fallback). Terrain: NASA LOLA elevation models
 (PGDA products 78 and 90). Every response names its sources in `meta`.
 """
 
-app = FastAPI(title="Lunar Skyline API", version=config.API_VERSION, description=DESCRIPTION)
-# The web page is served from its own origin, so the API allows cross-origin calls. SKYLINE_CORS_ORIGINS (comma list)
+app = FastAPI(title="Mons Carlo API", version=config.API_VERSION, description=DESCRIPTION)
+# The web page is served from its own origin, so the API allows cross-origin calls. MONS_CARLO_CORS_ORIGINS (comma list)
 # narrows that to the page's address when hosted; the default allows any origin.
-_origins = [o.strip() for o in os.environ.get("SKYLINE_CORS_ORIGINS", "*").split(",") if o.strip()]
+_origins = [o.strip() for o in os.environ.get("MONS_CARLO_CORS_ORIGINS", "*").split(",") if o.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["GET", "POST", "DELETE"], allow_headers=["*"],
                    expose_headers=["X-Size", "X-Cell-Km", "X-Half-Km"])
 app.add_middleware(GZipMiddleware, minimum_size=2000)
@@ -70,7 +70,7 @@ async def _coverage(_: Request, ex: OutOfCoverage):
 
 @app.exception_handler(EphemerisError)
 async def _eph(_: Request, ex: EphemerisError):
-    return _err(503, str(ex), hint="Horizons could not be reached and the SPICE kernels are missing: run python -m skyline.prep.fetch_data")
+    return _err(503, str(ex), hint="Horizons could not be reached and the SPICE kernels are missing: run python -m monscarlo.prep.fetch_data")
 
 
 @app.exception_handler(Busy)
@@ -86,6 +86,6 @@ async def _value(_: Request, ex: ValueError):
 @app.get("/", include_in_schema=False)
 @app.get("/api", include_in_schema=False)
 def api_root():
-    return {"name": "Lunar Skyline API", "version": config.API_VERSION, "docs": "/docs",
+    return {"name": "Mons Carlo API", "version": config.API_VERSION, "docs": "/docs",
             "try": ["/report?site=shack", "/sky?site=mala", "/sites", "/landers"],
             "web_page": "served separately from the web/ folder (see the root README)"}

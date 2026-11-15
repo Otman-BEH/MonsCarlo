@@ -6,10 +6,10 @@ import numpy as np
 import pytest
 
 from conftest import arr, num
-from skyline.engine import geometry as G
-from skyline.engine import mission as M
-from skyline.engine import visibility as V
-from skyline.engine.terrain import mask_at
+from monscarlo.engine import geometry as G
+from monscarlo.engine import mission as M
+from monscarlo.engine import visibility as V
+from monscarlo.engine.terrain import mask_at
 
 
 def view_from_golden(golden, sid, eye=2):
