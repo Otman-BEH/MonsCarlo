@@ -1,6 +1,9 @@
-/* Dump parity fixtures from main's JS engine for the Python port.
-   Run from the repo root after `npm ci`:   node backend/tools/make_golden.js
-   Writes backend/tests/fixtures/golden.json. Loads src/ exactly as build/test_core.js does. */
+/* Dump parity fixtures from the original in-browser JS engine for the Python port.
+   That engine (src/, build/data.json) was removed when the web page moved onto the backend, so run this from a checkout
+   of the last commit that has it (afd9e78, "Lunar Skyline: lunar landing site navigator"):
+       git worktree add /tmp/ls-js afd9e78 && cp backend/tools/make_golden.js /tmp/ls-js/backend/tools/ 2>/dev/null
+       cd /tmp/ls-js && npm ci && mkdir -p backend/tools && node backend/tools/make_golden.js
+   then copy /tmp/ls-js/backend/tests/fixtures/golden.json back. Loads src/ exactly as build/test_core.js did. */
 global.Eng = require('../../src/engine.js'); global.Terrain = require('../../src/terrain.js');
 const Ana = require('../../src/analysis.js'), data = require('../../build/data.json'), fs = require('fs'), path = require('path');
 const arr = a => Array.from(a, v => (Number.isFinite(v) ? v : (v > 0 ? 'Infinity' : v < 0 ? '-Infinity' : 'NaN')));

@@ -1,5 +1,5 @@
 {
-  "about": "Site catalogue copied from main src/app.js SITES. snapped = the highest ground within 600 m of the nominal point on the 80 m DEM (as main's build/hires.py placed them).",
+  "about": "Site catalogue copied from main src/app.js SITES. snapped = the highest ground within 600 m of the nominal point on the 80 m DEM (as the original in-browser app placed them).",
   "sites": [
     {
       "id": "shack",
@@ -13,7 +13,7 @@
         "lon": -156.35098,
         "h0_80m": 1736.8
       },
-      "snap_note": "Placed on the highest ground within 600 m on the 80 m DEM (main build/hires.py)."
+      "snap_note": "Placed on the highest ground within 600 m on the 80 m DEM."
     },
     {
       "id": "ridge",
@@ -27,7 +27,7 @@
         "lon": -137.0999,
         "h0_80m": 1958.1
       },
-      "snap_note": "Placed on the highest ground within 600 m on the 80 m DEM (main build/hires.py)."
+      "snap_note": "Placed on the highest ground within 600 m on the 80 m DEM."
     },
     {
       "id": "gerl",
@@ -41,7 +41,7 @@
         "lon": -68.36072,
         "h0_80m": 1780.2
       },
-      "snap_note": "Placed on the highest ground within 600 m on the 80 m DEM (main build/hires.py)."
+      "snap_note": "Placed on the highest ground within 600 m on the 80 m DEM."
     },
     {
       "id": "ce7",
@@ -68,7 +68,7 @@
         "lon": 2.80877,
         "h0_80m": 5149.9
       },
-      "snap_note": "Placed on the highest ground within 600 m on the 80 m DEM (main build/hires.py)."
+      "snap_note": "Placed on the highest ground within 600 m on the 80 m DEM."
     },
     {
       "id": "viper",

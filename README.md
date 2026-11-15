@@ -6,8 +6,20 @@ Interactive mission-planning tool for the NASA Space Apps challenge "Lunar Landi
 It shows where the Sun and Earth sit against the terrain horizon of any lunar site on any date,
 tests a mission against power and communication needs, and finds alternative sites and dates when a landing slips.
 
-Open `index.html` in a browser. It is one self-contained file and works offline. To publish it, put this folder in a
-public GitHub repository and turn on GitHub Pages for the main branch.
+It runs as one service: a Python backend (`backend/`) that does every calculation from NASA data and serves the web page
+(`web/`) that draws the results.
+
+    cd backend
+    python -m venv .venv && source .venv/bin/activate        (Windows: .venv\Scripts\activate)
+    pip install -r requirements.txt
+    python run.py
+
+Then open http://127.0.0.1:8000/ for the page and http://127.0.0.1:8000/docs for the API. The first start downloads about
+620 MB of NASA data (LOLA elevation models, SPICE kernels) and 14 months of Sun and Earth positions from JPL Horizons;
+later starts skip what is already there. Details: [backend/README.md](backend/README.md).
+
+To put it online, deploy the `Dockerfile` on any host with a persistent disk (a `fly.toml` for Fly.io is included; see
+[Hosting](#hosting)).
 
 ## What it does
 - **Plan a mission**: enter mission length, array output, loads, battery, reserve, link-gap limit and a terrain margin.
@@ -28,42 +40,22 @@ public GitHub repository and turn on GitHub Pages for the main branch.
 - **Share and export**: "Copy link to this scenario" puts the site or custom coordinates, time, mast height, compared sites and mission needs in the address, so a colleague opens the same view. The time series (CSV) and the mission report (Markdown) can be copied or saved as files.
 
 ## Layout
-- `index.html`        the built app (Astronomy Engine inlined)
-- `lunar_skyline_walkthrough.ipynb`  Jupyter notebook: the challenge, the method in plain words, and the core calculations re-run in Python with charts
-- `src/engine.js`     Sun/Earth vectors in the Moon body-fixed frame (Astronomy Engine + IAU lunar rotation), site geometry
-- `src/terrain.js`    elevation grids, 80 m horizon profiles, in-browser ray casting
-- `src/analysis.js`   per-site time series, rise/set search, statistics, mission and battery model
-- `src/app.js`        user interface
-- `build/pack.py`     packs the global LOLA grid and Moon mosaic (LLNL `ssa-data-lunar` package) into `build/data.json`
-- `build/hires.py`    reads NASA's 80 m south-pole model and adds horizon profiles and a 400 m raster to `build/data.json`
-- `build/patches.py`  cuts fine terrain patches (80 m within 3 km, 240 m within 15 km) around each listed site
-- `build/truth.py`    reference Sun/Earth angles from JPL DE421 and the lunar orientation kernel through SPICE (MOON_ME frame) -> `build/truth.json`
-- `build/validate.js` compares the engine with those reference values
-- `build/horizons_check.js` compares the engine with NASA's live JPL Horizons service (needs a network connection)
-- `build/test_core.js` unit tests for geometry, terrain, pole handling, rise/set search and the mission model
-- `build/build.py`    assembles `index.html`, with Astronomy Engine inlined from `node_modules`
-- `build/make_notebook.py` regenerates the notebook
-- `docs/Lunar_Site_Navigator_Technical_Review.md`  review of data sources, methods, existing tools and candidate sites, with references
+- `web/`        the page: `index.html`, `style.css`, `app.js` (fetches every number from the server and draws it)
+- `backend/`    the server: data preparation (`skyline/prep`), the engine (`skyline/engine`), the API (`skyline/api`),
+                tests and the NASA data manifest; see [backend/README.md](backend/README.md)
+- `Dockerfile`, `fly.toml`   hosting
 
-## Reproduce
-    npm i astronomy-engine
-    pip install numpy pillow scipy tifffile imagecodecs spiceypy lunarsky skyfield-data ssa-data-lunar
-    # download LDEM_80S_80MPP_ADJ.TIF (189 MB) from https://pgda.gsfc.nasa.gov/products/90
-    python3 build/pack.py
-    python3 build/hires.py /path/to/LDEM_80S_80MPP_ADJ.TIF
-    python3 build/patches.py /path/to/LDEM_80S_80MPP_ADJ.TIF
-    python3 build/truth.py
-    npm test            # ephemeris validation + 888 unit checks
-    npm run check:horizons   # optional: compare with live JPL Horizons
-    python3 build/build.py
+The original single-file app (in-browser engine, embedded data, `build/` pipeline) was retired when the page moved onto
+the backend; it is in the git history at commit `afd9e78`.
 
 ## Accuracy
-- Positions: 3,166 epochs (Nov 2026 to Dec 2028, every 6 h) at six sites against DE421/SPICE. Largest error 0.0042 deg in Sun or Earth elevation or azimuth.
-- Independent check against NASA's live JPL Horizons service (DE441, observer on the lunar surface): 1,260 comparisons at six sites, weekly from Nov 2026 to Nov 2028. Largest difference 0.0038 deg (run on 14 Nov 2026 with `npm run check:horizons`).
-- Terrain tiers, shown beside every site:
-  - listed south-pole sites: horizons ray-cast at 80 m (720 directions, out to 330 km, seven mast heights from 0 to 100 m)
-  - any other point south of 80 S: ray-cast in the browser from the same model (80 m within 3 km of a listed site, 240 m to 15 km, 400 m beyond); this matches the 80 m reference to about 0.05 deg near listed sites
-  - elsewhere: LOLA grid at 1/8 deg (polar caps) or 1/4 deg
+- Positions: JPL Horizons, cached by month (JPL SPICE DE440 as the fallback). Checked against JPL DE421 through SPICE at
+  3,166 epochs and six sites: largest difference 0.00002 deg.
+- Terrain tiers, shown beside every site: NASA's 5 m site maps where they exist (Shackleton rim, connecting ridge,
+  de Gerlache rim, Chang'e 7 target, the pole), the 80 m south-pole model from 80 S, the 240 m model from 60 S, and a
+  LOLA grid at 1/8 to 1/4 deg elsewhere. Every skyline is ray-cast on the server, 720 directions out to 330 km.
+- The engine was ported from the original in-browser app and checked against it: identical mission verdicts, battery
+  traces, Monte Carlo random numbers and design-lab results. See backend/README.md for every check.
 - Shackleton rim, Connecting ridge, de Gerlache rim and Malapert Massif are placed on the highest ground within 600 m of their published coordinates.
 
 ## Limits
@@ -71,7 +63,7 @@ public GitHub repository and turn on GitHub Pages for the main branch.
   Temperature, dust, array pointing limits and degradation are not modelled.
 - Earth contact is line of sight to Earth's centre. Antenna pointing, link margin and ground-station scheduling are not modelled.
 - Hourly sampling can miss a visibility window shorter than an hour.
-- The landing-risk analysis uses 80 m terrain only within 3 km of a listed site (400 m elsewhere). Its spreads are assumptions the user can change. Its 95% interval reflects the finite number of simulated missions only, not errors in the terrain data or in those assumptions. Slope is measured over about 160 m, so boulders and small craters are not seen.
+- The landing-risk analysis samples the finest terrain at each touchdown cell every 30 m near the cell. Its spreads are assumptions the user can change. Its 95% interval reflects the finite number of simulated missions only, not errors in the terrain data or in those assumptions. Slope is measured over about 160 m, so boulders and small craters are not seen.
 - With safe mode on, a larger array can occasionally fail where a smaller one passes, because less load is shed. The design lab then reports a size that passes, which may not be the very smallest.
 - Design-lab masses are screening figures (output and energy divided by the W per kg and Wh per kg entered); structure, wiring, thermal control and margins are not included.
 - The stress test applies one fault at a time and safe mode is a simple rule; neither models real flight software. Rise and set times shown in the status panel are refined by bisection.
@@ -80,7 +72,7 @@ public GitHub repository and turn on GitHub Pages for the main branch.
 ## Future directions
 - **Mission digital twin**: several faults at once, scheduled activities, and a planner that chooses recovery actions (delay a high-power task, change the communication schedule).
 - **Hazard-scale landing safety**: slope, roughness and boulders from the 5 m LOLA site models and LROC images.
-- **Finer landing-risk terrain**: run the Monte Carlo on the 5 m LOLA site models and on LOLA's own height-error maps, so boulder- and crater-scale hazards count.
+- **Finer landing-risk terrain**: the Monte Carlo already uses the 5 m LOLA site models where they exist; next, LOLA's own height-error maps, so boulder- and crater-scale hazards count.
 - **Relay satellites**: add orbiters (for example ESA's Lunar Pathfinder) as a second way to reach Earth, which matters most for far-side and crater-floor sites.
 - **Rover traverses**: plan a path and timing that keep a rover in sunlight and in contact, instead of a single fixed point.
 - **Thermal model**: surface and hardware temperature through the lunar day and night, which often limits a mission before power does.
@@ -88,10 +80,23 @@ public GitHub repository and turn on GitHub Pages for the main branch.
 - **Learned surrogate**: a small neural network trained on the ray-cast results could give instant whole-region illumination maps. It only makes sense once the physics-based maps exist to train and check it against.
 
 ## Data and credits
-- NASA GSFC PGDA, "A New View of the Lunar South Pole from LOLA" (Barker et al.), LDEM_80S_80MPP_ADJ
+- NASA GSFC PGDA LOLA elevation models (Barker et al. 2021): products 90 (80 m and 240 m south polar) and 78 (5 m site maps)
 - LOLA-derived global grid and Moon mosaic: LLNL `ssa-data-lunar` (MIT)
-- Astronomy Engine by Don Cross (MIT)
-- JPL DE421 ephemeris and lunar orientation kernels, used for validation
+- JPL Horizons: Sun and Earth positions
+- JPL NAIF SPICE kernels (DE440, lunar orientation): fallback ephemeris and validation; DE421 for validation
+- The full citation list is in backend/manifest.json and backend/README.md
 
 ## Use of AI
 Code, tests and text were drafted with Claude (Anthropic) and reviewed with feedback from ChatGPT (OpenAI).
+
+## Hosting
+The submission needs a public link, so the service runs in a container on any host with a persistent disk:
+
+    fly launch --no-deploy --copy-config          # once: choose an app name and region
+    fly volumes create skyline_data --size 3      # 3 GB for the NASA data and the cache
+    fly deploy
+
+The first start downloads the data (a few minutes); `/health` reports progress. Locally the server peaked at about
+820 MB while serving every view (Monte Carlo included), so 2 GB of memory leaves room. The
+Dockerfile has not yet been built and run end to end; test it locally with
+`docker build -t lunar-skyline . && docker run -p 8000:8000 -v "$PWD/backend/data:/data" lunar-skyline`.
