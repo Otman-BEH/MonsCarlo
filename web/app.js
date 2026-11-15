@@ -682,7 +682,7 @@ import { createTerrain } from './js/terrain.js';
   function sunRaster() { if (polarBuilt && S.now && sunFt !== S.t) { castPolar(S.now.sun, false, 0.266, sunF, sunI); sunFt = S.t; } }
 
   // ---------- explore: first-person surface view ----------
-  const VW = { az: null, fov: 90, off: document.createElement('canvas'), litKey: '', fine: null, near: null, far: null, drag: false };
+  const VW = { az: null, fov: 75, off: document.createElement('canvas'), litKey: '', fine: null, near: null, far: null, drag: false };
   // Which ground is in sunlight: for each cell of a grid around the site, march toward the Sun over the terrain and
   // keep the steepest rise; the share of the solar disc above it is the light that cell gets.
   function litGrid(x0, y0, ux, uy, sunEl, cell, n, tmax) {
@@ -1106,7 +1106,7 @@ import { createTerrain } from './js/terrain.js';
   ['m-days', 'm-peak', 'm-array', 'm-lsun', 'm-ldark', 'm-cap', 'm-res', 'm-dte', 'm-gap', 'm-margin', 'm-auto', 'm-fault', 'm-fday', 'm-safe'].forEach(id => $(id).addEventListener('change', readCfg));
   $('s-sun').addEventListener('click', () => { if (S.cur) { VW.az = S.cur.sunAz; drawSurface(); } });
   $('s-earth').addEventListener('click', () => { if (S.cur) { VW.az = S.cur.earthAz; drawSurface(); } });
-  $('s-zoom').addEventListener('click', () => { VW.fov = VW.fov === 90 ? 45 : VW.fov === 45 ? 20 : 90; drawSurface(); });
+  $('s-zoom').addEventListener('click', () => { VW.fov = VW.fov === 75 ? 40 : VW.fov === 40 ? 20 : 75; drawSurface(); });
   (() => { const cv = $('surf'); let px = null, az0 = 0, pend = 0;
     cv.addEventListener('pointerdown', e => { px = e.clientX; az0 = VW.az; VW.drag = true; try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
     cv.addEventListener('pointermove', e => { if (px === null || VW.az === null) return; VW.az = az0 - (e.clientX - px) / cv.clientWidth * VW.fov; if (!pend) pend = requestAnimationFrame(() => { pend = 0; drawSurface(); }); });
@@ -1200,6 +1200,16 @@ import { createTerrain } from './js/terrain.js';
     const el = document.querySelector(st.sel); if (el) { try { el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); } catch (_) { el.scrollIntoView(); } el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); }
   }
   $('tour-go').addEventListener('click', () => tourShow(0));
+  // first-visit introduction: hidden for good once dismissed
+  let introSeen = false; try { introSeen = localStorage.getItem('ls-intro') === 'hidden'; } catch (_) {}
+  $('intro').hidden = introSeen;
+  const hideIntro = () => { $('intro').hidden = true; try { localStorage.setItem('ls-intro', 'hidden'); } catch (_) {} };
+  $('intro-x').addEventListener('click', hideIntro);
+  document.querySelectorAll('[data-intro]').forEach(b => b.addEventListener('click', () => {
+    const go = b.dataset.intro; hideIntro();
+    if (go === 'tour') tourShow(0); else if (go === 'compare') { S.cmp = ['mala', 'ridge', 'gerl']; pickSite('shack'); setView('compare'); } else setView(go);
+    window.scrollTo(0, 0);
+  }));
   try { const th = localStorage.getItem('ls-theme'); if (th) document.documentElement.dataset.theme = th; } catch (_) {}
   $('theme').addEventListener('click', () => { const th = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; document.documentElement.dataset.theme = th; try { localStorage.setItem('ls-theme', th); } catch (_) {} });
   $('tour-x').addEventListener('click', () => tourShow(tourI + 1));
