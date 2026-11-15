@@ -726,11 +726,9 @@ import { createTerrain } from './js/terrain.js';
   // Shadow grids around the site for the current Sun (coarser and cached per 30 min of mission time while moving)
   function surfGrids(P, fast) {
     const key = [S.site.lat, S.site.lon, fast ? Math.round(S.t / 1800e3) : S.t, fast ? 1 : 0].join('|');
-    // turning the view does not move the shadows: keep the full-detail ones if they are for this exact time
-    if (VW.litKey === key || (fast && VW.litKey === [S.site.lat, S.site.lon, S.t, 0].join('|'))) return;
+    if (VW.litKey === key) return;
     VW.litKey = key; sunRaster();
-    // the ground next to the lander needs fine shadows even while moving: a coarse grid puts a rim site in shadow
-    VW.fine = litGrid(P.x0, P.y0, P.ux, P.uy, P.c.sunEl, 0.01, fast ? 150 : 300, 12);
+    VW.fine = fast ? null : litGrid(P.x0, P.y0, P.ux, P.uy, P.c.sunEl, 0.01, 300, 12);
     VW.near = litGrid(P.x0, P.y0, P.ux, P.uy, P.c.sunEl, fast ? 0.12 : 0.04, fast ? 100 : 300, 40);
     VW.far = litGrid(P.x0, P.y0, P.ux, P.uy, P.c.sunEl, fast ? 0.6 : 0.2, fast ? 100 : 300, 160);
   }
