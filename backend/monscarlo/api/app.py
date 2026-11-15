@@ -95,7 +95,15 @@ def api_root():
 _WEB = config.REPO_DIR / "web"
 if _WEB.is_dir():
     from fastapi.staticfiles import StaticFiles
-    app.mount("/", StaticFiles(directory=_WEB, html=True), name="web")
+
+    class _PageFiles(StaticFiles):
+        # no-cache: browsers revalidate with the ETag on each load (a 304 when unchanged), so page edits show at once
+        async def get_response(self, path, scope):
+            resp = await super().get_response(path, scope)
+            resp.headers["Cache-Control"] = "no-cache"
+            return resp
+
+    app.mount("/", _PageFiles(directory=_WEB, html=True), name="web")
 else:
     @app.get("/", include_in_schema=False)
     def _root():
