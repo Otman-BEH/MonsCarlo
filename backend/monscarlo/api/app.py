@@ -83,9 +83,20 @@ async def _value(_: Request, ex: ValueError):
     return _err(422, str(ex))
 
 
-@app.get("/", include_in_schema=False)
 @app.get("/api", include_in_schema=False)
 def api_root():
     return {"name": "Mons Carlo API", "version": config.API_VERSION, "docs": "/docs",
             "try": ["/report?site=shack", "/sky?site=mala", "/sites", "/landers"],
             "web_page": "served separately from the web/ folder (see the root README)"}
+
+
+# When the web page is shipped next to the API (the Docker image copies web/), serve it from the same address, so one
+# deployment holds both. Registered last: every API route above wins over a file of the same name.
+_WEB = config.REPO_DIR / "web"
+if _WEB.is_dir():
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/", StaticFiles(directory=_WEB, html=True), name="web")
+else:
+    @app.get("/", include_in_schema=False)
+    def _root():
+        return api_root()

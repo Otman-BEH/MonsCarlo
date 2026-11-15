@@ -109,7 +109,8 @@ def test_terrain_files_and_page(c):
         n = int(r.headers["X-Size"])
         assert len(r.content) == n * n * 2
     assert c.get("/terrain/moon.jpg").headers["content-type"] == "image/jpeg"
-    assert c.get("/").json()["docs"] == "/docs"         # API only: the page is served separately
+    assert c.get("/api").json()["docs"] == "/docs"
+    assert "Mons Carlo" in c.get("/").text              # the web page, served from the same address
     assert c.get("/sky", params={"site": "mala", "time": T}).json()["vectors_km"]["sun"]
 
 
