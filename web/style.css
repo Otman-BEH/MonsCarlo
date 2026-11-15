@@ -185,6 +185,9 @@ h3 { font-family: var(--f-display); font-weight: 600; font-size: 15px; line-heig
 .hero canvas { border-radius: 0; }
 .hero .cap { padding: 12px 20px 14px; border-top: 1px solid var(--line); }
 /* Mission planning: the lander form on the left, its results stacked on the right, so neither column leaves a hole */
+/* form and results share one box, so the sticky form stops at the end of landing risk instead of riding over the sections below */
+.ptop { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; min-width: 0; }
+@media (min-width: 1000px) { .ptop { grid-template-columns: minmax(0, 400px) minmax(0, 1fr); } }
 .pstack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-content: start; min-width: 0; }
 /* the form stays in view beside the results (under the app bar, site bar and section links) and scrolls on its own if taller than the window */
 @media (min-width: 1000px) {
