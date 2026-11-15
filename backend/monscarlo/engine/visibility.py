@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..config import REARTH, RSUN
-from .geometry import disc_frac, irradiance, look, site_basis
+from .geometry import disc_cover, disc_frac, irradiance, look, separation, site_basis
 from .terrain import mask_at
 
 F32 = np.float32
@@ -41,10 +41,13 @@ def state_at(v: View, sun: np.ndarray, earth: np.ndarray) -> dict:
     e = look(be, earth, REARTH)
     hs = mask_at(v.sun_mask, s["az"])
     he = mask_at(v.earth_mask, e["az"])
-    return {"sunEl": s["el"], "sunAz": s["az"], "sunRad": s["rad"], "sunHz": hs, "sunClr": s["el"] - hs,
+    # Earth in front of the Sun (a lunar eclipse seen from the Moon): the share of the solar disc left uncovered.
+    # It is exactly 1 outside eclipses, and it scales "irr", so every power figure downstream sees it.
+    ecl = 1.0 - disc_cover(separation(s["el"], s["az"], e["el"], e["az"]), s["rad"], e["rad"])
+    return {"sunEcl": ecl, "sunEl": s["el"], "sunAz": s["az"], "sunRad": s["rad"], "sunHz": hs, "sunClr": s["el"] - hs,
             "sunFrac": disc_frac(s["el"], s["rad"], hs), "sunDist": s["dist"],
             "earthEl": e["el"], "earthAz": e["az"], "earthRad": e["rad"], "earthHz": he, "earthClr": e["el"] - he,
-            "earthFrac": disc_frac(e["el"], e["rad"], he), "irr": irradiance(s["dist"])}
+            "earthFrac": disc_frac(e["el"], e["rad"], he), "irr": irradiance(s["dist"]) * ecl}
 
 
 SERIES_KEYS = ("sunEl", "sunAz", "sunClr", "sunFrac", "earthEl", "earthAz", "earthClr", "irr", "sunRad")

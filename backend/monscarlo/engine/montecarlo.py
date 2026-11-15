@@ -205,8 +205,10 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
     want = M.js_round(cfg["days"] * 24)
     n = np.maximum(0, np.minimum(want, nser - i0))
     floor = cfg["minSoc"] * cap
-    E = cap.astype(np.float64).copy()
+    E = cap.astype(np.float64) * (cfg.get("initSoc") or 1.0)
     minE = E.copy()
+    TH = cfg.get("thermal")
+    Tb = np.full(T, TH["T0"]) if TH else None
     gap = np.zeros(T, np.int64); maxGap = np.zeros(T, np.int64)
     draw = np.zeros(T); maxDraw = np.zeros(T)
     F = cfg["fault"] if cfg.get("fault") and cfg["fault"]["kind"] != "none" else None
@@ -248,6 +250,10 @@ def mission_batch(se: dict, i0: np.ndarray, cfg: dict, margin: np.ndarray, peak:
                 load = np.where(safe, np.minimum(load, ldark), load)
             if on and xLoad:
                 load = load + xLoad
+            if TH:
+                Tn, hw = M.thermal_step(Tb, load + TH["sun"] * g(irr, i) * f, TH)
+                Tb = np.where(act, Tn, Tb)
+                load = load + hw
             net = p - load
             dE = np.where(net > 0, net * eff, net / dis)
             En = np.minimum(capNow, E + dE)
