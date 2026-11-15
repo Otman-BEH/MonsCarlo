@@ -3,7 +3,9 @@
 **A lunar landing site navigator.** Pick a site and a date, and Mons Carlo shows where the Sun and Earth sit against the
 real terrain horizon, when power and radio windows open and close, and whether a lander survives its mission there.
 
-Team Mons Carlo Â· NASA Space Apps Challenge 2026 Â· challenge: *Lunar Landing Site Navigator*
+Team Mons Carlo · NASA Space Apps Challenge 2026 · challenge: *Lunar Landing Site Navigator*
+
+Live: https://mons-carlo.fly.dev (deployed from `main`)
 
 ## Why it exists
 
@@ -18,7 +20,7 @@ day, with this lander, does it make it?* Mons Carlo answers that, and shows why.
 |---|---|
 | Select and compare sites, curated or custom | 16 curated sites (Artemis candidates, CLPS, Chang'e, Chandrayaan-3, Apollo 11), any custom latitude and longitude, and a Compare view that puts several sites side by side over the same window |
 | Flexible date and time | Any date and time from 1900 to 2100 (the next 14 months are preloaded), step buttons, a Play button, and a draggable timeline |
-| Sun and Earth against the horizon, time to sunset and Earthset | Status cards, a 360Â° sky panorama with the terrain horizon, and next sunset, sunrise, Earthset and Earthrise to the second |
+| Sun and Earth against the horizon, time to sunset and Earthset | Status cards, a 360° sky panorama with the terrain horizon, and next sunset, sunrise, Earthset and Earthrise to the second |
 | Power and communication metrics | Solar power now for the chosen lander, sunlit and Earth-in-view hours, longest night and longest link gap, Deep Space Network station visibility |
 | More than one visualisation | A first-person surface view rendered from the terrain, the sky panorama, a polar shadow map, a globe, a flat map, and timelines |
 | Change over time | Paths of the Sun and Earth over the next lunar day, hour-by-hour timelines up to a year, and a landing-date calendar |
@@ -70,22 +72,23 @@ later runs skip what is done. Then open http://127.0.0.1:8000. The page and the 
 With Docker: `docker build -t mons-carlo . && docker run -p 8000:8000 -v mons_carlo_data:/data mons-carlo`.
 `fly.toml` deploys the same image to Fly.io with a persistent volume.
 
-Tests: `cd backend && python -m pytest` (107 tests; those that need the downloaded data skip themselves until it is there).
+Tests: `cd backend && python -m pytest` (107 tests; those that need the downloaded data skip themselves until it is
+there, and two live JPL Horizons checks only run with `-m live`).
 
 ## How we know it is right
 
 | Check | Result |
 |---|---|
-| SPICE DE440 against an independent DE421 truth file, 3,166 epochs at 6 sites | largest difference 0.000015Â° |
-| JPL Horizons against SPICE | largest difference 0.00001Â° |
+| SPICE DE440 against an independent DE421 truth file, 3,166 epochs at 6 sites | largest difference 0.000015° |
+| JPL Horizons against SPICE, December 2026 at 4 sites | largest difference 0.000006° |
 | Python engine against the original in-browser engine: series, missions, Monte Carlo, design | identical verdicts and traces; see backend/README.md |
-| Site horizons against the original engine's, mast heights 2 to 10 m | within 0.05Â° |
+| Site horizons against the original engine's, mast heights 2 to 10 m | within 0.05° |
 | Earth passing in front of the Sun, August 2026 to December 2028 | found on the dates of the five lunar eclipses in that period |
 | Heat model step against a 1 s integration; eclipse overlap against a pixel count; Fresnel loss worked by hand | pass |
 
 ## What it does not do
 
-- The radio link is geometry: Earth above the terrain, and a Deep Space Network complex with the Moon above 10Â°.
+- The radio link is geometry: Earth above the terrain, and a Deep Space Network complex with the Moon above 10°.
   There is no link budget, antenna pointing or dish scheduling.
 - The mission simulation steps hourly. The heat model is one node with a thermostat, a first estimate and not a
   thermal design.
@@ -99,7 +102,21 @@ Tests: `cd backend && python -m pytest` (107 tests; those that need the download
   [78](https://pgda.gsfc.nasa.gov/products/78) and [90](https://pgda.gsfc.nasa.gov/products/90) (Barker et al. 2021).
 - **Ephemeris:** [JPL Horizons API](https://ssd.jpl.nasa.gov/horizons/); SPICE kernels from
   [JPL NAIF](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/).
+- **Coarse global grid and Moon image:** the LOLA-derived 1/4° global grid used away from the pole and the Moon mosaic
+  on the globe come from LLNL's `ssa-data-lunar` package (MIT licence). Both ship in `backend/monscarlo/assets/`.
 - **Method:** the horizon method of Mazarico et al. (2011, Icarus 211, 1066).
+- **Reference values for checks:** the parity fixtures in `backend/tests/fixtures/` were produced with the original
+  in-browser engine, which used [Astronomy Engine](https://github.com/cosinekitty/astronomy) (MIT licence) for positions.
+- **Lander presets and site coordinates:** published figures from ispace, Intuitive Machines, Firefly Aerospace, ISRO,
+  Astrobotic, Blue Origin and NASA. Each preset in `backend/monscarlo/engine/presets/landers.json` names its source and
+  marks every value that is our own estimate as assumed.
+- **Server software:** FastAPI, Uvicorn, Pydantic, NumPy, SciPy, pandas, Requests, tifffile and imagecodecs (reading the
+  LOLA GeoTIFFs), SpiceyPy with NAIF's CSPICE toolkit, and pytest with HTTPX for the tests. Exact versions are in
+  `backend/requirements.txt`.
+- **Web page:** plain JavaScript, HTML and CSS with no framework. The typeface is IBM Plex Sans (SIL Open Font
+  Licence), loaded from Google Fonts.
+- **About page:** the team photos are our own. University and company logos belong to their owners and are shown only
+  to say where each of us studies or works.
 
 Every file, with its address, size, checksum and citation, is in `backend/manifest.json`. NASA does not endorse this
 project.

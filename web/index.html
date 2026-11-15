@@ -22,8 +22,8 @@
   </div>
   <nav class="views" aria-label="Views">
     <button id="v-explore" type="button" data-view="explore">Site</button>
-    <button id="v-plan" type="button" data-view="plan">Mission planning</button>
     <button id="v-compare" type="button" data-view="compare">Compare</button>
+    <button id="v-plan" type="button" data-view="plan">Mission planning</button>
     <button id="v-learn" type="button" data-view="learn">Why the pole?</button>
     <button id="v-method" type="button" data-view="method">Method</button>
     <button id="v-about" type="button" data-view="about">About</button>
@@ -259,6 +259,7 @@
         </div>
         <p class="cap">Landing time is a 3σ spread; the others are 1σ.</p>
       </details>
+      <p class="say" id="k-say" aria-live="polite"></p>
       <div class="risk">
         <div class="riskl">
           <div class="tiles">
@@ -350,8 +351,8 @@
       <div class="tblwrap"><table class="valid">
         <thead><tr><th>Check</th><th>Against</th><th>Result</th></tr></thead>
         <tbody>
-          <tr><td>Sun and Earth directions (SPICE path)</td><td>JPL DE421 ephemeris, 3,166 epochs at 6 sites</td><td>largest difference 0.00002°</td></tr>
-          <tr><td>Sun and Earth directions (Horizons path)</td><td>JPL SPICE DE440, one month at 4 sites</td><td>largest difference 0.00001°</td></tr>
+          <tr><td>Sun and Earth directions (SPICE path)</td><td>JPL DE421 ephemeris, 3,166 epochs at 6 sites</td><td>largest difference 0.000015°</td></tr>
+          <tr><td>Sun and Earth directions (Horizons path)</td><td>JPL SPICE DE440, one month at 4 sites</td><td>largest difference 0.000006°</td></tr>
           <tr><td>Horizons, 80 m mode, mast 2 to 10 m</td><td>the original 80 m horizons of this app, 9 sites</td><td>within 0.05°</td></tr>
           <tr><td>Mission verdicts, battery traces, failure messages</td><td>the original in-browser engine, 48 cases</td><td>identical</td></tr>
           <tr><td>Monte Carlo random numbers, mission design results</td><td>the original in-browser engine</td><td>bit for bit / identical</td></tr>
@@ -359,7 +360,7 @@
         </tbody></table></div>
       <div class="cols c2">
         <div><h3>Positions</h3>
-          <p>Sun and Earth positions come from NASA's JPL Horizons service, fetched by the Mons Carlo server one month at a time and cached (JPL's SPICE DE440 kernels stand in if Horizons cannot be reached). They are Moon-fixed vectors, so lunar libration and the parallax between the Moon's centre and the site are included. Checked against JPL's DE421 ephemeris through SPICE (3,166 epochs at six sites): the largest difference is 0.00002°. Rise and set times are refined to a few seconds after an hourly search.</p></div>
+          <p>Sun and Earth positions come from NASA's JPL Horizons service, fetched by the Mons Carlo server one month at a time and cached (JPL's SPICE DE440 kernels stand in if Horizons cannot be reached). They are Moon-fixed vectors, so lunar libration and the parallax between the Moon's centre and the site are included. Checked against JPL's DE421 ephemeris through SPICE (3,166 epochs at six sites): the largest difference is 0.000015°. Rise and set times are refined to a few seconds after an hourly search.</p></div>
         <div><h3>Terrain</h3>
           <p>Tiers, named beside every site. The server ray-casts every horizon (720 directions, out to 330 km) from NASA's LOLA elevation models: the 5 m site maps where they exist (Shackleton rim, the connecting ridge, de Gerlache rim, the Chang'e 7 target and the pole), the 80 m south-pole model from 80°S, the 240 m model from 60°S, and a 1/8° to 1/4° LOLA grid elsewhere. The same terrain draws the surface view and the shadow map.</p></div>
       </div>
@@ -397,7 +398,7 @@
             <li>Lander presets use published figures where they exist. Anything marked (assumed) is an estimate. Side-mounted panels are modelled; top-deck panels are left out.</li>
           </ul></section>
       </div>
-      <p>Data: NASA GSFC PGDA LOLA elevation models (Barker et al., products 78 and 90), LOLA global grid and Moon mosaic from the LLNL <code>ssa-data-lunar</code> package; ephemeris from <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a> and JPL NAIF SPICE kernels. Every number on this page comes from the Mons Carlo server; its API is documented at <a href="docs">/docs</a>. Reference tools: <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a>, <a href="https://quickmap.lroc.asu.edu/">LROC Quickmap</a>, <a href="https://trek.nasa.gov/moon/">Moon Trek</a>.</p>
+      <p>Data: NASA GSFC PGDA LOLA elevation models (Barker et al., products 78 and 90), LOLA global grid and Moon mosaic from the LLNL <code>ssa-data-lunar</code> package; ephemeris from <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a> and JPL NAIF SPICE kernels. Software: FastAPI, Uvicorn, Pydantic, NumPy, SciPy, pandas, Requests, tifffile, imagecodecs and SpiceyPy on the server; the page is plain JavaScript set in IBM Plex Sans (Google Fonts). The full list with licences is in the project README. Every number on this page comes from the Mons Carlo server; its API is documented at <a href="docs">/docs</a>. Reference tools: <a href="https://ssd.jpl.nasa.gov/horizons/">JPL Horizons</a>, <a href="https://quickmap.lroc.asu.edu/">LROC Quickmap</a>, <a href="https://trek.nasa.gov/moon/">Moon Trek</a>.</p>
     </section>
 
   <!-- ABOUT -->
