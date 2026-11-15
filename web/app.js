@@ -355,8 +355,10 @@ import { createTerrain } from './js/terrain.js';
       : 'The Sun is ' + Math.abs(c.sunClr).toFixed(2) + '° below the terrain horizon' + (c.sunFrac > 0 ? ', with ' + Math.round(c.sunFrac * 100) + '% of its disc still showing.' : '.');
     const earthTxt = link ? 'Earth is ' + Math.abs(c.earthClr).toFixed(2) + '° clear of the terrain.' : (c.earthEl < -c.earthRad ? 'Earth is below the horizon.' : 'Earth is hidden behind terrain.');
     $('say').textContent = sunTxt + ' ' + earthTxt;
-    $('t-sun').textContent = sg(c.sunClr, 2); $('t-sun-s').textContent = 'Elevation ' + sg(c.sunEl, 2) + ' · bearing ' + c.sunAz.toFixed(0) + '° ' + compass(c.sunAz);
-    $('t-earth').textContent = sg(c.earthClr, 2); $('t-earth-s').textContent = 'Elevation ' + sg(c.earthEl, 2) + ' · bearing ' + c.earthAz.toFixed(0) + '° ' + compass(c.earthAz);
+    $('t-sun').previousElementSibling.textContent = c.sunClr >= 0 ? 'Sun above terrain' : 'Sun below terrain';
+    $('t-earth').previousElementSibling.textContent = c.earthClr >= 0 ? 'Earth above terrain' : 'Earth below terrain';
+    $('t-sun').textContent = Math.abs(c.sunClr).toFixed(2) + '°'; $('t-sun-s').textContent = 'Elevation ' + sg(c.sunEl, 2) + ' · bearing ' + c.sunAz.toFixed(0) + '° ' + compass(c.sunAz);
+    $('t-earth').textContent = Math.abs(c.earthClr).toFixed(2) + '°'; $('t-earth-s').textContent = 'Elevation ' + sg(c.earthEl, 2) + ' · bearing ' + c.earthAz.toFixed(0) + '° ' + compass(c.earthAz);
     $('t-sset-k').textContent = lit ? 'Sunset in' : 'Sunrise in';
     $('t-sset').textContent = !S.ev ? '…' : se ? fmtDur(se.t - S.t) : '> ' + look + ' d'; $('t-sset-s').textContent = !S.ev ? '' : se ? fmtDT(se.t) : (lit ? 'No sunset in the next ' + look + ' days' : 'No sunrise in the next ' + look + ' days');
     $('t-eset-k').textContent = link ? 'Earthset in' : 'Earthrise in';
@@ -1088,7 +1090,7 @@ import { createTerrain } from './js/terrain.js';
     drawSiteInfo();
     if (S.cur) drawStatus();
     if (S.view === 'plan') { drawMission(); drawLab(); drawRescue(); drawRisk(); }
-    else if (S.view === 'explore') { if (S.cur) { drawSurface(); drawSky(); } else { waiting($('surf'), 'Loading the sky…'); waiting($('sky'), 'Loading the sky…'); } drawTimeline(); drawMap(); }
+    else if (S.view === 'explore') { $('surf').closest('section').hidden = !riskOk(); if (S.cur) { drawSurface(); drawSky(); } else { waiting($('surf'), 'Loading the sky…'); waiting($('sky'), 'Loading the sky…'); } drawTimeline(); drawMap(); }
     else if (S.view === 'learn') drawLearn();
     else { drawCmpSky(); drawCompare(); drawCalendar(); }
     if (srv.lastErr && !$('srverr')) { const p = document.createElement('p'); p.id = 'srverr'; p.className = 'tag'; p.style.color = 'var(--bad)'; p.textContent = 'Some data could not be loaded from the server: ' + srv.lastErr.message + '.'; $('siteinfo').after(p); }
