@@ -70,7 +70,6 @@ Flags: `--skip-fetch`, `--skip-prefetch`, `--all-data` (also the optional files:
 | `GET /mission-design`, `POST /mission-design` | **Mission design** (main's design lab): the survival frontier (smallest array for 36 battery sizes, with and without the terrain margin), the lightest pair, your design, the fixes (numbers and main's sentences), both battery traces, and a lander body for `POST /landers` ("use this design"). Mass figures: query, else the lander's `mass` block, else 80 W/kg and 160 Wh/kg (all reported in `defaults_used`). |
 | `GET /mission-design/atlas`, `POST /mission-design/atlas` | **Opportunity atlas**: the lightest design for a landing every `step_h` (12) hours over `days` (60) from 5 days before the landing day, nulls where nothing works, and the 4 best dates at least 3 days apart with links. |
 | `POST /calendar` | Verdict for a landing on each of up to 400 days, for up to 8 sites, with the first failure cause. |
-| `POST /design`, `POST /rescue` | Deprecated: the earlier forms of `/mission-design` and `/landing-window`, kept so older pages keep working. |
 | `GET /series`, `GET /ephemeris` | Hourly series and skyline for a site, and hourly Moon-fixed Sun and Earth vectors (used by the page for charts and smooth playback). |
 | `GET /terrain/patch`, `GET /terrain/polar400`, `GET /terrain/moon.jpg` | Height grids around a site (40 m within 3 km, 240 m within 15 km), the 400 m south-pole raster and the Moon mosaic, for drawing the surface view, the shadow map and the globe. |
 

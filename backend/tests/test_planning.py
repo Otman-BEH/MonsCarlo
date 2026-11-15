@@ -1,4 +1,4 @@
-"""Design lab, calendar, rescue, DSN and the endpoints the web page uses."""
+"""Design lab core, calendar, DSN and the endpoints the web page uses."""
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
@@ -78,15 +78,14 @@ def test_series_and_ephemeris(c):
 
 
 @api
-def test_design_calendar_rescue(c):
-    d = c.post("/design", json={"location": {"site": "mala"}, "landing_time": T}).json()
-    assert len(d["frontier"]["caps"]) == 36 and len(d["atlas"]) == 120 and d["landing_time"] == T
+def test_calendar(c):
     cal = c.post("/calendar", json={"locations": [{"site": "mala"}, {"lat": -85.4, "lon": 31.6}], "start": T, "days": 30}).json()
     assert [len(s["state"]) for s in cal["sites"]] == [30, 30]
-    r = c.post("/rescue", json={"plan": {"site": "mala"}, "plan_time": T, "sites": [{"site": "shack"}], "slip_days": 3, "flex_days": 5}).json()
-    assert r["alternatives"][0]["location"]["id"] in ("mala", "shack") and len(r["alternatives"]) == 2
-    states = [a["state"] for a in r["alternatives"]]
-    assert states == sorted(states, reverse=True)
+
+
+def test_old_design_and_rescue_are_gone(c):
+    assert c.post("/design", json={"location": {"site": "mala"}}).status_code in (404, 405)
+    assert c.post("/rescue", json={"plan": {"site": "mala"}, "plan_time": T}).status_code in (404, 405)
 
 
 @api

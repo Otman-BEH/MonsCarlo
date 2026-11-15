@@ -19,7 +19,7 @@ from ..engine import sites as SI
 from ..engine.service import Engine, iso, parse_time
 from ..prep import fetch_data, horizons, precompute, spice
 from ..prep.store import default_store
-from .schemas import CalendarRequest, DesignRequest, MissionRequest, ReportRequest, RescueRequest
+from .schemas import CalendarRequest, MissionRequest, ReportRequest
 
 router = APIRouter()
 _engine: Engine | None = None
@@ -360,36 +360,10 @@ def dsn(time: Optional[str] = Query(None, description="one instant (default now 
                               method="JPL Horizons OBSERVER tables (Moon seen from each station, airless), cached by month; SPICE DE440 with IAU 1976 precession and GMST when Horizons cannot be reached")}
 
 
-@router.post("/design", tags=["mission"], deprecated=True,
-             summary="Design lab (superseded by /mission-design and /mission-design/atlas; kept for older pages)")
-def design(req: DesignRequest):
-    loc = _loc(req.location.site, req.location.lat, req.location.lon)
-    t = parse_time(req.landing_time)
-    ld = LD.resolve(req.lander)
-    r = engine().design(loc, t, ld, req.mission, req.dem, (req.array_w_per_kg, req.battery_wh_per_kg),
-                        parse_time(req.atlas_start) if req.atlas_start else None)
-    return {**_clean(r), "meta": meta(r["_meta"], ld)}
-
-
 @router.post("/calendar", tags=["mission"], summary="Verdict for a landing on each day, for up to 8 sites")
 def calendar(req: CalendarRequest):
     ld = LD.resolve(req.lander)
     r = engine().calendar(_locs(req.locations), parse_time(req.start), ld, req.mission, req.dem, req.days)
-    return {**_clean(r), "meta": meta(r["_meta"], ld)}
-
-
-@router.post("/rescue", tags=["mission"], deprecated=True,
-             summary="Mission rescue (superseded by /landing-window; kept for older pages)")
-def rescue(req: RescueRequest):
-    plan = _loc(req.plan.site, req.plan.lat, req.plan.lon)
-    if req.sites == "all":
-        locs = [SI.resolve(s["id"]) for s in SI.catalogue()]
-    elif req.sites == "pole":
-        locs = [SI.resolve(s["id"]) for s in SI.catalogue() if s["lat"] <= -80]
-    else:
-        locs = _locs(req.sites)
-    ld = LD.resolve(req.lander)
-    r = engine().rescue(plan, parse_time(req.plan_time), locs, ld, req.mission, req.slip_days, req.flex_days, req.dem)
     return {**_clean(r), "meta": meta(r["_meta"], ld)}
 
 

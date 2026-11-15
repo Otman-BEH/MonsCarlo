@@ -295,25 +295,6 @@ class Engine:
                 "sun_km": np.round(tab[:, :3], 1).tolist(), "earth_km": np.round(tab[:, 3:], 3).tolist(),
                 "frame": "Moon-fixed (body-fixed), from the Moon's centre", "_meta": {"ephemeris": self._eph_sources(src)}}
 
-    def design(self, loc: Location, landing: float, lander: dict, spec: M.MissionSpec, mode: str = "best",
-               mass_of=(80.0, 160.0), atlas_start: float | None = None) -> dict:
-        from . import design as D
-        cfg = M.make_cfg(lander, spec)
-        days_h = M.js_round(spec.duration_days * 24)
-        a0 = landing if atlas_start is None else min(atlas_start, landing)
-        first = int(math.floor(a0 / HOUR)) * HOUR
-        span_h = max(int(math.ceil((landing - first) / HOUR)), 120 * 12) + days_h + 1
-        tab, t0, src = self.table(first, span_h)
-        v, ter = self.view(loc, lander, mode)
-        se = V.series(v, tab)
-        i0 = int(math.floor((landing - t0) / HOUR))
-        out = D.lab(se, i0, cfg, mass_of, atlas_first=0)
-        out["atlas_start"] = iso(t0)
-        out["atlas_step_h"] = 12
-        out["landing_time"] = iso(t0 + i0 * HOUR)
-        out["_meta"] = {"terrain": ter, "ephemeris": self._eph_sources(src)}
-        return out
-
     def calendar(self, locs: list[Location], start: float, lander: dict, spec: M.MissionSpec, mode: str = "best", days: int = 366) -> dict:
         from . import planning as P
         cfg = M.make_cfg(lander, spec)
@@ -328,40 +309,6 @@ class Engine:
             out["sites"].append({"location": loc.as_dict(), **P.calendar(V.series(v, tab), cfg, days)})
         out["_meta"] = {"terrain": {"dem": mode, "tiers": sorted(tiers)}, "ephemeris": self._eph_sources(src)}
         return out
-
-    def rescue(self, plan: Location, plan_time: float, locs: list[Location], lander: dict, spec: M.MissionSpec,
-               slip_days: int, flex_days: int, mode: str = "best") -> dict:
-        from . import planning as P
-        cfg = M.make_cfg(lander, spec)
-        days_h = M.js_round(spec.duration_days * 24)
-        tP = int(math.floor(plan_time / HOUR)) * HOUR
-        n = (slip_days + flex_days) * 24 + days_h + 1
-        tab, t0, src = self.table(tP, n)
-        iS = slip_days * 24
-        pv, _ = self.view(plan, lander, mode)
-        pse = V.series(pv, tab)
-        base = M.verdict(pse, 0, cfg)
-        slipped = M.verdict(pse, iS, cfg)
-        if not any(l.id == plan.id and l.lat == plan.lat and l.lon == plan.lon for l in locs):
-            locs = [plan] + list(locs)
-        alts = []
-        for loc in locs:
-            v, ter = self.view(loc, lander, mode)
-            r = P.rescue_site(pse if loc is plan else V.series(v, tab), iS, flex_days, cfg)
-            alts.append((loc, r, ter))
-        alts.sort(key=lambda a: (-a[1]["state"], (a[1]["i"] if a[1]["state"] else 0), -a[1]["verdict"]["nom"]["minSoc"]))
-
-        def vd(v):
-            st = v["state"]
-            return {"verdict": M.VERDICTS[st], "state": st, "nominal": M.summary_of(v["nom"], cfg["capWh"]),
-                    "with_terrain_margin": M.summary_of(v["rob"], cfg["capWh"]) if v["rob"] else None,
-                    "reasons": v["nom"]["fails"] if st == 0 else (v["rob"]["fails"] if st == 1 else [])}
-        return {"plan": {"location": plan.as_dict(), "landing_time": iso(tP), **vd(base)},
-                "after_slip": {"landing_time": iso(tP + iS * HOUR), **vd(slipped)}, "slip_days": slip_days, "flex_days": flex_days,
-                "alternatives": [{"location": loc.as_dict(), "landing_time": iso(tP + r["i"] * HOUR) if r["state"] else None,
-                                  "extra_wait_days": (r["i"] - iS) / 24 if r["state"] else None, "good_landing_days": r["good_days"],
-                                  "terrain": ter["tiers"][0] if ter["tiers"] else None, **vd(r["verdict"])} for loc, r, ter in alts],
-                "_meta": {"terrain": {"dem": mode}, "ephemeris": self._eph_sources(src)}}
 
     # ================================================================ phase 2
     # ---------------------------------------------------------------- /compare
@@ -621,7 +568,7 @@ class Engine:
         res, t0, src = self.series_many([loc], landing, days_h + 1, lander, mode)
         se, ter = res[0]
         i0 = 0
-        r = D.lab(se, i0, cfg, mass_of, atlas_first=None)
+        r = D.lab(se, i0, cfg, mass_of)
         F = r["frontier"]
         b = F["best"]
         shape = M.power_shape(se, cfg)

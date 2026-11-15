@@ -135,7 +135,7 @@ def atlas(se, i_first: int, cfg: dict, mass_of=(80.0, 160.0), n: int = 120, step
     return out
 
 
-def lab(se, i0: int, cfg: dict, mass_of=(80.0, 160.0), atlas_first: int | None = None) -> dict:
+def lab(se, i0: int, cfg: dict, mass_of=(80.0, 160.0)) -> dict:
     """Everything the design-lab panel shows."""
     shape = M.power_shape(se, cfg)
     F = frontier(se, i0, cfg, mass_of, 36, 12, True, shape)
@@ -157,8 +157,6 @@ def lab(se, i0: int, cfg: dict, mass_of=(80.0, 160.0), atlas_first: int | None =
     else:
         r = M.mission(se, i0, dict(cfg, peakW=F["pMax"], capWh=60000.0), cfg["margin"], False, shape)
         out["why_none"] = r["fails"][0] if r["fails"] else "the needs cannot be met"
-    if atlas_first is not None:
-        out["atlas"] = atlas(se, atlas_first, cfg, mass_of, 120, 12, shape)
     return out
 
 

@@ -1,5 +1,5 @@
-"""Landing-date planning: verdicts for many landing times at once, the 12-month calendar, and mission rescue.
-Ports of main's src/app.js calStates and computeRescue."""
+"""Landing-date planning: verdicts for many landing times at once and the 12-month calendar. Port of main's
+src/app.js calStates. Mission Rescue is now engine/landing.py (/landing-window)."""
 from __future__ import annotations
 
 import numpy as np
@@ -31,17 +31,3 @@ def calendar(se: dict, cfg: dict, days: int = 366, shape=None) -> dict:
     st, cz = verdicts(se, np.arange(days) * 24, cfg, shape)
     return {"state": st.tolist(), "cause": [CAUSE_TEXT.get(int(c)) if c >= 0 else None for c in cz],
             "good_days": int((st == 2).sum()), "marginal_days": int((st == 1).sum())}
-
-
-def rescue_site(se: dict, i_slip: int, flex_days: int, cfg: dict) -> dict:
-    """Best landing for one site after a slip (main's computeRescue, per site): candidates every 6 h over the flexible
-    window, the first that meets the needs (else the best state, earliest), and the number of workable landing days."""
-    shape = M.power_shape(se, cfg)
-    cand = np.arange(i_slip, i_slip + flex_days * 24 + 1, 6)
-    st, _ = verdicts(se, cand, cfg, shape)
-    best_state = int(st.max())
-    j = int(np.argmax(st == best_state))
-    i_best = int(cand[j])
-    daily, _ = verdicts(se, i_slip + np.arange(flex_days + 1) * 24, cfg, shape)
-    v = M.verdict(se, i_best, cfg, shape)
-    return {"state": int(v["state"]), "i": i_best, "verdict": v, "good_days": int((daily > 0).sum())}
