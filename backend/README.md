@@ -15,8 +15,10 @@ It is one FastAPI service built from three packages:
 - `monscarlo/api/`: the HTTP layer (routes and request schemas).
 
 The web page in `../web/` is a separate static frontend. It asks these endpoints for every number and only does the
-drawing, and it is served on its own (`python serve_web.py` from the repo root). The API accepts cross-origin calls; set
-`MONS_CARLO_CORS_ORIGINS` (a comma list) to limit them to the page's address once it is hosted. The original single-file
+drawing. When `web/` sits next to `backend/` (the repo, and the Docker image), the API also serves the page at `/`, so
+one address holds both; the API's own summary is at `/api`. For page work you can still serve it on its own
+(`python serve_web.py` from the repo root, port 5173), and it then calls the local API. The API accepts cross-origin
+calls; set `MONS_CARLO_CORS_ORIGINS` (a comma list) to limit them to the page's address. The original single-file
 app, which had its own engine in the browser, is in the git history at commit `afd9e78`.
 
 ## Install
