@@ -51,3 +51,37 @@ class ReportRequest(BaseModel):
     uncertainty: Uncertainty = Uncertainty()
     include: list[Literal["series", "horizon", "risk", "trace"]] = []
     dem: Literal["best", "80m"] = "best"
+
+
+class DesignRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    location: LocationIn
+    landing_time: Optional[str] = None
+    lander: Optional[LanderSpec] = None
+    mission: MissionSpec = MissionSpec()
+    array_w_per_kg: float = Field(default=80, ge=5, le=500)
+    battery_wh_per_kg: float = Field(default=160, ge=20, le=500)
+    atlas_start: Optional[str] = Field(default=None, description="first landing time of the 60-day atlas (default: the landing time)")
+    dem: Literal["best", "80m"] = "best"
+
+
+class CalendarRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    locations: list[LocationIn] = Field(min_length=1, max_length=8)
+    start: Optional[str] = Field(default=None, description="first day (default today)")
+    days: int = Field(default=366, ge=1, le=400)
+    lander: Optional[LanderSpec] = None
+    mission: MissionSpec = MissionSpec()
+    dem: Literal["best", "80m"] = "best"
+
+
+class RescueRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plan: LocationIn
+    plan_time: str
+    sites: Union[Literal["pole", "all"], list[LocationIn]] = "pole"
+    slip_days: int = Field(default=14, ge=0, le=60)
+    flex_days: int = Field(default=21, ge=0, le=60)
+    lander: Optional[LanderSpec] = None
+    mission: MissionSpec = MissionSpec()
+    dem: Literal["best", "80m"] = "best"

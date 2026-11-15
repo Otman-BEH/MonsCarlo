@@ -64,6 +64,20 @@ const arr = a => Array.from(a, v => (Number.isFinite(v) ? v : (v > 0 ? 'Infinity
     out.wilson = [[0.5, 100], [0, 50], [0.93, 12.5], [1, 30]].map(([p, n]) => ({ p, n, ci: Ana.wilson(p, n) })); }
   { const L = []; let a = 12345; const u = () => { a = (Math.imul(a, 1103515245) + 12345) >>> 0; return a / 4294967296; };
     for (let i = 0; i < 4000; i++) { const x = Math.pow(u() + 1e-12, 1 + u() * 20); L.push([x, Math.log(x)]); } out.logs = L; }
+  // 6. Design lab (inverse design) and the Deep Space Network view, on the Malapert series
+  {
+    const q = Terrain.profiles.sites.mala, se = Ana.seriesAt({ id: 'mala', lat: q.lat, lon: q.lon }, 2, Terrain.profileMask('mala', 2), tab, 0, N);
+    const massOf = { wkg: 80, whkg: 160 };
+    out.design = [];
+    for (const [i0, over] of [[100, {}], [333, { tracking: false }], [520, { fault: { kind: 'load', day: 2 }, safe: true }]]) {
+      const cfg = Object.assign({}, base, over), F = Ana.designFrontier(se, i0, cfg, massOf, 36, 12, true);
+      const pa = Ana.minArray(se, i0, cfg, cfg.capWh, true, F.pMax, 14);
+      const cb = Ana.bisectUp(c => Ana.mission(se, i0, Object.assign({}, cfg, { capWh: c }), cfg.margin, false).ok, 10, 60000, 16);
+      const atlas = []; for (let j = 0; j < 20; j++) { const i = i0 + j * 12; if (i + cfg.days * 24 > N) break; const G = Ana.designFrontier(se, i, cfg, massOf, 12, 9, false); atlas.push(G.best ? [G.best.peakW, G.best.capWh, G.best.mass] : null); }
+      out.design.push({ site: 'mala', i0, cfg, caps: F.caps, rob: F.rob, nom: F.nom, best: F.best, pMax: F.pMax, minArrayAtCap: pa, minBatteryAtArray: cb, atlas });
+    }
+    out.dsn = [0, 7, 19, 33.5, 101].map(hh => ({ ms: T0 + hh * 3600e3, v: Eng.dsnView(T0 + hh * 3600e3) }));
+  }
   out.nextCross = [[[-2, -1, 1, 3], 0], [[1, 2, 3], 0], [[3, 1, -1, -2, 2], 0.5]].map(([a, x]) => ({ a, x, r: Ana.nextCross(Float32Array.from(a), x, a.length) }));
 
   const dir = path.join(__dirname, '..', 'tests', 'fixtures'); fs.mkdirSync(dir, { recursive: true });

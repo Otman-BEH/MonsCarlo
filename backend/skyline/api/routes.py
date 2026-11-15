@@ -19,7 +19,7 @@ from ..engine import sites as SI
 from ..engine.service import Engine, iso, parse_time
 from ..prep import fetch_data, horizons, precompute, spice
 from ..prep.store import default_store
-from .schemas import MissionRequest, ReportRequest
+from .schemas import CalendarRequest, DesignRequest, MissionRequest, ReportRequest, RescueRequest
 
 router = APIRouter()
 _engine: Engine | None = None
@@ -300,3 +300,105 @@ def report_post(req: ReportRequest):
     t = parse_time(req.time)
     ld = LD.resolve(req.lander)
     return _report(loc, t, ld, req.mission, req.dem, req.window_days, set(req.include), req.uncertainty, dict(time=req.time, lander=req.lander))
+
+
+# ---------------------------------------------------------------- data for the web page (and anyone else)
+def _locs(items) -> list[SI.Location]:
+    return [_loc(i.site, i.lat, i.lon) for i in items]
+
+
+@router.get("/series", tags=["sky"], summary="Hourly Sun and Earth series plus the skyline, for drawing charts")
+def series(site: Optional[str] = None, lat: Optional[float] = None, lon: Optional[float] = None,
+           start: Optional[str] = Query(None, description="default now"), hours: int = Query(720, ge=1, le=10320),
+           step_h: int = Query(1, ge=1, le=24), array_height_m: Optional[float] = Query(None, ge=0, le=100),
+           antenna_height_m: Optional[float] = Query(None, ge=0, le=100), lander: Optional[str] = LanderQ,
+           dem: Literal["best", "80m"] = DemQ):
+    loc = _loc(site, lat, lon)
+    ld = _lander_get(lander, _flat(None, None, array_height_m, None, antenna_height_m, None, None, None, None, None, None))
+    r = engine().series_window(loc, parse_time(start), hours, ld, dem, step_h)
+    return {**_clean(r), "meta": meta(r["_meta"], ld)}
+
+
+@router.get("/ephemeris", tags=["sky"], summary="Hourly Sun and Earth vectors in the Moon-fixed frame (km)")
+def ephemeris(start: Optional[str] = Query(None, description="default now"), hours: int = Query(720, ge=1, le=10320),
+              step_h: int = Query(1, ge=1, le=24)):
+    r = engine().ephemeris_window(parse_time(start), hours, step_h)
+    return {**_clean(r), "meta": meta({"ephemeris": r["_meta"]["ephemeris"], "terrain": {"tiers": []}})}
+
+
+@router.get("/dsn", tags=["sky"], summary="Moon elevation at the three Deep Space Network complexes")
+def dsn(time: Optional[str] = Query(None, description="default now")):
+    t = parse_time(time)
+    if not spice.available():
+        return JSONResponse(status_code=503, content={"detail": "the DSN view needs the SPICE kernels; run python -m skyline.prep.fetch_data"})
+    return {"time": iso(t), "stations": spice.dsn_view(t), "meta": meta()}
+
+
+@router.post("/design", tags=["mission"], summary="Design lab: the lightest array and battery that pass, and a 60-day atlas")
+def design(req: DesignRequest):
+    loc = _loc(req.location.site, req.location.lat, req.location.lon)
+    t = parse_time(req.landing_time)
+    ld = LD.resolve(req.lander)
+    r = engine().design(loc, t, ld, req.mission, req.dem, (req.array_w_per_kg, req.battery_wh_per_kg),
+                        parse_time(req.atlas_start) if req.atlas_start else None)
+    return {**_clean(r), "meta": meta(r["_meta"], ld)}
+
+
+@router.post("/calendar", tags=["mission"], summary="Verdict for a landing on each day, for up to 8 sites")
+def calendar(req: CalendarRequest):
+    ld = LD.resolve(req.lander)
+    r = engine().calendar(_locs(req.locations), parse_time(req.start), ld, req.mission, req.dem, req.days)
+    return {**_clean(r), "meta": meta(r["_meta"], ld)}
+
+
+@router.post("/rescue", tags=["mission"], summary="Mission rescue: after a schedule slip, the sites and times that still work")
+def rescue(req: RescueRequest):
+    plan = _loc(req.plan.site, req.plan.lat, req.plan.lon)
+    if req.sites == "all":
+        locs = [SI.resolve(s["id"]) for s in SI.catalogue()]
+    elif req.sites == "pole":
+        locs = [SI.resolve(s["id"]) for s in SI.catalogue() if s["lat"] <= -80]
+    else:
+        locs = _locs(req.sites)
+    ld = LD.resolve(req.lander)
+    r = engine().rescue(plan, parse_time(req.plan_time), locs, ld, req.mission, req.slip_days, req.flex_days, req.dem)
+    return {**_clean(r), "meta": meta(r["_meta"], ld)}
+
+
+@router.get("/terrain/patch", tags=["terrain"], summary="Height grids around a point (metres), for drawing the surface view")
+def terrain_patch(lat: float = Query(..., ge=-90, le=-79), lon: float = Query(..., ge=-360, le=360)):
+    from ..engine.terrain import ll_to_xy, xy_to_ll
+    import numpy as np
+    T = engine().sky.terrain
+    x0, y0 = (float(v) for v in ll_to_xy(max(-89.9999, lat), lon))
+    out = {}
+    for key, cell, half in (("a", 40.0, 3000.0), ("b", 240.0, 15000.0)):
+        n = int(round(2 * half / cell))
+        c = (np.arange(n) - (n - 1) / 2) * cell
+        X, Y = np.meshgrid(x0 + c, y0 - c)
+        la, lo = xy_to_ll(X, Y)
+        h = T.elev(la.ravel(), lo.ravel(), "best").reshape(n, n)
+        out[key] = {"n": n, "cell_km": cell / 1000, "x_km": (x0 + c[0]) / 1000, "y_km": (y0 - c[0]) / 1000,
+                    "h": np.round(h, 1).ravel().tolist()}
+    return {"lat": lat, "lon": lon, "patches": out, "tier": T.best_tier(lat, lon),
+            "note": "x_km, y_km: south polar stereographic map coordinates of the top-left cell centre; rows run south (down the map)",
+            "meta": meta()}
+
+
+@router.get("/terrain/polar400", tags=["terrain"], summary="The 80 m DEM averaged to 400 m, 80S to the pole (int16 metres, row-major)")
+def terrain_polar400():
+    from fastapi.responses import Response as R
+    p = config.DERIVED_DIR / "polar400.npy"
+    if not p.exists():
+        return JSONResponse(status_code=503, content={"detail": "run python run.py (precompute) first"})
+    import numpy as np
+    a = np.load(p)
+    return R(content=a.astype("<i2").tobytes(), media_type="application/octet-stream",
+             headers={"X-Size": str(a.shape[0]), "X-Cell-Km": "0.4", "X-Half-Km": str(a.shape[0] * 0.2),
+                      "Cache-Control": "public, max-age=86400", "Access-Control-Expose-Headers": "X-Size, X-Cell-Km, X-Half-Km"})
+
+
+@router.get("/terrain/moon.jpg", tags=["terrain"], summary="Moon mosaic for the globe (equirectangular, 1440 x 720)")
+def terrain_texture():
+    from fastapi.responses import FileResponse
+    return FileResponse(config.ASSETS_DIR / "moon.jpg", media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})

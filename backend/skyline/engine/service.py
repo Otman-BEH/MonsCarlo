@@ -108,8 +108,16 @@ class Engine:
         body = lambda p, frac: {
             "azimuth_deg": f(st[p + "Az"]), "elevation_deg": f(st[p + "El"]), "angular_radius_deg": f(st[p + "Rad"]),
             "skyline_deg": f(st[p + "Hz"]), "clearance_deg": f(st[p + "Clr"]), "visible_share": f(frac), "above_skyline": bool(st[p + "Clr"] > 0)}
+        from .geometry import sub_point
+        from ..prep import spice
+        sp_lat, sp_lon = sub_point(s_vec)
+        se_lat, se_lon = sub_point(e_vec)
+        dsn = spice.dsn_view(t) if spice.available() else None
         return {
             "time": iso(t), "location": loc.as_dict(),
+            "vectors_km": {"sun": [float(x) for x in s_vec], "earth": [float(x) for x in e_vec], "frame": "Moon-fixed (body-fixed), from the Moon's centre"},
+            "subsolar": {"lat": float(sp_lat), "lon": float(sp_lon)}, "subearth": {"lat": float(se_lat), "lon": float(se_lon)},
+            "dsn": dsn,
             "sun": {**body("sun", st["sunFrac"]), "irradiance_factor": f(st["irr"]),
                     "next_sunset": events["sunset"], "next_sunrise": events["sunrise"]},
             "earth": {**body("earth", st["earthFrac"]), "next_earthset": events["earthset"], "next_earthrise": events["earthrise"]},
@@ -140,7 +148,8 @@ class Engine:
             "stats": {"sunlit_pct": st["litPct"], "earth_in_view_pct": st["linkPct"], "both_pct": 100 * B.sum() / n,
                       "power_share_tracking_pct": st["pTrack"], "power_share_horizontal_pct": st["pFlat"],
                       "longest_sunlit_h": st["maxLitD"] * 24, "longest_dark_h": st["maxDarkD"] * 24,
-                      "longest_radio_gap_h": st["maxOutD"] * 24, "longest_both_h": (st["maxBothD"] * 24)},
+                      "longest_radio_gap_h": st["maxOutD"] * 24, "longest_both_h": (st["maxBothD"] * 24),
+                      "max_sun_elevation_deg": float(se["sunEl"].max()), "max_earth_elevation_deg": float(se["earthEl"].max())},
             "intervals": {"sunlit": V.intervals(L, t0, step_h * HOUR), "earth_in_view": V.intervals(K, t0, step_h * HOUR),
                           "both": V.intervals(B, t0, step_h * HOUR)},
             "_meta": {"terrain": ter, "ephemeris": self._eph_sources(src)},
@@ -177,9 +186,16 @@ class Engine:
             "terrain_margin_deg": cfg["margin"], "mission": spec.model_dump(),
             "_meta": {"terrain": ter, "ephemeris": self._eph_sources(src)},
         }
+        if cfg["fault"]["kind"] != "none" or cfg["safe"]:
+            clean = M.mission(se, i0, dict(cfg, fault={"kind": "none", "day": 0}), 0, False, shp)
+            other = M.mission(se, i0, dict(cfg, safe=not cfg["safe"]), 0, False, shp)
+            out["stress"] = {"without_fault": {"ok": clean["ok"], "fails": clean["fails"]},
+                             "safe_mode_toggled": {"safe_mode": not cfg["safe"], "ok": other["ok"], "fails": other["fails"], "safe_mode_hours": other["safeH"]}}
         if trace:
             n = nom["n"]
+            robk = M.mission(se, i0, cfg, cfg["margin"], True, shp)
             out["trace"] = {"time": [iso(t0 + (i0 + k) * HOUR) for k in range(n + 1)], "state_of_charge": np.round(nom["soc"], 5).tolist(),
+                            "state_of_charge_with_margin": np.round(robk["soc"], 5).tolist(),
                             "sun_share": np.round(nom["sun"], 4).tolist(), "earth_link": nom["link"].astype(int).tolist(),
                             "safe_mode": nom["safeArr"].astype(int).tolist()}
         if risk:
@@ -199,3 +215,99 @@ class Engine:
         return {"location": loc.as_dict(), "dem": mode, "ground_m": hm.ground_m, "tiers": hm.tiers,
                 "azimuth_deg": hm.az_deg.tolist(),
                 "horizon_deg": {f"{h:g}": np.round(masks[h], 4).tolist() for h in heights}}
+
+    # ---------------------------------------------------------------- data for the web page
+    def series_window(self, loc: Location, start: float, hours: int, lander: dict, mode: str = "best", step_h: int = 1,
+                      include_skyline: bool = True) -> dict:
+        if hours < 1 or hours > 430 * 24:
+            raise ValueError("hours must be between 1 and 10320 (430 days)")
+        step_h = max(1, int(step_h))
+        v, ter = self.view(loc, lander, mode)
+        tab, t0, src = self.table(start, hours + 1)
+        tab = tab[::step_h]
+        se = V.series(v, tab)
+        out = {"location": loc.as_dict(), "start": iso(t0), "start_unix": t0, "step_h": step_h, "n": se["n"],
+               "series": {k: np.round(se[k], 4).tolist() for k in V.SERIES_KEYS},
+               "_meta": {"terrain": ter, "ephemeris": self._eph_sources(src)}}
+        if include_skyline:
+            out["skyline"] = {"azimuth_step_deg": 360.0 / len(v.sun_mask), "sun": np.round(v.sun_mask, 4).tolist(),
+                              "earth": np.round(v.earth_mask, 4).tolist(), "ground_m": v.ground_m, "tiers": ter["tiers"],
+                              "lo_deg": float(min(v.sun_mask.min(), v.earth_mask.min())), "hi_deg": float(max(v.sun_mask.max(), v.earth_mask.max()))}
+        return out
+
+    def ephemeris_window(self, start: float, hours: int, step_h: int = 1) -> dict:
+        if hours < 1 or hours > 430 * 24:
+            raise ValueError("hours must be between 1 and 10320 (430 days)")
+        tab, t0, src = self.table(start, hours + 1)
+        tab = tab[:: max(1, int(step_h))]
+        return {"start": iso(t0), "start_unix": t0, "step_h": max(1, int(step_h)), "n": len(tab),
+                "sun_km": np.round(tab[:, :3], 1).tolist(), "earth_km": np.round(tab[:, 3:], 3).tolist(),
+                "frame": "Moon-fixed (body-fixed), from the Moon's centre", "_meta": {"ephemeris": self._eph_sources(src)}}
+
+    def design(self, loc: Location, landing: float, lander: dict, spec: M.MissionSpec, mode: str = "best",
+               mass_of=(80.0, 160.0), atlas_start: float | None = None) -> dict:
+        from . import design as D
+        cfg = M.make_cfg(lander, spec)
+        days_h = M.js_round(spec.duration_days * 24)
+        a0 = landing if atlas_start is None else min(atlas_start, landing)
+        first = int(math.floor(a0 / HOUR)) * HOUR
+        span_h = max(int(math.ceil((landing - first) / HOUR)), 120 * 12) + days_h + 1
+        tab, t0, src = self.table(first, span_h)
+        v, ter = self.view(loc, lander, mode)
+        se = V.series(v, tab)
+        i0 = int(math.floor((landing - t0) / HOUR))
+        out = D.lab(se, i0, cfg, mass_of, atlas_first=0)
+        out["atlas_start"] = iso(t0)
+        out["atlas_step_h"] = 12
+        out["landing_time"] = iso(t0 + i0 * HOUR)
+        out["_meta"] = {"terrain": ter, "ephemeris": self._eph_sources(src)}
+        return out
+
+    def calendar(self, locs: list[Location], start: float, lander: dict, spec: M.MissionSpec, mode: str = "best", days: int = 366) -> dict:
+        from . import planning as P
+        cfg = M.make_cfg(lander, spec)
+        days_h = M.js_round(spec.duration_days * 24)
+        t0 = int(math.floor(start / 86400)) * 86400
+        tab, t0, src = self.table(t0, days * 24 + days_h + 1)
+        out = {"start": iso(t0), "days": days, "sites": []}
+        tiers = set()
+        for loc in locs:
+            v, ter = self.view(loc, lander, mode)
+            tiers.update(ter["tiers"])
+            out["sites"].append({"location": loc.as_dict(), **P.calendar(V.series(v, tab), cfg, days)})
+        out["_meta"] = {"terrain": {"dem": mode, "tiers": sorted(tiers)}, "ephemeris": self._eph_sources(src)}
+        return out
+
+    def rescue(self, plan: Location, plan_time: float, locs: list[Location], lander: dict, spec: M.MissionSpec,
+               slip_days: int, flex_days: int, mode: str = "best") -> dict:
+        from . import planning as P
+        cfg = M.make_cfg(lander, spec)
+        days_h = M.js_round(spec.duration_days * 24)
+        tP = int(math.floor(plan_time / HOUR)) * HOUR
+        n = (slip_days + flex_days) * 24 + days_h + 1
+        tab, t0, src = self.table(tP, n)
+        iS = slip_days * 24
+        pv, _ = self.view(plan, lander, mode)
+        pse = V.series(pv, tab)
+        base = M.verdict(pse, 0, cfg)
+        slipped = M.verdict(pse, iS, cfg)
+        if not any(l.id == plan.id and l.lat == plan.lat and l.lon == plan.lon for l in locs):
+            locs = [plan] + list(locs)
+        alts = []
+        for loc in locs:
+            v, ter = self.view(loc, lander, mode)
+            r = P.rescue_site(pse if loc is plan else V.series(v, tab), iS, flex_days, cfg)
+            alts.append((loc, r, ter))
+        alts.sort(key=lambda a: (-a[1]["state"], (a[1]["i"] if a[1]["state"] else 0), -a[1]["verdict"]["nom"]["minSoc"]))
+
+        def vd(v):
+            st = v["state"]
+            return {"verdict": M.VERDICTS[st], "state": st, "nominal": M.summary_of(v["nom"], cfg["capWh"]),
+                    "with_terrain_margin": M.summary_of(v["rob"], cfg["capWh"]) if v["rob"] else None,
+                    "reasons": v["nom"]["fails"] if st == 0 else (v["rob"]["fails"] if st == 1 else [])}
+        return {"plan": {"location": plan.as_dict(), "landing_time": iso(tP), **vd(base)},
+                "after_slip": {"landing_time": iso(tP + iS * HOUR), **vd(slipped)}, "slip_days": slip_days, "flex_days": flex_days,
+                "alternatives": [{"location": loc.as_dict(), "landing_time": iso(tP + r["i"] * HOUR) if r["state"] else None,
+                                  "extra_wait_days": (r["i"] - iS) / 24 if r["state"] else None, "good_landing_days": r["good_days"],
+                                  "terrain": ter["tiers"][0] if ter["tiers"] else None, **vd(r["verdict"])} for loc, r, ter in alts],
+                "_meta": {"terrain": {"dem": mode}, "ephemeris": self._eph_sources(src)}}

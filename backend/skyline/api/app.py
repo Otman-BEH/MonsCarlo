@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -28,6 +30,7 @@ Ephemeris: JPL Horizons API, cached by month in SQLite (SPICE DE440 fallback). T
 app = FastAPI(title="Lunar Skyline API", version=config.API_VERSION, description=DESCRIPTION)
 # local use by the web app and other tools on this machine
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "DELETE"], allow_headers=["*"])
+app.add_middleware(GZipMiddleware, minimum_size=2000)
 app.include_router(router)
 
 
@@ -70,7 +73,13 @@ async def _value(_: Request, ex: ValueError):
     return _err(422, str(ex))
 
 
-@app.get("/", include_in_schema=False)
-def root():
+@app.get("/api", include_in_schema=False)
+def api_root():
     return {"name": "Lunar Skyline API", "version": config.API_VERSION, "docs": "/docs",
             "try": ["/report?site=shack", "/sky?site=mala", "/sites", "/landers"]}
+
+
+# the web page (repo folder web/): the same server answers the API and serves the page that uses it
+WEB_DIR = config.REPO_DIR / "web"
+if WEB_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

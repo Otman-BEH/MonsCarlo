@@ -29,7 +29,7 @@ def c():
 
 
 def test_root_and_health(c):
-    assert c.get("/").json()["docs"] == "/docs"
+    assert c.get("/api").json()["docs"] == "/docs"
     h = c.get("/health").json()
     assert h["status"] in ("ok", "degraded") and "files" in h and "ephemeris" in h and h["meta"]["api_version"]
 
