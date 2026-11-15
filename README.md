@@ -24,18 +24,19 @@ To put it online, deploy the `Dockerfile` on any host with a persistent disk (a 
 ## What it does
 - **Plan a mission**: enter mission length, array output, loads, battery, reserve, link-gap limit and a terrain margin.
   The page simulates battery charge hour by hour and gives a verdict: meets the needs, marginal (passes only without the terrain margin), or fails, with the reason.
-- **Design lab**: works backwards from the mission to the hardware. A survival frontier shows every solar-array and battery pair that passes, the lightest pair is marked, and concrete fixes are listed (grow the array, grow the battery, or cut the load). An opportunity atlas repeats the search for a landing every 12 hours to show which dates need the least hardware. One tap applies a design, or a date and its design.
+- **Mission design** (was the design lab): works backwards from the mission to the hardware. A survival frontier shows every solar-array and battery pair that passes, the lightest pair is marked, and concrete fixes are listed (grow the array, grow the battery, or cut the load). An opportunity atlas repeats the search for a landing every 12 hours to show which dates need the least hardware. One tap applies a design, or a date and its design.
 - **Blackout rule**: the battery must be able to carry the darkness load through an unplanned blackout (6 h by default) even at its lowest charge, so a tiny battery is not approved just because the Sun never sets.
 - **Stress test**: inject one fault (array loses 30%, unexpected 100 W load, battery loses 25%, antenna down for 24 h) on a chosen mission day, with or without a safe mode that sheds load when the battery runs low.
 - **Landing risk (Monte Carlo)**: thousands of missions are simulated with the touchdown point, landing time, terrain height and hardware varied at random; ground steeper than a set slope counts as a failure.
   The page reports the chance of success with a 95% interval, why missions fail, what drives the risk, a map of where a touchdown still works, and a better aim point when one holds up on a separate set of random draws.
   Every spread, the slope limit, the random seed and a "loads high, battery low together" link are adjustable.
 - **Guided tour**: eight steps that walk a first-time visitor through the whole tool.
-- **Mission Rescue**: set a plan, apply a schedule slip, and get a ranked list of sites and landing times that still meet the needs.
+- **Landing window** (was Mission Rescue): set a plan, apply a schedule slip (or none), and get a ranked list of sites and landing times that still meet the needs, with the runs of landing times that work at each site.
 - **Stand at the landing site**: a first-person view of the real LOLA terrain from mast height, with cast shadows, and the Sun and Earth (with its phase) at true size. Drag to look around; press Play to watch a lunar day.
-- **Explore the sky**: horizon panorama with the Sun's and Earth's paths, live south-pole shadow map, a 3D globe of the whole Moon lit from the true Sun direction (drag to turn, tap to pick a point), rise and set countdowns, time series.
+- **Explore the sky**: horizon panorama with the Sun's and Earth's paths, live south-pole shadow map (cast on the server), a 3D globe of the whole Moon lit from the true Sun direction (drag to turn, tap to pick a point), rise and set countdowns, time series.
   The surface view carries a compact readout: Sun and Earth clearance above the terrain and the time to the next set or rise.
-- **Compare sites and dates**: one horizon panorama per site for the same instant, side-by-side statistics and a twelve-month landing-date calendar.
+- **Compare sites and dates**: one horizon panorama per site for the same instant, side-by-side statistics with the best site per column marked by the server, and a twelve-month landing-date calendar.
+- **Deep Space Network**: the Moon's elevation at Goldstone, Madrid and Canberra, and contact windows that need both Earth above the skyline and a station that sees the Moon.
 - **Why the south pole?**: a view for educators and the public. It pairs Apollo 11's sky with Shackleton rim's at the same moment, gives live figures for both (highest Sun, longest night, time with Earth in view), and explains the cause with an axis-tilt diagram.
 - **Share and export**: "Copy link to this scenario" puts the site or custom coordinates, time, mast height, compared sites and mission needs in the address, so a colleague opens the same view. The time series (CSV) and the mission report (Markdown) can be copied or saved as files.
 

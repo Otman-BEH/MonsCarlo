@@ -1,5 +1,5 @@
 /* Mons Carlo web page. Every number comes from the Mons Carlo server (backend/, FastAPI): positions, skylines,
-   series, verdicts, design lab, rescue, calendar, landing risk. This file only fetches, interpolates between hourly
+   series, verdicts, shadow map, site compare, mission design, landing window, DSN view, calendar, landing risk. This file only fetches, interpolates between hourly
    values for smooth playback, and draws. The server's API is documented at /docs. */
 (async function () {
   const $ = id => document.getElementById(id);
@@ -129,7 +129,7 @@
   function skyExact() {
     const key = 'sky|' + siteKey(S.site) + '|' + S.eye + '|' + S.t, e = cache.get(key);
     if (e && e.v) return e.v;
-    if (!S.playing && skyWant !== key) { skyWant = key; clearTimeout(skyTimer); skyTimer = setTimeout(() => need(key, () => getJSON('/sky?' + qs({ ...loc(S.site), time: iso(S.t), array_height_m: S.eye, antenna_height_m: S.eye }))), 120); }
+    if (!S.playing && skyWant !== key) { skyWant = key; clearTimeout(skyTimer); skyTimer = setTimeout(() => need(key, () => getJSON('/sky?' + qs({ ...loc(S.site), time: iso(S.t), array_height_m: S.eye, antenna_height_m: S.eye, dsn: true }))), 120); }
     return null;
   }
   const evOf = ev => ev && ev.time ? { t: Date.parse(ev.time) } : null;
@@ -210,34 +210,40 @@
     for (let d = 0; d <= days + 1e-9; d += stepD) { const x = X(d * 24); g.strokeStyle = C.line; g.beginPath(); g.moveTo(x, bt + bh); g.lineTo(x, bt + bh + 4); g.stroke(); if (d > 0 && d * per < 52) continue; g.textAlign = d === 0 ? 'left' : d >= days - 0.01 ? 'right' : 'center'; g.fillText(d === 0 ? 'Landing' : 'Day ' + d, x, bt + bh + 7); }
   }
 
-  // ---------- plan: design lab (inverse design, server: /design) ----------
+  // ---------- plan: mission design (inverse design, server: /mission-design and /mission-design/atlas) ----------
   const LAB = { wkg: 80, whkg: 160, F: null, atlas: null, geo: null, ageo: null, res: null };
   const fmtKg = m => (m < 10 ? m.toFixed(1) : Math.round(m)) + ' kg', fmtW = p => Math.round(p).toLocaleString('en-US') + ' W', fmtCap = c => Math.round(c).toLocaleString('en-US') + ' Wh';
   const labMass = (p, c) => p / LAB.wkg + c / LAB.whkg;
   function setHardware(p, c) { $('m-peak').value = Math.round(p); $('m-cap').value = Math.round(c); readCfg(); }
   function labNow() {
-    const body = { location: loc(S.site), landing_time: iso(landingTime()), lander: lander(), mission: missionSpec(), array_w_per_kg: LAB.wkg, battery_wh_per_kg: LAB.whkg,
-                   atlas_start: iso(Math.max(TAB.t0, floorDay(S.t) - 5 * DAY)) }, key = 'lab|' + JSON.stringify(body);
-    return { r: need(key, () => getJSON('/design', body)), err: failed(key) };
+    const body = { location: loc(S.site), landing_time: iso(landingTime()), lander: lander(), mission: missionSpec(), array_w_per_kg: LAB.wkg, battery_wh_per_kg: LAB.whkg };
+    const abody = Object.assign({}, body, { start: iso(Math.max(TAB.t0, floorDay(S.t) - 5 * DAY)), days: 60, step_h: 12 });
+    const k1 = 'md|' + JSON.stringify(body), k2 = 'mda|' + JSON.stringify(abody);
+    const d = need(k1, () => getJSON('/mission-design', body)), a = need(k2, () => getJSON('/mission-design/atlas', abody));
+    return { r: d ? labShape(d, a) : null, err: failed(k1) || failed(k2) };
+  }
+  // the server's answers in the shape the drawing code uses (frontier arrays, the lightest pair, the atlas)
+  function labShape(d, a) {
+    const L = d.lightest;
+    return { frontier: { caps: d.frontier.capacity_wh, rob: d.frontier.min_array_w_robust, nom: d.frontier.min_array_w_nominal, pMax: d.frontier.array_w_max,
+                         best: L ? { peakW: L.array_w, capWh: L.battery_wh, mass: L.mass_kg } : null },
+             why: d.why_none_text, best_trace_soc: d.traces.state_of_charge_lightest, fixes: d.fixes.map(f => f.text), fixesHeading: d.fixes_heading,
+             status: d.status_text, yours: d.yours,
+             atlas: a ? { t0: Date.parse(a.start), step_h: a.step_h, m: a.lightest_mass_kg.map(v => v === null ? NaN : v), pk: a.array_w, cp: a.battery_wh,
+                          top: a.best_dates.map(b => a.time.indexOf(b.landing_time)), text: a.text } : null };
   }
   function drawLab() {
     const cv = $('dfront'); if (!shown(cv)) return;
     const q = labNow(), R = q.r, cfg = S.cfg;
     if (!R || !S.mv) { $('d-pill').innerHTML = '<span class="pill big off">' + (q.err ? 'Server error' : 'Searching designs…') + '</span>'; waiting(cv, q.err || 'Searching array and battery sizes…'); waiting($('dab'), ' '); waiting($('datlas'), ' '); return; }
-    LAB.res = R; LAB.F = R.frontier; const F = R.frontier, b = F.best, st = S.mv.st, mc = labMass(cfg.peakW, cfg.capWh);
+    LAB.res = R; LAB.F = R.frontier; const F = R.frontier, b = F.best, st = R.yours.state, mc = R.yours.mass_kg;
     $('d-apply').hidden = !b;
     if (b) { $('d-best').textContent = fmtW(b.peakW) + ' + ' + fmtCap(b.capWh); $('d-best-s').textContent = 'About ' + fmtKg(b.mass) + ' of array and battery. A screening figure from the W per kg and Wh per kg above.'; }
-    else { $('d-best').textContent = 'None'; $('d-best-s').textContent = 'No array and battery pass at this landing time, because ' + (R.why_none || 'the needs cannot be met') + '. Try another time in the atlas below.'; }
-    $('d-cur').textContent = STN[st]; $('d-cur-s').textContent = fmtW(cfg.peakW) + ' + ' + fmtCap(cfg.capWh) + ', about ' + fmtKg(mc) + (b ? (st === 2 ? (mc - b.mass > 0.05 ? ' · ' + fmtKg(mc - b.mass) + ' more than the lightest' : ' · as light as it gets') : ' · the lightest passing design is ' + fmtKg(b.mass)) : '');
-    $('d-pill').innerHTML = !b ? '<span class="pill big bad">No hardware works at this time</span>' : st === 2 ? '<span class="pill big go">' + ((mc - b.mass) / b.mass < 0.15 ? 'Lean design' : 'Passes, with mass to spare') + '</span>' : '<span class="pill big ' + (st === 1 ? 'warn">Marginal: needs more hardware' : 'bad">Fails: needs more hardware') + '</span>';
-    const alts = [];
-    if (b) {
-      const pa = R.min_array_at_your_battery_w, cb = R.min_battery_at_your_array_wh;
-      alts.push(pa === null ? 'Keeping the ' + fmtCap(cfg.capWh) + ' battery: no array size is enough.' : 'Keeping the ' + fmtCap(cfg.capWh) + ' battery: the array ' + (pa > cfg.peakW ? 'must grow to ' : 'could shrink to ') + fmtW(Math.ceil(pa / 5) * 5) + ' (' + (pa > cfg.peakW ? '+' : '−') + fmtKg(Math.abs(pa - cfg.peakW) / LAB.wkg) + ').');
-      alts.push(cb === null ? 'Keeping the ' + fmtW(cfg.peakW) + ' array: no battery size is enough.' : 'Keeping the ' + fmtW(cfg.peakW) + ' array: the battery ' + (cb > cfg.capWh ? 'must grow to ' : 'could shrink to ') + fmtCap(Math.ceil(cb / 10) * 10) + ' (' + (cb > cfg.capWh ? '+' : '−') + fmtKg(Math.abs(cb - cfg.capWh) / LAB.whkg) + ').');
-      if (st < 2) { const x = R.max_sunlit_load_w; alts.push(x === null || x < 1 ? 'Cutting the sunlight load alone cannot save this hardware.' : 'Keeping all hardware: cut the sunlight load from ' + fmtW(cfg.loadSun) + ' to ' + fmtW(Math.floor(x)) + '.'); }
-    }
-    $('d-alt').innerHTML = alts.length ? '<div class="bt">Ways to make ' + (st === 2 ? 'it lighter' : 'it pass') + '</div><ul class="alts">' + alts.map(a => '<li>' + a + '</li>').join('') + '</ul>' : '';
+    else { $('d-best').textContent = 'None'; $('d-best-s').textContent = R.why || 'No array and battery pass at this landing time.'; }
+    $('d-cur').textContent = STN[st]; $('d-cur-s').textContent = R.yours.text;
+    $('d-pill').innerHTML = '<span class="pill big ' + (!b ? 'bad' : st === 2 ? 'go' : st === 1 ? 'warn' : 'bad') + '">' + R.status + '</span>';
+    const alts = R.fixes;
+    $('d-alt').innerHTML = alts.length ? '<div class="bt">' + R.fixesHeading + '</div><ul class="alts">' + alts.map(a => '<li>' + a + '</li>').join('') + '</ul>' : '';
     // survival frontier
     const { g, w, h } = prep(cv), L = 50, Rm = 12, T = 12, B = 30, pw = w - L - Rm, ph = h - T - B, x0 = Math.log(60), x1 = Math.log(60000), y0 = Math.log(20), y1 = Math.log(F.pMax);
     const X = c => L + (Math.log(c) - x0) / (x1 - x0) * pw, Y = p => T + (1 - (Math.log(Math.max(20, Math.min(F.pMax, p))) - y0) / (y1 - y0)) * ph;
@@ -266,11 +272,10 @@
     drawAtlas(R);
   }
   function drawAtlas(R) {
-    const cv = $('datlas'), cfg = S.cfg, NA = R.atlas.length, t0 = Date.parse(R.atlas_start), span = NA * R.atlas_step_h / 24;
-    const m = R.atlas.map(a => a ? a.mass : NaN), pk = R.atlas.map(a => a ? a.peakW : NaN), cp = R.atlas.map(a => a ? a.capWh : NaN);
-    const order = []; for (let j = 0; j < NA; j++) if (m[j] === m[j]) order.push(j); order.sort((a, b) => m[a] - m[b]);
-    const top = []; for (const j of order) { if (top.every(q => Math.abs(q - j) >= 6)) top.push(j); if (top.length === 4) break; }
-    LAB.atlas = { t0, step: R.atlas_step_h * HOUR, m, pk, cp, top };
+    const cv = $('datlas'), cfg = S.cfg, A = R.atlas;
+    if (!A) { waiting(cv, 'Searching 120 landing times…'); $('d-tbl').innerHTML = ''; return; }
+    const NA = A.m.length, t0 = A.t0, span = NA * A.step_h / 24, m = A.m, pk = A.pk, cp = A.cp, top = A.top;
+    LAB.atlas = { t0, step: A.step_h * HOUR, m, pk, cp, top };
     const { g, w, h } = prep(cv), L = 46, Rm = 10, T = 10, ch = h - T - 30, pw = w - L - Rm;
     let mx = 0; for (const v of m) if (v === v && v > mx) mx = v; mx = mx ? mx * 1.2 : 1;
     const X = j => L + j / NA * pw, Y = v => T + (1 - v / mx) * ch; LAB.ageo = { L, pw, NA };
@@ -284,9 +289,9 @@
     const cx = L + (S.t - t0) / (span * DAY) * pw; if (cx >= L && cx <= L + pw) { g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx, T); g.lineTo(cx, T + ch); g.stroke(); }
     if (top.length) { const j = top[0], x = X(j + 0.5), y = Y(m[j]); g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 6, y); g.lineTo(x, y + 6); g.lineTo(x - 6, y); g.closePath(); g.fillStyle = C.go; g.fill(); g.strokeStyle = C.ink; g.lineWidth = 1.5; g.stroke();
       g.font = FONTC(13); const t = 'Lightest: ' + fmtKg(m[j]), tw = g.measureText(t).width; g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineWidth = 3; g.strokeStyle = C.panel; const lx = x + 10 + tw > L + pw ? x - 10 - tw : x + 10; g.strokeText(t, lx, y - 12); g.fillStyle = C.ink; g.fillText(t, lx, y - 12); }
-    const mc = labMass(cfg.peakW, cfg.capWh), st = R.atlas_step_h * HOUR;
+    const mc = labMass(cfg.peakW, cfg.capWh), st = A.step_h * HOUR;
     $('d-tbl').innerHTML = top.length ? '<thead><tr><th>Land on</th><th>Solar array</th><th>Battery</th><th>Mass</th><th>Against your design</th><th></th></tr></thead><tbody>' + top.map(j => '<tr><td>' + fmtDT(t0 + j * st).replace(' UTC', '') + '</td><td>' + fmtW(pk[j]) + '</td><td>' + fmtCap(cp[j]) + '</td><td>' + fmtKg(m[j]) + '</td><td>' + (m[j] <= mc ? '−' : '+') + fmtKg(Math.abs(m[j] - mc)) + '</td><td><button type="button" data-ai="' + j + '">Use date and design</button></td></tr>').join('') + '</tbody>'
-      : '<tbody><tr><td>No landing time in these 60 days works with any hardware, for this site and these mission needs.</td></tr></tbody>';
+      : '<tbody><tr><td>' + (A.text || 'No landing time in these 60 days works with any hardware, for this site and these mission needs.') + '</td></tr></tbody>';
   }
 
   // ---------- plan: landing risk (Monte Carlo, server: /mission with risk) ----------
@@ -356,28 +361,30 @@
     g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.moveTo(10, w - 12); g.lineTo(10 + lp, w - 12); g.stroke(); g.font = FONT(11); g.textAlign = 'left'; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.85)'; g.strokeText(fmtDist(Ls), 10, w - 22); g.fillStyle = '#fff'; g.fillText(fmtDist(Ls), 10, w - 22);
   }
 
-  // ---------- plan: mission rescue (server: /rescue) ----------
+  // ---------- plan: landing window (server: /landing-window) ----------
   function rows() { return [S.site].concat(S.cmp.filter(id => id !== S.site.id).map(byId).filter(Boolean)).slice(0, 5); }
   function rescueNow() {
-    const body = { plan: loc(S.plan.site), plan_time: iso(S.plan.t), sites: S.scope === 'cmp' ? rows().map(loc) : S.scope, slip_days: S.slip, flex_days: S.flex, lander: lander(), mission: missionSpec() };
-    const key = 'res|' + JSON.stringify(body); return { r: need(key, () => getJSON('/rescue', body)), err: failed(key) };
+    const body = { plan: loc(S.plan.site), plan_time: iso(S.plan.t), slip_days: S.slip, flex_days: S.flex, lander: lander(), mission: missionSpec() };
+    if (S.scope === 'cmp') body.sites = rows().map(loc); else body.scope = S.scope;
+    const key = 'lw|' + JSON.stringify(body); return { r: need(key, () => getJSON('/landing-window', body)), err: failed(key) };
   }
   function drawRescue() {
     $('r-slipv').textContent = S.slip + (S.slip === 1 ? ' day' : ' days');
     $('r-plan').textContent = 'Plan: ' + S.plan.site.name + ', landing ' + fmtDT(S.plan.t) + ', ' + S.cfg.days + '-day surface mission.';
     const q = rescueNow(), r = q.r;
     if (!r) { $('r-cards').innerHTML = '<div class="card"><div class="s">' + (q.err ? 'The server could not search: ' + q.err : 'Searching every site and landing time…') + '</div></div>'; $('r-tbl').innerHTML = ''; $('r-cap').textContent = ''; return; }
-    const why = v => v.state === 2 ? 'Power and Earth contact hold for all ' + S.cfg.days + ' days, with the terrain margin.' : v.state === 1 ? 'Works on the modelled terrain; with the margin ' + v.reasons[0] + '.' : cap1(v.reasons.join(', and ')) + '.';
+    const why = v => v.text;
     const card = (k, t, v) => '<div class="card s' + v.state + '"><div class="k">' + k + '</div><div class="v">' + STN[v.state] + ' · ' + fmtDate(t) + '</div><div class="s">' + why(v) + '</div></div>';
+    const wins = a => { const m = a.windows.filter(w => w.verdict === 'meets'), ws = m.length ? m : a.windows, f = t => fmtDM(t) + ' ' + p2(new Date(t).getUTCHours()) + 'h';
+      return ws.length ? ws.slice(0, 2).map(w => { const t1 = Date.parse(w.start), t2 = Date.parse(w.end); return (t1 === t2 ? f(t1) : f(t1) + '–' + f(t2)) + (w.verdict === 'marginal' ? ' (marginal)' : ''); }).join(', ') + (ws.length > 2 ? ', +' + (ws.length - 2) + ' more' : '') : '—'; };
     $('r-cards').innerHTML = card('As planned, ' + short(S.plan.site), S.plan.t, r.plan) + card('After a ' + S.slip + '-day slip, same site', S.plan.t + S.slip * DAY, r.after_slip);
-    let h = '<thead><tr><th>#</th><th>Site</th><th>Land on</th><th>Extra wait</th><th>Verdict</th><th>Lowest battery</th><th>Longest link gap</th><th>Good landing days</th><th>Why</th></tr></thead><tbody>';
-    r.alternatives.slice(0, 8).forEach((a, k) => {
-      const t = a.landing_time ? Date.parse(a.landing_time) : null, wait = a.extra_wait_days, nm = a.location.id ? short(byId(a.location.id) || a.location) : a.location.name;
-      h += '<tr><td>' + (k + 1) + '</td><td><button type="button" data-open="' + (a.location.id || '') + '" data-lat="' + a.location.lat + '" data-lon="' + a.location.lon + '" data-t="' + (t || S.plan.t) + '">' + nm + '</button></td><td>' + (a.state ? fmtDT(t).replace(' UTC', '') : '—') + '</td><td>' + (a.state ? (wait === 0 ? 'none' : '+' + (wait % 1 ? wait.toFixed(2) : wait) + ' d') : '—') + '</td><td><span class="st s' + a.state + '">' + STN[a.state] + '</span></td><td>' + Math.round(a.nominal.min_soc * 100) + '%</td><td>' + fmtH(a.nominal.longest_link_gap_h) + '</td><td>' + a.good_landing_days + ' of ' + (S.flex + 1) + '</td><td>' + why(a) + '</td></tr>';
+    let h = '<thead><tr><th>#</th><th>Site</th><th>Land on</th><th>Extra wait</th><th>Verdict</th><th>Lowest battery</th><th>Longest link gap</th><th>Good landing days</th><th>Landing windows (UTC)</th><th>Why</th></tr></thead><tbody>';
+    r.sites.slice(0, 8).forEach((a, k) => {
+      const t = a.best_landing_time ? Date.parse(a.best_landing_time) : null, wait = a.extra_wait_days, nm = a.location.id ? short(byId(a.location.id) || a.location) : a.location.name;
+      h += '<tr><td>' + (k + 1) + '</td><td><button type="button" data-open="' + (a.location.id || '') + '" data-lat="' + a.location.lat + '" data-lon="' + a.location.lon + '" data-t="' + (t || S.plan.t) + '">' + nm + '</button></td><td>' + (a.state ? fmtDT(t).replace(' UTC', '') : '—') + '</td><td>' + (a.state ? (wait === 0 ? 'none' : '+' + (wait % 1 ? wait.toFixed(2) : wait) + ' d') : '—') + '</td><td><span class="st s' + a.state + '">' + STN[a.state] + '</span></td><td>' + Math.round(a.lowest_battery * 100) + '%</td><td>' + fmtH(a.longest_link_gap_h) + '</td><td>' + a.good_landing_days + ' of ' + (S.flex + 1) + '</td><td>' + wins(a) + '</td><td>' + why(a) + '</td></tr>';
     });
     $('r-tbl').innerHTML = h + '</tbody>';
-    const ok = r.alternatives.filter(a => a.state === 2).length, mg = r.alternatives.filter(a => a.state === 1).length;
-    $('r-cap').textContent = 'Searched ' + r.alternatives.length + ' sites for landings between ' + fmtDate(S.plan.t + S.slip * DAY) + ' and ' + fmtDate(S.plan.t + (S.slip + S.flex) * DAY) + ', every 6 hours: ' + ok + ' meet the needs with the terrain margin, ' + mg + ' only without it. Ranked by verdict, then shortest extra wait, then battery margin. Select a site name to load that option.';
+    $('r-cap').textContent = r.summary + ' Select a site name to load that option.';
   }
 
   // ---------- explore: status ----------
@@ -616,18 +623,30 @@
     const j = need(key, () => getJSON('/calendar', body)); if (!j) return null;
     const out = {}; j.sites.forEach((s, k) => { out[siteKey(rs[k])] = s; }); return out;
   }
+  // the statistics table for two or more sites in one request (server: /compare); best_by says which cells to highlight
+  const CMPKEY = { litPct: 'sunlit_pct', linkPct: 'earth_in_view_pct', bothPct: 'both_pct', maxLitD: 'longest_sunlit_h', maxDarkD: 'longest_dark_h', maxOutD: 'longest_radio_gap_h', pTrack: 'power_share_tracking_pct' };
+  function compareNow(rs) {
+    const named = rs.filter(s => s.id && s.id !== 'custom'), pts = rs.filter(s => !s.id || s.id === 'custom'), order = named.concat(pts);
+    const q = { sites: named.length ? named.map(s => s.id).join(',') : undefined, points: pts.length ? pts.map(s => s.lat.toFixed(5) + ',' + s.lon.toFixed(5)).join(';') : undefined,
+                start: iso(S.anchor), end: iso(S.anchor + S.span * DAY), array_height_m: S.eye, antenna_height_m: S.eye };
+    const j = need('cmp|' + qs(q), () => getJSON('/compare?' + qs(q))); if (!j) return null;
+    const stat = {}, best = {};
+    order.forEach((s, k) => { const v = c => j.stats[c][k]; stat[siteKey(s)] = { litPct: v('sunlit_pct'), linkPct: v('earth_in_view_pct'), bothPct: v('both_pct'), maxLitD: v('longest_sunlit_h') / 24, maxDarkD: v('longest_dark_h') / 24, maxOutD: v('longest_radio_gap_h') / 24, pTrack: v('power_share_tracking_pct') }; });
+    for (const c in j.best_by) best[c] = new Set(j.best_by[c].map(k => siteKey(order[k])));
+    return { stats: rs.map(s => stat[siteKey(s)]), best };
+  }
   function drawCompare() {
     const cv = $('cmp'); if (!shown(cv)) return;
     const rs = rows(), a0 = idx(S.anchor), nW = S.span * 24;
     $('chips').innerHTML = rs.map((s, i) => '<span class="chip' + (i === 0 ? ' pin' : '') + '">' + s.name + (i === 0 ? '' : '<button type="button" data-rm="' + s.id + '" aria-label="Remove ' + s.name + '">×</button>') + '</span>').join('');
-    const st = rs.map(s => statsFor(s, S.anchor, S.span)), cal = calNow();
+    const cmp = rs.length > 1 ? compareNow(rs) : null, st = rs.length > 1 ? (cmp ? cmp.stats : rs.map(() => null)) : rs.map(s => statsFor(s, S.anchor, S.span)), cal = calNow();
     const cols = [['Sunlit', 'litPct', 1, v => v.toFixed(0) + '%'], ['Earth in view', 'linkPct', 1, v => v.toFixed(0) + '%'], ['Both', 'bothPct', 1, v => v.toFixed(0) + '%'],
       ['Longest sunlit run', 'maxLitD', 1, v => v.toFixed(1) + ' d'], ['Longest night', 'maxDarkD', -1, v => v.toFixed(1) + ' d'], ['Longest Earth gap', 'maxOutD', -1, v => v.toFixed(1) + ' d'], ['Mean solar availability', 'pTrack', 1, v => v.toFixed(0) + '%']];
     let html = '<thead><tr><th>Site</th>' + cols.map(c => '<th>' + c[0] + '</th>').join('') + '<th>Landing days that meet the needs, next 12 months</th><th>Terrain</th></tr></thead><tbody>';
     const good = rs.map(s => cal && cal[siteKey(s)] ? cal[siteKey(s)].good_days : null);
     rs.forEach((s, i) => {
       const m = siteMask(s);
-      html += '<tr><td>' + s.name + '</td>' + cols.map(c => { if (!st[i]) return '<td>…</td>'; const vals = st.map(x => x ? x[c[1]] * c[2] : -1e9), best = Math.max(...vals); return '<td' + (rs.length > 1 && vals[i] === best ? ' class="best"' : '') + '>' + c[3](st[i][c[1]]) + '</td>'; }).join('')
+      html += '<tr><td>' + s.name + '</td>' + cols.map(c => { if (!st[i]) return '<td>…</td>'; return '<td' + (cmp && cmp.best[CMPKEY[c[1]]].has(siteKey(s)) ? ' class="best"' : '') + '>' + c[3](st[i][c[1]]) + '</td>'; }).join('')
         + '<td' + (rs.length > 1 && good[i] !== null && good[i] === Math.max(...good) ? ' class="best"' : '') + '>' + (good[i] === null ? '…' : good[i]) + '</td><td>' + (m ? (m.tiers[0] || '').replace('LOLA ', '') : '…') + '</td></tr>';
     });
     $('cmptbl').innerHTML = html + '</tbody>';
@@ -700,45 +719,27 @@
 
   // ---------- maps ----------
   const PS = 400, CAP = -80, RHO = 2 * RM * Math.tan((90 + CAP) / 2 * D2R), PXKM = 2 * RHO / PS;
-  const pH = new Float32Array(PS * PS), pSL = new Float32Array(PS * PS), pCL = new Float32Array(PS * PS), pSO = new Float32Array(PS * PS), pCO = new Float32Array(PS * PS), pIn = new Uint8Array(PS * PS), pHill = new Float32Array(PS * PS);
-  const pFrac = new Float32Array(PS * PS), pInc = new Float32Array(PS * PS), sunF = new Float32Array(PS * PS), sunI = new Float32Array(PS * PS); let sunFt = NaN, polarBuilt = false;
-  const STEPS = []; for (let d = 1; d <= 8; d++) STEPS.push(d); for (let d = 9; d < 190; d *= 1.12) STEPS.push(d);
+  const pIn = new Uint8Array(PS * PS);     // inside the 80S circle (geometry only, for the alpha channel)
+  for (let y = 0; y < PS; y++) for (let x = 0; x < PS; x++) pIn[y * PS + x] = Math.hypot((x + 0.5 - PS / 2) * PXKM, (PS / 2 - (y + 0.5)) * PXKM) <= RHO ? 1 : 0;
   const off = document.createElement('canvas'); off.width = off.height = PS; const offg = off.getContext('2d'); const img = offg.createImageData(PS, PS);
-  function buildPolar() {
-    for (let y = 0; y < PS; y++) for (let x = 0; x < PS; x++) {
-      const i = y * PS + x, Xk = (x + 0.5 - PS / 2) * PXKM, Yk = (PS / 2 - (y + 0.5)) * PXKM, rho = Math.hypot(Xk, Yk);
-      const lat = -90 + 2 * Math.atan(rho / (2 * RM)) * R2D, lon = Math.atan2(Xk, Yk);
-      pH[i] = TER.polarXY(Xk, Yk); pSL[i] = Math.sin(lat * D2R); pCL[i] = Math.cos(lat * D2R); pSO[i] = Math.sin(lon); pCO[i] = Math.cos(lon); pIn[i] = rho <= RHO ? 1 : 0;
-    }
-    for (let y = 1; y < PS - 1; y++) for (let x = 1; x < PS - 1; x++) {
-      const i = y * PS + x, gx = (pH[i + 1] - pH[i - 1]) / (2 * PXKM * 1000), gy = (pH[i + PS] - pH[i - PS]) / (2 * PXKM * 1000);
-      pHill[i] = Math.max(0, Math.min(1, 0.5 - 1.8 * (gx + gy)));
-    }
-    polarBuilt = true;
+  // Sunlight and Earth-view grids, cast on the server for the hour (server: /map?format=json). The hillshade comes with
+  // the first answer. While a request is in flight (for example during playback) the last hour stays on screen.
+  const MAPS = { sun: null, earth: null, hill: null, busy: false };
+  const unb64 = b => { const t = atob(b), a = new Float32Array(t.length); for (let i = 0; i < t.length; i++) a[i] = t.charCodeAt(i) / 255; return a; };
+  function mapLayer(layer) {
+    const th = Math.round(S.t / HOUR) * HOUR, key = 'map|' + layer + '|' + th;
+    if (!cache.has(key) && MAPS.busy) return MAPS[layer];
+    const v = need(key, async () => {
+      MAPS.busy = true;
+      try {
+        const j = await getJSON('/map?' + qs({ time: iso(th), layer, format: 'json', size: PS, hillshade: MAPS.hill ? undefined : true }));
+        if (j.grid.hillshade) MAPS.hill = unb64(j.grid.hillshade);
+        return { t: th, frac: unb64(j.grid.visible_share), inc: j.grid.incidence ? unb64(j.grid.incidence) : null };
+      } finally { MAPS.busy = false; }
+    });
+    if (v) MAPS[layer] = v;
+    return MAPS[layer];
   }
-  function castPolar(vec, finite, rad, pFrac, pInc) {
-    let ux = 0, uy = 0, uz = 0;
-    if (!finite) { const L = Math.hypot(vec[0], vec[1], vec[2]); ux = vec[0] / L; uy = vec[1] / L; uz = vec[2] / L; }
-    for (let i = 0; i < PS * PS; i++) {
-      if (!pIn[i]) continue;
-      const sl = pSL[i], cl = pCL[i], so = pSO[i], co = pCO[i], nx = cl * co, ny = cl * so, nz = sl;
-      if (finite) { const vx = vec[0] - RM * nx, vy = vec[1] - RM * ny, vz = vec[2] - RM * nz, L = Math.hypot(vx, vy, vz); ux = vx / L; uy = vy / L; uz = vz / L; }
-      const el = Math.asin(ux * nx + uy * ny + uz * nz) * R2D;
-      if (el < -rad - 7) { pFrac[i] = 0; pInc[i] = 0; continue; }
-      const sN = -ux * sl * co - uy * sl * so + uz * cl, sE = -ux * so + uy * co;
-      let dx = sN * so + sE * co, dy = -(sN * co - sE * so); const L2 = Math.hypot(dx, dy) || 1; dx /= L2; dy /= L2;
-      const x = i % PS, y = (i / PS) | 0, h1 = pH[i], tanTop = Math.tan((el + rad) * D2R); let mt = -0.15;
-      for (let k = 0; k < STEPS.length; k++) {
-        const d = STEPS[k], xx = Math.round(x + dx * d), yy = Math.round(y + dy * d); if (xx < 0 || yy < 0 || xx >= PS || yy >= PS) break;
-        const dk = d * PXKM, tA = (pH[yy * PS + xx] - h1) / (dk * 1000) - dk / (2 * RM); if (tA > mt) { mt = tA; if (mt > tanTop) break; }
-      }
-      pFrac[i] = discFrac(el, rad, Math.atan(mt) * R2D);
-      const xa = Math.max(0, Math.min(PS - 1, Math.round(x + dx * 1.5))), ya = Math.max(0, Math.min(PS - 1, Math.round(y + dy * 1.5))), xb = Math.max(0, Math.min(PS - 1, Math.round(x - dx * 1.5))), yb = Math.max(0, Math.min(PS - 1, Math.round(y - dy * 1.5)));
-      const gsl = (pH[ya * PS + xa] - pH[yb * PS + xb]) / (3 * PXKM * 1000);
-      pInc[i] = Math.max(0, Math.sin((el + Math.atan(gsl) * R2D) * D2R));
-    }
-  }
-  function sunRaster() { if (polarBuilt && S.now && sunFt !== S.t) { castPolar(S.now.sun, false, 0.266, sunF, sunI); sunFt = S.t; } }
 
   // ---------- explore: first-person surface view ----------
   const VW = { az: null, fov: 90, off: document.createElement('canvas'), lit: new Float32Array(128 * 128), litKey: '' };
@@ -759,7 +760,7 @@
     const sa = c.sunAz * D2R, ux = nx * Math.cos(sa) + ex * Math.sin(sa), uy = ny * Math.cos(sa) + ey * Math.sin(sa), E = TER.elevXYsmooth, EB = TER.elevXY;
     const NL = 128, LS = 0.2, key = [S.site.lat, S.site.lon, S.t].join('|');
     if (VW.litKey !== key) {
-      VW.litKey = key; sunRaster();
+      VW.litKey = key; mapLayer('sun');
       for (let j = 0; j < NL; j++) for (let i = 0; i < NL; i++) {
         const x = x0 + (i - NL / 2 + 0.5) * LS, y = y0 + (NL / 2 - j - 0.5) * LS, h1 = EB(x, y), el = c.sunEl + ((x - x0) * ux + (y - y0) * uy) / RM * R2D; let mt = -0.2;
         for (let t = 0.08; t < 160; t += Math.max(0.08, t * 0.09)) { const v = (EB(x + ux * t, y + uy * t) - h1) / (1000 * t) - t / (2 * RM); if (v > mt) mt = v; }
@@ -769,7 +770,7 @@
     const litAt = (x, y) => {
       const i = (x - x0) / LS + NL / 2 - 0.5, j = NL / 2 - 0.5 - (y - y0) / LS;
       if (i >= 0 && j >= 0 && i < NL - 1 && j < NL - 1) { const i0 = i | 0, j0 = j | 0, fi = i - i0, fj = j - j0, a = VW.lit, k = j0 * NL + i0; return (a[k] * (1 - fi) + a[k + 1] * fi) * (1 - fj) + (a[k + NL] * (1 - fi) + a[k + NL + 1] * fi) * fj; }
-      const px = Math.floor(x / PXKM + PS / 2), py = Math.floor(PS / 2 - y / PXKM); return px >= 0 && py >= 0 && px < PS && py < PS ? sunF[py * PS + px] : 1;
+      const px = Math.floor(x / PXKM + PS / 2), py = Math.floor(PS / 2 - y / PXKM), sl = MAPS.sun; return sl && px >= 0 && py >= 0 && px < PS && py < PS ? sl.frac[py * PS + px] : 1;
     };
     const off = VW.off; if (off.width !== Wc || off.height !== Hc) { off.width = Wc; off.height = Hc; }
     const og = off.getContext('2d'), im = og.createImageData(Wc, Hc), buf = new Uint32Array(im.data.buffer);
@@ -927,10 +928,9 @@
     $('l-sun').classList.toggle('on', S.layer === 'sun'); $('l-earth').classList.toggle('on', S.layer === 'earth');
     const ss = subPoint(S.now.sun), sE = subPoint(S.now.earth);
     if (polar) {
-      if (!polarBuilt) { g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the polar terrain…', w / 2, h / 2); return; }
-      const earth = S.layer === 'earth';
-      if (earth) castPolar(S.now.earth, true, 0.95, pFrac, pInc); else sunRaster();
-      const fr = earth ? pFrac : sunF, inc = earth ? pInc : sunI, dd = img.data;
+      const earth = S.layer === 'earth', ML = mapLayer(S.layer);
+      if (!ML || !MAPS.hill) { g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Casting shadows on the server…', w / 2, h / 2); return; }
+      const fr = ML.frac, inc = ML.inc, pHill = MAPS.hill, dd = img.data;
       for (let i = 0; i < PS * PS; i++) {
         const o = i * 4; if (!pIn[i]) { dd[o + 3] = 0; continue; }
         const hill = pHill[i], base = 16 + 44 * hill; let r, gg, b;
@@ -989,7 +989,7 @@
       if (mv.nom.fails.length) L.push('- Fails because ' + mv.nom.fails.join('; ')); else if (mv.rob.fails.length) L.push('- With the terrain margin: ' + mv.rob.fails.join('; '));
       L.push('');
     }
-    if (LAB.F) { const b = LAB.F.best; L.push('## Design lab', b ? '- Lightest array and battery that pass with the terrain margin: ' + fmtW(b.peakW) + ' + ' + fmtCap(b.capWh) + ', about ' + fmtKg(b.mass) + ' at ' + LAB.wkg + ' W/kg and ' + LAB.whkg + ' Wh/kg (screening figure)' : '- No array and battery pass at this landing time', '- Your design: ' + fmtW(c.peakW) + ' + ' + fmtCap(c.capWh) + ', about ' + fmtKg(labMass(c.peakW, c.capWh)), '- Blackout rule: ride out ' + c.autonomyH + ' h at the darkness load from the lowest charge', ''); }
+    if (LAB.F) { const b = LAB.F.best; L.push('## Mission design', b ? '- Lightest array and battery that pass with the terrain margin: ' + fmtW(b.peakW) + ' + ' + fmtCap(b.capWh) + ', about ' + fmtKg(b.mass) + ' at ' + LAB.wkg + ' W/kg and ' + LAB.whkg + ' Wh/kg (screening figure)' : '- No array and battery pass at this landing time', '- Your design: ' + fmtW(c.peakW) + ' + ' + fmtCap(c.capWh) + ', about ' + fmtKg(labMass(c.peakW, c.capWh)), '- Blackout rule: ride out ' + c.autonomyH + ' h at the darkness load from the lowest charge', ''); }
     const k = riskOk() ? riskNow() : null;
     if (k && !k.pending && !k.stale) {
       L.push('## Landing risk (Monte Carlo)', '- Chance of success: ' + Math.round(k.p * 100) + '% (95% interval ' + Math.round(k.lo * 100) + ' to ' + Math.round(k.hi * 100) + '%, reflecting the number of simulated missions only), from ' + k.total.toLocaleString('en-US') + ' simulated missions, seed ' + S.sig.seed,
@@ -999,9 +999,9 @@
         k.best.clear ? '- Best aim point nearby (checked on separate draws): ' + Math.round(k.best.p * 100) + '% at ' + fmtLat(k.best.lat) + ' ' + fmtLon(k.best.lon) + ' (' + fmtDist(k.best.dist) + ' away)' : '- No better aim point found within ' + fmtDist(1.5 * k.Rkm), '');
     }
     if (r) {
-      L.push('## Mission Rescue', 'Plan: ' + S.plan.site.name + ', landing ' + fmtDT(S.plan.t) + ' (' + STN[r.plan.state].toLowerCase() + '). After a ' + S.slip + '-day slip at the same site: ' + STN[r.after_slip.state].toLowerCase() + (r.after_slip.state === 0 ? ', ' + r.after_slip.reasons[0] : '') + '.', '',
+      L.push('## Landing window', 'Plan: ' + S.plan.site.name + ', landing ' + fmtDT(S.plan.t) + ' (' + STN[r.plan.state].toLowerCase() + '). After a ' + S.slip + '-day slip at the same site: ' + STN[r.after_slip.state].toLowerCase() + (r.after_slip.state === 0 ? ', ' + r.after_slip.reasons[0] : '') + '.', '',
         '| # | Site | Land on (UTC) | Extra wait | Verdict | Lowest battery | Longest link gap | Terrain |', '|---|---|---|---|---|---|---|---|');
-      r.alternatives.slice(0, 8).forEach((a, k2) => L.push('| ' + (k2 + 1) + ' | ' + a.location.name.split(',')[0] + ' | ' + (a.state ? fmtDT(Date.parse(a.landing_time)).replace(' UTC', '') : 'none') + ' | ' + (a.state ? '+' + a.extra_wait_days.toFixed(2) + ' d' : 'n/a') + ' | ' + STN[a.state] + ' | ' + Math.round(a.nominal.min_soc * 100) + '% | ' + fmtH(a.nominal.longest_link_gap_h) + ' | ' + (a.terrain || '') + ' |'));
+      r.sites.slice(0, 8).forEach((a, k2) => L.push('| ' + (k2 + 1) + ' | ' + a.location.name.split(',')[0] + ' | ' + (a.state ? fmtDT(Date.parse(a.best_landing_time)).replace(' UTC', '') : 'none') + ' | ' + (a.state ? '+' + a.extra_wait_days.toFixed(2) + ' d' : 'n/a') + ' | ' + STN[a.state] + ' | ' + Math.round(a.lowest_battery * 100) + '% | ' + fmtH(a.longest_link_gap_h) + ' | ' + (a.terrain || '') + ' |'));
       L.push('');
     }
     L.push('## Method and limits', '- Sun and Earth positions: JPL Horizons (fetched month by month and cached by the Mons Carlo server; JPL SPICE DE440 kernels when Horizons is unreachable); checked against JPL DE421 through SPICE to 0.00002°.',
@@ -1095,7 +1095,7 @@
       S.cur = { sunEl: sn.elevation_deg, sunAz: sn.azimuth_deg, sunRad: sn.angular_radius_deg, sunHz: sn.skyline_deg, sunClr: sn.clearance_deg, sunFrac: sn.visible_share,
                 earthEl: ea.elevation_deg, earthAz: ea.azimuth_deg, earthRad: ea.angular_radius_deg, earthHz: ea.skyline_deg, earthClr: ea.clearance_deg, h0: exact.heights.ground_m, irr: sn.irradiance_factor };
       S.now = { sun: exact.vectors_km.sun, earth: exact.vectors_km.earth };
-      S.ev = { sun: evOf(sn.above_skyline ? sn.next_sunset : sn.next_sunrise), earth: evOf(ea.above_skyline ? ea.next_earthset : ea.next_earthrise) }; S.evAt = S.t; S.dsn = exact.dsn;
+      S.ev = { sun: evOf(sn.above_skyline ? sn.next_sunset : sn.next_sunrise), earth: evOf(ea.above_skyline ? ea.next_earthset : ea.next_earthrise) }; S.evAt = S.t; S.dsn = exact.dsn ? exact.dsn.stations : null;
     } else {
       S.cur = lerped;
       if (S.ev && S.evAt !== S.t) { const keep = ev => ev && ev.t > S.t ? ev : null; S.ev = { sun: keep(S.ev.sun), earth: keep(S.ev.earth) }; }
@@ -1198,13 +1198,13 @@
     { v: 'explore', sel: '[aria-label="Surface view"]', t: 'Days pass in seconds. The Sun slides sideways along the horizon instead of climbing overhead, and the Earth barely moves. That is why one ridge can decide a mission here.', go: () => { tourKeep.t = S.t; if (!S.playing) $('play').click(); }, leave: () => { if (S.playing) $('play').click(); setTime(tourKeep.t, true); } },
     { v: 'explore', sel: '[aria-label="Status now"]', t: 'The same sky as numbers: how far the Sun and the Earth sit above the terrain, and how long until each one sets.' },
     { v: 'plan', sel: '[aria-label="Mission needs"]', t: 'Describe a lander: its solar array, its battery, how long it can go without radio contact. The server simulates the battery hour by hour and says whether the mission survives.' },
-    { v: 'plan', sel: '[aria-label="Design lab"]', t: 'Now work backwards. This lander is too small: a 100 W array and a 500 Wh battery. The green region shows every array and battery pair that survives, the diamond is the lightest, and the atlas below shows which landing dates need the least hardware.',
+    { v: 'plan', sel: '[aria-label="Mission design"]', t: 'Now work backwards. This lander is too small: a 100 W array and a 500 Wh battery. The green region shows every array and battery pair that survives, the diamond is the lightest, and the atlas below shows which landing dates need the least hardware.',
       go: () => { tourKeep.hw = [S.cfg.peakW, S.cfg.capWh]; setHardware(100, 500); }, leave: () => setHardware(tourKeep.hw[0], tourKeep.hw[1]) },
     { v: 'plan', sel: '[aria-label="Mission verdict"]', t: 'Now break something. At Malapert Massif an unexpected 100 W load appears on mission day 3. Without safe mode the battery runs flat. With it, the lander survives.',
       go: () => { tourKeep.site = S.site.id; tourKeep.t2 = S.t; $('m-fault').value = 'load'; $('m-fday').value = 3; $('m-safe').checked = true; readCfg(); pickSite('mala'); setTime(Date.UTC(2026, 11, 23), true); },
       leave: () => { $('m-fault').value = 'none'; $('m-safe').checked = false; readCfg(); pickSite(tourKeep.site); setTime(tourKeep.t2, true); } },
     { v: 'plan', sel: '[aria-label="Landing risk"]', t: 'No lander touches down exactly on target. Thousands of simulated landings give the real chance of success, show why missions fail, and check whether a nearby aim point is safer.' },
-    { v: 'plan', sel: '[aria-label="Mission Rescue"]', t: 'The launch slips by 14 days. The plan may no longer work, so the table ranks the sites and landing times that still do. Move the slider to try other delays.' },
+    { v: 'plan', sel: '[aria-label="Landing window"]', t: 'The launch slips by 14 days. The plan may no longer work, so the table ranks the sites and landing times that still do. Move the slider to try other delays.' },
     { v: 'compare', sel: '[aria-label="Landing-date calendar"]', t: 'Last, compare sites over a whole year. Green columns are landing days that meet the mission\'s needs. Tap any day to go there.' },
   ];
   const tourKeep = {}; let tourI = -1;
@@ -1233,7 +1233,7 @@
     $('boot').textContent = 'Loading the polar terrain and the ephemeris from the server…';
     texImg = new Image(); texImg.onload = () => { try { const c = document.createElement('canvas'); c.width = texImg.naturalWidth; c.height = texImg.naturalHeight; const cg = c.getContext('2d'); cg.drawImage(texImg, 0, 0); const d = cg.getImageData(0, 0, c.width, c.height).data, a = new Uint8Array(c.width * c.height); for (let i = 0; i < a.length; i++) a[i] = d[i * 4]; GL.tex = a; GL.tw = c.width; GL.th = c.height; } catch (_) {} if (ready && S.mapTab !== 'pole') drawMap(); };
     texImg.src = API + '/terrain/moon.jpg';
-    TER.loadPolar().then(() => { buildPolar(); renderSoon(); }, err => { lastErr = err; renderSoon(); });
+    TER.loadPolar().then(() => renderSoon(), err => { lastErr = err; renderSoon(); });
     const hv = hashView(); if (VIEWS.includes(hv)) S.view = hv;
     ensureTab();
     // default plan: the middle of the first run of landing days at the default site that meet the needs

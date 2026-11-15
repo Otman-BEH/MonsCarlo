@@ -99,8 +99,8 @@
       <div class="row"><button id="report" type="button">Copy mission report</button><button id="reportdl" type="button">Download report</button><span class="readout" id="reportmsg"></span></div>
     </section>
 
-    <section class="panel span2" data-v="plan" aria-label="Design lab">
-      <div class="phead"><h2>Design lab: the lightest hardware that survives here</h2><div class="pills" id="d-pill"></div></div>
+    <section class="panel span2" data-v="plan" aria-label="Mission design">
+      <div class="phead"><h2>Mission design: the lightest hardware that survives here</h2><div class="pills" id="d-pill"></div></div>
       <p class="cap">This works backwards from the mission. Every point on the chart is one solar array and battery pair, tested with the same hour-by-hour simulation, terrain margin and blackout rule as the verdict above. Tap the chart to try a design.</p>
       <div class="row">
         <label class="fl" for="d-wkg">Solar array, W per kg<input id="d-wkg" type="number" min="5" max="500" step="5" value="80"></label>
@@ -168,8 +168,8 @@
       <p class="cap" id="k-cap"></p>
     </section>
 
-    <section class="panel span2" data-v="plan" aria-label="Mission Rescue">
-      <div class="phead"><h2>Mission Rescue: the landing slipped. Can the mission still fly?</h2></div>
+    <section class="panel span2" data-v="plan" aria-label="Landing window">
+      <div class="phead"><h2>Landing window: when and where can the mission still fly?</h2></div>
       <p class="readout" id="r-plan"></p>
       <div class="row">
         <label class="fl grow" for="r-slip">Schedule slip: <span id="r-slipv"></span><input id="r-slip" type="range" min="0" max="60" step="1" value="14"></label>

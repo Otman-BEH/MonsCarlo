@@ -42,8 +42,9 @@ This runs, in order, and every step skips work already done:
 2. **Precompute**: converts the compressed regional DEMs to `.npy` for fast memory-mapping, averages the 80 m DEM to
    the 400 m raster the page draws shadows from, and casts the skylines of every listed polar site (720 azimuths, heights 0 to 100 m, both terrain
    modes). About 10 s on an Apple M1, then skipped while the stamp matches.
-3. **Ephemeris**: pre-fetches 14 months of hourly Sun and Earth vectors from JPL Horizons (28 requests, about 40 s).
-   If Horizons cannot be reached, those months come from SPICE and are replaced by Horizons data on a later run.
+3. **Ephemeris**: pre-fetches 14 months of hourly Sun and Earth vectors from JPL Horizons (28 requests, about 40 s),
+   then 14 months of the Deep Space Network view (3 requests a month, 42 in all). If Horizons cannot be reached, those
+   months come from SPICE and are replaced by Horizons data on a later run.
 4. **Server** on http://127.0.0.1:8000: the web page at `/`, interactive API documentation at `/docs`.
 
 Flags: `--skip-fetch`, `--skip-prefetch`, `--all-data` (also the optional files: illumination maps, hillshade, extra
@@ -62,11 +63,15 @@ Flags: `--skip-fetch`, `--skip-prefetch`, `--all-data` (also the optional files:
 | `GET /horizon` | The skyline: 720 azimuths, one or more heights (`height_m=2,10`). |
 | `GET /sites`, `GET /health` | Site catalogue (26 sites); data readiness. |
 | `GET /landers`, `GET /landers/{id}`, `POST /landers`, `DELETE /landers/{id}` | Lander presets and saved custom landers (SQLite). |
-| `POST /design` | Design lab: the survival frontier (smallest array for 36 battery sizes, with and without the terrain margin), the lightest pair, ways to make the current design pass or lighter, and a 60-day atlas of the lightest design per landing time. |
+| `GET /map` | **Sunlight and Earth-view map** of the south pole (80°S to the pole) for one hour: `layer=sun\|earth`, `size=100..1200` (400 = main's 1.52 km grid), `format=png` (coloured as main draws it) or `json` (visible share and, for the Sun, incidence as base64 `uint8`, plus `hillshade=true`), `sites=true` for the catalogue sites' pixel positions. Projection, extent, pixel size and the Sun and Earth sub-points come with it, so a click turns into lat and lon. Rounds to the hour unless `exact=true`. |
+| `GET /compare` | **Site compare**: 2 to 8 sites (`sites=shack,ridge,mala`) and/or points (`points=-89.45,222.7;-85.4,31.6`) over the same window, with exactly the `/windows` statistics per site as parallel arrays, `best_by` (the best site per column; the API does not pick a winner), the verdict at `landing_time`, and `include=panorama` (each skyline at 180 azimuths and the Sun and Earth paths over 29.5 days for one instant). |
+| `GET /dsn` | **DSN station view**: Moon azimuth and elevation at Goldstone, Madrid and Canberra, at one `time` or hourly from `start` to `end` with intervals above `min_el_deg` (default 10) per station and for any station. `dsn=true` on `/sky` lists the stations that see the Moon; on `/windows` it adds `contact` intervals (Earth above the skyline and a station above `min_el_deg`). |
+| `GET /landing-window`, `POST /landing-window` | **Landing window** (main's Mission Rescue): the plan's verdict, the verdict after `slip_days` (default 0, so it also answers "when are the next windows here?"), then the sites (`scope=pole\|all` or `sites=`) ranked by verdict, earliest landing and lowest charge, each with its best landing time, good landing days, reason, the windows (runs of landing times that meet the needs) and links to `/report` and `/mission-design`. `needs_dsn_at_landing=true` drops landing times when no station sees the Moon. |
+| `GET /mission-design`, `POST /mission-design` | **Mission design** (main's design lab): the survival frontier (smallest array for 36 battery sizes, with and without the terrain margin), the lightest pair, your design, the fixes (numbers and main's sentences), both battery traces, and a lander body for `POST /landers` ("use this design"). Mass figures: query, else the lander's `mass` block, else 80 W/kg and 160 Wh/kg (all reported in `defaults_used`). |
+| `GET /mission-design/atlas`, `POST /mission-design/atlas` | **Opportunity atlas**: the lightest design for a landing every `step_h` (12) hours over `days` (60) from 5 days before the landing day, nulls where nothing works, and the 4 best dates at least 3 days apart with links. |
 | `POST /calendar` | Verdict for a landing on each of up to 400 days, for up to 8 sites, with the first failure cause. |
-| `POST /rescue` | After a schedule slip: the plan's verdict, the verdict after the slip, and other sites and landing times ranked by verdict, extra wait and battery margin. |
+| `POST /design`, `POST /rescue` | Deprecated: the earlier forms of `/mission-design` and `/landing-window`, kept so older pages keep working. |
 | `GET /series`, `GET /ephemeris` | Hourly series and skyline for a site, and hourly Moon-fixed Sun and Earth vectors (used by the page for charts and smooth playback). |
-| `GET /dsn` | Moon elevation at the three Deep Space Network complexes (SPICE). |
 | `GET /terrain/patch`, `GET /terrain/polar400`, `GET /terrain/moon.jpg` | Height grids around a site (40 m within 3 km, 240 m within 15 km), the 400 m south-pole raster and the Moon mosaic, for drawing the surface view, the shadow map and the globe. |
 
 Common inputs: location `site=<id>` or `lat=&lon=` (east positive); `time=` or `start=`/`end=` (ISO 8601 UTC, default
@@ -102,6 +107,11 @@ python -m skyline report site=shack --text
 python -m skyline mission site=shack landing_time=2026-12-14T00:00:00Z risk=true
 python -m skyline windows site=mala format=csv > mala.csv
 python -m skyline --url http://127.0.0.1:8000 sky site=pole
+python -m skyline compare sites=shack,ridge,mala include=panorama
+python -m skyline landing-window site=mala plan_time=2026-12-01T06:00:00Z slip_days=14
+python -m skyline mission-design site=mala landing_time=2026-12-14T00:00:00Z
+python -m skyline mission-design/atlas site=mala
+python -m skyline map layer=earth format=png > earth.png
 ```
 
 ## Landers
@@ -152,11 +162,22 @@ month serve every site, custom point and Monte Carlo cell. Months are cached in 
 change). If Horizons fails, the month comes from SPICE (`spkpos(..., 'MOON_ME', 'LT+S', 'MOON')`, DE440 kernels) and is
 marked so a later run replaces it. Event times between hours use 4-point Lagrange interpolation, then bisection.
 
+## Deep Space Network view
+
+Same rule as the ephemeris: JPL Horizons first, one OBSERVER request per station per month (target Moon `301`,
+`CENTER='coord@399'` at the station's geodetic coordinates, quantity 4, airless), cached in the SQLite tables `dsn` and
+`dsn_months`. The SPICE fallback takes the Moon from DE440 in J2000 and turns it to Earth-fixed with IAU 1976
+precession and Greenwich mean sidereal time (UT1 taken as UTC); stations on the pck00011 ellipsoid. It does not use
+pck00011's `IAU_EARTH` frame, which turns with TDB instead of UT1 and put the Moon 0.07° off at the stations. Elevations
+are geometric (no refraction); main's status panel added refraction, which only matters near the horizon.
+
 ## Validation
 
-`python -m pytest` (90 tests; `-m live` adds two live Horizons checks). Parity fixtures come from main's JS engine
-(`backend/tools/make_golden.js`, run on a checkout of commit `afd9e78`, which still has the original engine; see the
-comment at the top of the file).
+`python -m pytest` (124 tests; `-m live` adds three live Horizons checks). Parity fixtures come from main's JS engine:
+`backend/tools/make_golden.js` and, for the phase 2 endpoints, `backend/tools/make_golden_phase2.js` (kept separate so
+the arm64 `golden.json` is not regenerated by accident), both run on a checkout of commit `afd9e78`, which still has the
+original engine; see the comment at the top of each file. The map, Mission Rescue and the atlas were not exported from
+main's `src/app.js`, so the phase 2 script rebuilds them with main's loops, line for line.
 
 | Check | Result |
 |---|---|
@@ -173,7 +194,14 @@ comment at the top of the file).
 | `/sky` and `/mission` through the API (Horizons ephemeris) vs main's JS (Astronomy Engine) | under 0.01°; same verdicts |
 | Monte Carlo, stacked simulation vs per-cell `cellTrials` port | identical per-cell results |
 | Design lab (frontier, lightest pair, minimum battery, atlas) vs main, 3 cases | identical |
-| DSN Moon elevation vs main (Astronomy Engine) | within 0.06° above 15° elevation (main adds atmospheric refraction, which matters only near the horizon) |
+| DSN Moon elevation, SPICE fallback vs main's Astronomy Engine without refraction, one week hourly | largest difference 0.0024° (azimuth 0.007°); vs main's panel (with refraction) within 0.1° above 15° |
+| Verdict scan (`engine/scan.py`) vs the scalar verdict, 6 configs incl. faults and safe mode | identical states, lowest charge and longest gap |
+| Map vs main's `castPolar`, 400 px, 3 times, both layers, grid from main's 400 m raster (`dem=80m`) | identical up to the fixture's 16-bit rounding (largest difference 0.000008); hillshade identical |
+| Map with the 80 m DEM (`dem=best`) vs the same map from main's 400 m raster | finding, not a pass or fail: 3.3% of pixels differ by more than 0.02 in visible share (1 Dec 2026), along shadow edges |
+| Site compare vs `/windows` for the same window, and vs main's `Ana.stats` | identical to `/windows`; within 1e-6 of main |
+| Landing window vs a JS rebuild of `computeRescue`, 3 plans, 9 sites | identical ranking, best landing times, verdicts, good-day counts and every 6-hour verdict; lowest charge within 1e-6 |
+| Mission design vs `designFrontier`, `minArray`, `bisectUp` and drawLab's fixes, 4 configs (tracking, horizontal, array fault, safe mode) | values within 1e-9 (so every bisection step went the same way), identical lightest pair and identical fix sentences |
+| Atlas vs a JS rebuild of `drawAtlas`'s loop, 2 cases of 120 landings | identical nulls, designs and 4 best dates; masses within 1e-9 |
 
 Notes:
 
@@ -192,6 +220,14 @@ Latency on an Apple M1 (warm cache; plan targets in brackets): `/sky` 4 ms (200 
 `/mission` 3 ms (300 ms), `/report` 5 ms (500 ms), custom-point `/horizon` in `best` mode 0.5 to 0.6 s (2 s), Monte
 Carlo with 15 x 15 cells x 48 trials, drivers and best aim 0.7 to 3.6 s (15 s). A first request for a month not yet
 cached adds about 2 s per month for Horizons. The Windows laptop has not been measured.
+
+Phase 2 endpoints, measured on a 2-core Linux container (Intel Xeon 2.1 GHz, warm series cache, a new hour for each map
+so every map is a real cast; plan targets in brackets): `/map` 400 px 0.14 s (0.3 s), 1200 px 2.1 s (3 s; the first
+1200 px request also builds and saves its grid, about 0.7 s), `/compare` 4 sites over 30 days 6 ms (300 ms), `/dsn` 30
+days 16 ms (100 ms), `/landing-window` 9 polar sites over 21 days at 6-hour steps 0.18 s (2 s), `/mission-design` 0.29 s
+(1 s), `/mission-design/atlas` 1.0 s (5 s), so no job endpoint was needed. Mission design runs bisections with fewer
+than 17 candidates through the scalar port of main's mission loop (0.3 ms each, against about 7 ms for one vectorised
+pass), which took it from 1.5 s to 0.3 s. Measure again on the Windows laptop and record it here.
 
 ## Data and citations
 
