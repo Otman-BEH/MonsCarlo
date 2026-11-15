@@ -51,8 +51,7 @@ A Python backend (FastAPI, NumPy) does every calculation. The web page asks it f
 same numbers are available to anyone through the API (`/docs` on a running server; `/report?site=shack` answers the
 challenge question in one call).
 
-More detail: [backend/README.md](backend/README.md) (endpoints, data, validation) and
-[docs/Mons_Carlo_Technical_Review.md](docs/Mons_Carlo_Technical_Review.md) (literature, method, existing tools).
+More detail: [backend/README.md](backend/README.md) (endpoints, data, validation).
 
 ## Run it
 
@@ -121,19 +120,11 @@ there, and two live JPL Horizons checks only run with `-m live`).
 Every file, with its address, size, checksum and citation, is in `backend/manifest.json`. NASA does not endorse this
 project.
 
-## Use of AI
-
-AI assistants (Anthropic Claude and OpenAI ChatGPT) were used to write and review parts of the code, tests and
-documentation, under the team's direction. The team chose the approach, ran the tests and checked the results against
-JPL and NASA sources as listed above. No AI-generated images, audio or video are used: the terrain views and shadow
-maps are drawn from NASA elevation data, and the globe uses a mosaic image of the Moon.
-
 ## Layout
 
 ```
 backend/   the API: prep/ (downloads, precompute, ephemeris), engine/ (analysis), api/ (routes), tests/
 web/       the page: index.html, app.js, style.css, js/
-docs/      technical review: literature, method, existing tools
 ```
 
 ## License
