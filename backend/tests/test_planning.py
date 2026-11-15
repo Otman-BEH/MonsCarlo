@@ -98,8 +98,12 @@ def test_mission_stress_block(c):
 
 @api
 def test_terrain_files_and_page(c):
-    p = c.get("/terrain/patch", params={"lat": -89.78, "lon": -155.7}).json()
-    assert p["patches"]["a"]["n"] == 150 and len(p["patches"]["a"]["h"]) == 150 * 150
+    import struct
+    r = c.get("/terrain/rings", params={"lat": -89.78, "lon": -155.7})
+    b = r.content
+    assert struct.unpack_from("<I", b, 0)[0] == 3
+    n, cell = struct.unpack_from("<If", b, 4)
+    assert (n, cell) == (300, 10.0) and r.headers["X-Tier"].startswith("LOLA 5 m")
     r = c.get("/terrain/polar400")
     if r.status_code == 200:
         n = int(r.headers["X-Size"])

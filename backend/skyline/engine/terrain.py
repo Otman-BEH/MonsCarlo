@@ -547,3 +547,31 @@ def reset_default() -> None:
     global _default
     with _dlock:
         _default = None
+
+
+# ---------------------------------------------------------------- height rings for drawing the surface view
+RINGS = ((10.0, 1500.0), (40.0, 6000.0), (160.0, 30000.0))   # (cell size m, half-width m), finest first
+
+
+def rings_binary(T: "Terrain", lat: float, lon: float, mode: str = "best") -> bytes:
+    """Nested square height grids centred on a site, for the web page's first-person view.
+
+    Little-endian layout: uint32 ring count, then per ring: uint32 n, float32 cell_m, float64 x0_m, float64 y0_m (map
+    coordinates of the centre of the top-left cell; rows run toward -y), float32 base_m, float32 scale_m, then n*n int16
+    with height = base + value * scale. Heights come from the finest tier at each point (5 m site maps where present).
+    """
+    import struct
+    x0, y0 = (float(v) for v in ll_to_xy(max(-89.9999, lat), lon))
+    out = [struct.pack("<I", len(RINGS))]
+    for cell, half in RINGS:
+        n = int(round(2 * half / cell))
+        c = (np.arange(n) - (n - 1) / 2) * cell
+        X, Y = np.meshgrid(x0 + c, y0 - c)
+        la, lo = xy_to_ll(X, Y)
+        h = T.elev(la.ravel(), lo.ravel(), mode).reshape(n, n)
+        base = float((h.max() + h.min()) / 2)
+        scale = max(0.05, float(np.ceil((h.max() - h.min()) / 65000.0 * 100) / 100))
+        q = np.clip(np.rint((h - base) / scale), -32767, 32767).astype("<i2")
+        out.append(struct.pack("<Ifddff", n, cell, x0 + c[0], y0 - c[0], base, scale))
+        out.append(q.tobytes())
+    return b"".join(out)

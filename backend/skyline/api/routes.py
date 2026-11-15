@@ -365,24 +365,24 @@ def rescue(req: RescueRequest):
     return {**_clean(r), "meta": meta(r["_meta"], ld)}
 
 
-@router.get("/terrain/patch", tags=["terrain"], summary="Height grids around a point (metres), for drawing the surface view")
-def terrain_patch(lat: float = Query(..., ge=-90, le=-79), lon: float = Query(..., ge=-360, le=360)):
-    from ..engine.terrain import ll_to_xy, xy_to_ll
-    import numpy as np
-    T = engine().sky.terrain
-    x0, y0 = (float(v) for v in ll_to_xy(max(-89.9999, lat), lon))
-    out = {}
-    for key, cell, half in (("a", 40.0, 3000.0), ("b", 240.0, 15000.0)):
-        n = int(round(2 * half / cell))
-        c = (np.arange(n) - (n - 1) / 2) * cell
-        X, Y = np.meshgrid(x0 + c, y0 - c)
-        la, lo = xy_to_ll(X, Y)
-        h = T.elev(la.ravel(), lo.ravel(), "best").reshape(n, n)
-        out[key] = {"n": n, "cell_km": cell / 1000, "x_km": (x0 + c[0]) / 1000, "y_km": (y0 - c[0]) / 1000,
-                    "h": np.round(h, 1).ravel().tolist()}
-    return {"lat": lat, "lon": lon, "patches": out, "tier": T.best_tier(lat, lon),
-            "note": "x_km, y_km: south polar stereographic map coordinates of the top-left cell centre; rows run south (down the map)",
-            "meta": meta()}
+_rings_cache: dict = {}
+
+
+@router.get("/terrain/rings", tags=["terrain"], summary="Nested height grids around a point, for drawing the surface view (binary)")
+def terrain_rings(lat: float = Query(..., ge=-90, le=-79), lon: float = Query(..., ge=-360, le=360)):
+    """10 m within 1.5 km, 40 m within 6 km, 160 m within 30 km, from the finest terrain at each point. Layout in
+    skyline.engine.terrain.rings_binary."""
+    from fastapi.responses import Response as R
+    from ..engine.terrain import rings_binary
+    key = (round(lat, 5), round(lon, 5))
+    data = _rings_cache.get(key)
+    if data is None:
+        data = rings_binary(engine().sky.terrain, lat, lon)
+        if len(_rings_cache) > 32:
+            _rings_cache.clear()
+        _rings_cache[key] = data
+    return R(content=data, media_type="application/octet-stream", headers={"Cache-Control": "public, max-age=86400",
+             "X-Tier": engine().sky.terrain.best_tier(lat, lon), "Access-Control-Expose-Headers": "X-Tier"})
 
 
 @router.get("/terrain/polar400", tags=["terrain"], summary="The 80 m DEM averaged to 400 m, 80S to the pole (int16 metres, row-major)")

@@ -6,6 +6,7 @@
   const DAY = 86400e3, HOUR = 3600e3, D2R = Math.PI / 180, R2D = 180 / Math.PI, RM = 1737.4;
   const SYNODIC = 29.530589, TAB_DAYS = 428, VIEWS = ['plan', 'explore', 'compare', 'learn'];
   // Where the Lunar Skyline API runs: ?api=... in the address wins, then web/config.js, then the page's own server.
+  const DEBUG = new URLSearchParams(location.search).has('debug');
   const API = (new URLSearchParams(location.search).get('api') || window.LUNAR_SKYLINE_API || '').replace(/\/$/, '');
 
   // ---------- talking to the server ----------
@@ -686,28 +687,42 @@
 
   // ---------- terrain for drawing (server: /terrain/polar400 and /terrain/patch) ----------
   // The surface view, the shadow map and the risk map's relief are drawn from these height grids.
+  // Height rings around the site (server: /terrain/rings): 10 m within 1.5 km, 40 m within 6 km, 160 m within 30 km,
+  // then the 400 m polar raster (server: /terrain/polar400). Map coordinates are south polar stereographic, in km.
   const TER = {
-    polar: null, focus: null,
+    polar: null, rings: null,
     ready: () => !!TER.polar,
     loadPolar: async () => { const r = await api('/terrain/polar400'), n = +r.headers.get('X-Size'), buf = await r.arrayBuffer(); TER.polar = { n, km: 0.4, half: n * 0.2, a: new Int16Array(buf) }; },
-    patches(site) {
+    ringsFor(site) {
       if (site.lat > -79.9) return null;
-      const key = 'patch|' + site.lat.toFixed(5) + ',' + site.lon.toFixed(5);
-      return need(key, async () => { const j = await getJSON('/terrain/patch?' + qs({ lat: site.lat, lon: site.lon })), o = {}; for (const k of ['a', 'b']) { const p = j.patches[k]; o[k] = { n: p.n, km: p.cell_km, x: p.x_km, y: p.y_km, a: Float32Array.from(p.h) }; } return o; });
+      const key = 'rings|' + site.lat.toFixed(5) + ',' + site.lon.toFixed(5);
+      return need(key, async () => {
+        const r = await api('/terrain/rings?' + qs({ lat: site.lat, lon: site.lon })), buf = await r.arrayBuffer(), dv = new DataView(buf);
+        let o = 0; const count = dv.getUint32(o, true); o += 4; const rings = [];
+        for (let k = 0; k < count; k++) {
+          const n = dv.getUint32(o, true), cell = dv.getFloat32(o + 4, true) / 1000, x0 = dv.getFloat64(o + 8, true) / 1000, y0 = dv.getFloat64(o + 16, true) / 1000, base = dv.getFloat32(o + 24, true), sc = dv.getFloat32(o + 28, true);
+          o += 32; const q = new Int16Array(buf.slice(o, o + n * n * 2)), a = new Float32Array(n * n); o += n * n * 2;
+          for (let i = 0; i < a.length; i++) a[i] = base + q[i] * sc;
+          rings.push({ n, km: cell, x: x0, y: y0, a, half: (n - 1) / 2 * cell, cx: x0 + (n - 1) / 2 * cell, cy: y0 - (n - 1) / 2 * cell });
+        }
+        return { rings, tier: r.headers.get('X-Tier') };
+      });
     },
-    patchAt(q, x, y) {
-      const c = (x - q.x) / q.km, r = (q.y - y) / q.km; if (c < 0 || r < 0 || c > q.n - 1.001 || r > q.n - 1.001) return NaN;
-      const c0 = Math.floor(c), r0 = Math.floor(r), fc = c - c0, fr = r - r0, a = q.a, i = r0 * q.n + c0;
-      return (a[i] * (1 - fc) + a[i + 1] * fc) * (1 - fr) + (a[i + q.n] * (1 - fc) + a[i + q.n + 1] * fc) * fr;
-    },
-    patchSmooth(q, x, y) {
+    // bicubic (Catmull-Rom) sample of one ring; NaN outside it
+    cubic(q, x, y) {
+      const c = (x - q.x) / q.km, r = (q.y - y) / q.km, c0 = Math.floor(c), r0 = Math.floor(r), n = q.n;
+      if (c0 < 1 || r0 < 1 || c0 > n - 3 || r0 > n - 3) return NaN;
+      const fc = c - c0, fr = r - r0, a = q.a;
       const cr = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
-      const c = (x - q.x) / q.km, r = (q.y - y) / q.km, c0 = Math.floor(c), r0 = Math.floor(r);
-      if (c0 < 1 || r0 < 1 || c0 > q.n - 3 || r0 > q.n - 3) return NaN;
-      const fc = c - c0, fr = r - r0, a = q.a, n = q.n; let i = (r0 - 1) * n + c0 - 1;
+      let i = (r0 - 1) * n + c0 - 1;
       const v0 = cr(a[i], a[i + 1], a[i + 2], a[i + 3], fc); i += n; const v1 = cr(a[i], a[i + 1], a[i + 2], a[i + 3], fc); i += n;
       const v2 = cr(a[i], a[i + 1], a[i + 2], a[i + 3], fc); i += n; const v3 = cr(a[i], a[i + 1], a[i + 2], a[i + 3], fc);
       return cr(v0, v1, v2, v3, fr);
+    },
+    linear(q, x, y) {
+      const c = (x - q.x) / q.km, r = (q.y - y) / q.km; if (c < 0 || r < 0 || c > q.n - 1.001 || r > q.n - 1.001) return NaN;
+      const c0 = Math.floor(c), r0 = Math.floor(r), fc = c - c0, fr = r - r0, a = q.a, i = r0 * q.n + c0;
+      return (a[i] * (1 - fc) + a[i + 1] * fc) * (1 - fr) + (a[i + q.n] * (1 - fc) + a[i + q.n + 1] * fc) * fr;
     },
     polarXY(x, y) {
       const P = TER.polar; let c = (x + P.half) / P.km - 0.5, r = (P.half - y) / P.km - 0.5;
@@ -715,8 +730,24 @@
       const c0 = Math.floor(c), r0 = Math.floor(r), fc = c - c0, fr = r - r0, a = P.a, i = r0 * P.n + c0;
       return (a[i] * (1 - fc) + a[i + 1] * fc) * (1 - fr) + (a[i + P.n] * (1 - fc) + a[i + P.n + 1] * fc) * fr;
     },
-    elevXY(x, y) { const f = TER.focus; if (f) { let v = TER.patchAt(f.a, x, y); if (v === v) return v; v = TER.patchAt(f.b, x, y); if (v === v) return v; } return TER.polarXY(x, y); },
-    elevXYsmooth(x, y) { const f = TER.focus; if (f) { let v = TER.patchSmooth(f.a, x, y); if (v === v) return v; v = TER.patchSmooth(f.b, x, y); if (v === v) return v; } return TER.elevXY(x, y); },
+    // height (m) at map point (km): the finest ring that covers it, blended into the next one over the outer 15% of
+    // each ring so no seam shows, then the polar raster
+    sample(x, y, fine) {
+      const R = TER.rings;
+      if (R) for (let k = 0; k < R.length; k++) {
+        const q = R[k], u = Math.max(Math.abs(x - q.cx), Math.abs(y - q.cy)) / q.half;
+        if (u >= 0.97) continue;
+        const v = fine ? TER.cubic(q, x, y) : TER.linear(q, x, y); if (v !== v) continue;
+        if (u <= 0.82) return v;
+        const w = (u - 0.82) / 0.15, nx = k + 1 < R.length ? (fine ? TER.cubic(R[k + 1], x, y) : TER.linear(R[k + 1], x, y)) : TER.polarXY(x, y);
+        return nx === nx ? v * (1 - w) + nx * w : v;
+      }
+      return TER.polarXY(x, y);
+    },
+    elevXY: (x, y) => TER.sample(x, y, false),
+    elevXYsmooth: (x, y) => TER.sample(x, y, true),
+    // grid cell size (km) of the terrain at distance d (km) from the site
+    resAt: d => d < 1.2 ? 0.01 : d < 4.9 ? 0.04 : d < 24 ? 0.16 : 0.4,
   };
 
   // ---------- maps ----------
@@ -762,60 +793,110 @@
   function sunRaster() { if (polarBuilt && S.now && sunFt !== S.t) { castPolar(S.now.sun, false, 0.266, sunF, sunI); sunFt = S.t; } }
 
   // ---------- explore: first-person surface view ----------
-  const VW = { az: null, fov: 90, off: document.createElement('canvas'), lit: new Float32Array(128 * 128), litKey: '' };
+  const VW = { az: null, fov: 90, off: document.createElement('canvas'), litKey: '', fine: null, near: null, far: null, drag: false };
   const wrap180 = a => ((a + 540) % 360) - 180;
+  // Which ground is in sunlight: for each cell of a grid around the site, march toward the Sun over the terrain and
+  // keep the steepest rise; the share of the solar disc above it is the light that cell gets.
+  function litGrid(x0, y0, ux, uy, sunEl, cell, n, tmax) {
+    const out = new Float32Array(n * n), H = TER.elevXY, half = (n - 1) / 2;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const x = x0 + (i - half) * cell, y = y0 + (half - j) * cell, h1 = H(x, y);
+      const el = sunEl + ((x - x0) * ux + (y - y0) * uy) / RM * R2D, top = Math.tan((el + 0.27) * D2R);
+      let mt = -0.2;
+      for (let t = cell * 0.75; t < tmax; t += Math.max(cell * 0.75, t * 0.06)) {
+        const v = (H(x + ux * t, y + uy * t) - h1) / (1000 * t) - t / (2 * RM);
+        if (v > mt) { mt = v; if (mt > top) break; }
+      }
+      out[j * n + i] = discFrac(el, 0.266, Math.atan(mt) * R2D);
+    }
+    return { a: out, n, cell, x0, y0 };
+  }
+  function litAtGrid(g, x, y) {
+    const half = (g.n - 1) / 2, i = (x - g.x0) / g.cell + half, j = half - (y - g.y0) / g.cell;
+    if (!(i >= 0 && j >= 0 && i < g.n - 1 && j < g.n - 1)) return NaN;
+    const i0 = i | 0, j0 = j | 0, fi = i - i0, fj = j - j0, a = g.a, k = j0 * g.n + i0;
+    return (a[k] * (1 - fi) + a[k + 1] * fi) * (1 - fj) + (a[k + g.n] * (1 - fi) + a[k + g.n + 1] * fi) * fj;
+  }
+  // Fine surface texture below the 5 to 10 m resolution of the data. Illustrative only: it changes the brightness by a
+  // few percent within a few hundred metres of the camera and never changes heights, shadows or any number.
+  const hash2 = (i, j) => { let h = (i * 374761393 + j * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  function vnoise(x, y) {
+    const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+    const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  }
+  function regolith(x, y, d) {
+    const fade = Math.max(0, 1 - d / 0.4); if (fade <= 0) return 1;
+    const m = x * 1000, n = y * 1000;   // metres
+    const t = 0.55 * vnoise(m / 2.5, n / 2.5) + 0.3 * vnoise(m / 0.8, n / 0.8) + 0.15 * vnoise(m / 0.25, n / 0.25);
+    const pebble = vnoise(m / 0.12, n / 0.12) > 0.82 ? 0.82 : 1;   // scattered small stones
+    return (1 + fade * 0.3 * (t - 0.5)) * (fade > 0.3 ? pebble : 1);
+  }
   function drawSurface() {
     const cv = $('surf'); if (!shown(cv)) return;
-    TER.focus = TER.patches(S.site) || null;
-    const can = riskOk() && TER.ready() && TER.focus && siteMask(S.site) && S.now;
-    cv.style.height = (riskOk() ? Math.round(Math.max(190, Math.min(540, cv.clientWidth * (cv.clientWidth < 520 ? 0.62 : 0.37)))) : 96) + 'px';
+    const can = riskOk() && TER.ready() && TER.rings && siteMask(S.site) && S.now && S.cur;
+    cv.style.height = (riskOk() ? Math.round(Math.max(220, Math.min(560, cv.clientWidth * (cv.clientWidth < 520 ? 0.66 : 0.42)))) : 96) + 'px';
     const { g, w, h } = prep(cv); g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
-    if (!riskOk()) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('The surface view needs the polar terrain, which covers 80°S to the south pole.', w / 2, h / 2); $('surfcap').textContent = 'Pick a south-pole site to stand on the surface. The chart below shows the sky for any site.'; return; }
+    if (!riskOk()) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('The surface view needs the polar terrain, which covers 80°S to the south pole.', w / 2, h / 2); $('surfcap').textContent = 'Pick a south-pole site to stand on the surface. The sky chart shows the horizon for any site.'; return; }
     if (!can) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the terrain around the site…', w / 2, h / 2); return; }
-    const c = S.cur, m = siteMask(S.site), mask = m.mask;
+    const c = S.cur, m = siteMask(S.site), mask = m.mask, dpr = Math.min(window.devicePixelRatio || 1, 2), tStart = performance.now();
     if (VW.az === null) { const sepA = wrap180(c.earthAz - c.sunAz); VW.az = Math.abs(sepA) <= 0.86 * VW.fov ? c.sunAz + sepA / 2 : c.sunAz + VW.fov * 0.24; }
-    const fast = S.playing || VW.drag, Wc = Math.min(fast ? 400 : 900, Math.round(w)), grow = fast ? 0.025 : 0.013, Hc = Math.round(Wc * h / w), fovH = VW.fov, fovV = fovH * Hc / Wc, elC = -0.02 * fovV;
+    const fast = S.playing || VW.drag, Wc = Math.min(2600, Math.round(w * (fast ? Math.min(dpr, 1) * 0.6 : dpr))), Hc = Math.round(Wc * h / w);
+    const fovH = VW.fov, fovV = fovH * Hc / Wc, elC = -0.02 * fovV;
     const lam = S.site.lon * D2R, nx = Math.sin(lam), ny = Math.cos(lam), ex = Math.cos(lam), ey = -Math.sin(lam);
     const rho0 = 2 * RM * Math.tan((90 + Math.max(-89.999, S.site.lat)) / 2 * D2R), x0 = rho0 * nx, y0 = rho0 * ny, hEye = m.h0 + S.eye;
-    const sa = c.sunAz * D2R, ux = nx * Math.cos(sa) + ex * Math.sin(sa), uy = ny * Math.cos(sa) + ey * Math.sin(sa), E = TER.elevXYsmooth, EB = TER.elevXY;
-    const NL = 128, LS = 0.2, key = [S.site.lat, S.site.lon, S.t].join('|');
+    const sa = c.sunAz * D2R, ux = nx * Math.cos(sa) + ex * Math.sin(sa), uy = ny * Math.cos(sa) + ey * Math.sin(sa), E = TER.elevXYsmooth;
+    // shadows: fine near the site, coarser farther out, then the polar shadow map
+    const key = [S.site.lat, S.site.lon, S.t, fast ? 1 : 0].join('|');
     if (VW.litKey !== key) {
       VW.litKey = key; sunRaster();
-      for (let j = 0; j < NL; j++) for (let i = 0; i < NL; i++) {
-        const x = x0 + (i - NL / 2 + 0.5) * LS, y = y0 + (NL / 2 - j - 0.5) * LS, h1 = EB(x, y), el = c.sunEl + ((x - x0) * ux + (y - y0) * uy) / RM * R2D; let mt = -0.2;
-        for (let t = 0.08; t < 160; t += Math.max(0.08, t * 0.09)) { const v = (EB(x + ux * t, y + uy * t) - h1) / (1000 * t) - t / (2 * RM); if (v > mt) mt = v; }
-        VW.lit[j * NL + i] = discFrac(el, 0.266, Math.atan(mt) * R2D);
-      }
+      VW.fine = fast ? null : litGrid(x0, y0, ux, uy, c.sunEl, 0.01, 300, 12);
+      VW.near = litGrid(x0, y0, ux, uy, c.sunEl, fast ? 0.12 : 0.04, fast ? 100 : 300, 40);
+      VW.far = litGrid(x0, y0, ux, uy, c.sunEl, fast ? 0.6 : 0.2, fast ? 100 : 300, 160);
     }
     const litAt = (x, y) => {
-      const i = (x - x0) / LS + NL / 2 - 0.5, j = NL / 2 - 0.5 - (y - y0) / LS;
-      if (i >= 0 && j >= 0 && i < NL - 1 && j < NL - 1) { const i0 = i | 0, j0 = j | 0, fi = i - i0, fj = j - j0, a = VW.lit, k = j0 * NL + i0; return (a[k] * (1 - fi) + a[k + 1] * fi) * (1 - fj) + (a[k + NL] * (1 - fi) + a[k + NL + 1] * fi) * fj; }
+      let v = VW.fine ? litAtGrid(VW.fine, x, y) : NaN; if (v === v) return v;
+      v = litAtGrid(VW.near, x, y); if (v === v) return v;
+      v = litAtGrid(VW.far, x, y); if (v === v) return v;
       const px = Math.floor(x / PXKM + PS / 2), py = Math.floor(PS / 2 - y / PXKM); return px >= 0 && py >= 0 && px < PS && py < PS ? sunF[py * PS + px] : 1;
     };
     const off = VW.off; if (off.width !== Wc || off.height !== Hc) { off.width = Wc; off.height = Hc; }
     const og = off.getContext('2d'), im = og.createImageData(Wc, Hc), buf = new Uint32Array(im.data.buffer);
     const Y = el => (0.5 - (el - elC) / fovV) * Hc, expo = 1 / (6 * Math.sin(Math.max(0.6, c.sunEl) * D2R));
+    const mix = (c1, c2, f) => 0xff000000 | (((c1 >> 16 & 255) * f + (c2 >> 16 & 255) * (1 - f)) << 16) | (((c1 >> 8 & 255) * f + (c2 >> 8 & 255) * (1 - f)) << 8) | ((c1 & 255) * f + (c2 & 255) * (1 - f));
+    const stepK = fast ? 2 : 1;
     for (let col = 0; col < Wc; col++) {
       const az = VW.az + ((col + 0.5) / Wc - 0.5) * fovH, a = az * D2R, dx = nx * Math.cos(a) + ex * Math.sin(a), dy = ny * Math.cos(a) + ey * Math.sin(a), toSun = Math.cos(a - sa);
-      let yb = Hc, last = 0xff0a0a0a, pr = -1, pf = 0, pc = 0;
-      const mix = (c1, c2, f) => 0xff000000 | (((c1 >> 16 & 255) * f + (c2 >> 16 & 255) * (1 - f)) << 16) | (((c1 >> 8 & 255) * f + (c2 >> 8 & 255) * (1 - f)) << 8) | ((c1 & 255) * f + (c2 & 255) * (1 - f));
-      for (let d = 0.004 * (1 + grow * ((col * 7919) % 13) / 13); d < 300 && yb > 0; d += Math.max(0.002, d * grow)) {
-        const x = x0 + dx * d, y = y0 + dy * d, hh = E(x, y), pyF = Y(Math.atan((hh - hEye) / (1000 * d) - d / (2 * RM)) * R2D), py = Math.floor(pyF);
-        if (py >= yb) continue;
-        const dl = Math.max(0.03, d * 0.01), gx = (E(x + dl, y) - E(x - dl, y)) / (2000 * dl), gy = (E(x, y + dl) - E(x, y - dl)) / (2000 * dl);
-        const elL = (c.sunEl + d / RM * toSun * R2D) * D2R, chh = Math.cos(elL), lam2 = Math.max(0, (-gx * ux * chh - gy * uy * chh + Math.sin(elL)) / Math.sqrt(1 + gx * gx + gy * gy));
-        const q = litAt(x, y) * lam2 * expo * 1.7, v = (6 + 249 * Math.pow(q / (1 + q), 0.72)) | 0;
+      let yb = Hc, last = 0xff0a0a0a, lastV = -1, pr = -1, pf = 0, pc = 0;
+      const rowsPerDeg = Hc / fovV;
+      for (let d = 0.003; d < 300 && yb > 0;) {
+        const res = TER.resAt(d), x = x0 + dx * d, y = y0 + dy * d, hh = E(x, y), pyF = Y(Math.atan((hh - hEye) / (1000 * d) - d / (2 * RM)) * R2D), py = Math.floor(pyF);
+        // step: fine enough for the terrain at this distance, and no more than about one pixel row on screen
+        const rowsPerKm = (Math.abs(hh - hEye) / 1000 / (d * d) + 1 / (2 * RM)) * R2D * rowsPerDeg;
+        d += stepK * Math.min(Math.max(res * 0.5, d * (d > 25 ? 0.0035 : 0.006)), Math.max(0.00002, 1.1 / rowsPerKm));
+        if (py >= yb) { lastV = -1; continue; }   // hidden behind nearer ground: never blend across a silhouette
+        // ground normal at a scale tied to distance, so the 5 m and 10 m detail near the site shows without banding
+        const dl = Math.min(0.25, Math.max(0.006, d * 0.012)), gx = (E(x + dl, y) - E(x - dl, y)) / (2000 * dl), gy = (E(x, y + dl) - E(x, y - dl)) / (2000 * dl);
+        const elL = (c.sunEl + (d / RM) * toSun * R2D) * D2R, chh = Math.cos(elL), lam2 = Math.max(0, (-gx * ux * chh - gy * uy * chh + Math.sin(elL)) / Math.sqrt(1 + gx * gx + gy * gy));
+        const q = litAt(x, y) * lam2 * expo * 1.7 * regolith(x, y, d), v = 6 + 249 * Math.pow(q / (1 + q), 0.72);
         last = 0xff000000 | ((v * 0.9) << 16) | ((v * 0.96) << 8) | v;
         if (pr >= 0) buf[pr * Wc + col] = mix(pc, last, pf);
-        for (let r = Math.max(0, py + 1); r < yb; r++) buf[r * Wc + col] = last;
+        // fill the rows down to the previous sample, blending toward its brightness, so steps never show as bands
+        const span = yb - (py + 1), contiguous = lastV >= 0 && span <= 6;
+        for (let r = Math.max(0, py + 1); r < yb; r++) {
+          const vv = contiguous ? v + (lastV - v) * ((r - py) / (span + 1)) : v;
+          buf[r * Wc + col] = 0xff000000 | ((vv * 0.9) << 16) | ((vv * 0.96) << 8) | vv;
+        }
         if (py >= 0) { buf[py * Wc + col] = last; pr = py; pf = py + 1 - pyF; pc = last; } else pr = -1;
-        yb = py;
+        yb = py; lastV = v;
       }
+      // the painted skyline agrees exactly with the server's skyline used for every number on the page
       const ymF = Math.max(0, Math.min(Hc, Y(maskAt(mask, az)))), ym = Math.floor(ymF);
       if (yb > ym) for (let r = ym; r < Math.min(Hc, yb); r++) buf[r * Wc + col] = last; else for (let r = Math.max(0, yb); r < ym; r++) buf[r * Wc + col] = 0;
       if (ym >= 0 && ym < Hc) buf[ym * Wc + col] = (buf[ym * Wc + col] & 0x00ffffff) | (Math.round(255 * (ym + 1 - ymF)) << 24);
     }
     og.putImageData(im, 0, 0);
+    if (DEBUG) console.log('surface view: ' + Wc + ' columns in ' + Math.round(performance.now() - tStart) + ' ms' + (fast ? ' (fast)' : ''));
     const X = az => (wrap180(az - VW.az) / fovH + 0.5) * w, Yc = el => (0.5 - (el - elC) / fovV) * h, ppd = w / fovH;
     const sep = Math.acos(Math.max(-1, Math.min(1, Math.sin(c.sunEl * D2R) * Math.sin(c.earthEl * D2R) + Math.cos(c.sunEl * D2R) * Math.cos(c.earthEl * D2R) * Math.cos((c.sunAz - c.earthAz) * D2R)))), k = (1 - Math.cos(sep)) / 2;
     const exs = X(c.earthAz), eys = Yc(c.earthEl), re = Math.max(3, c.earthRad * ppd), sxs = X(c.sunAz), sys = Yc(c.sunEl), rs = Math.max(1.6, c.sunRad * ppd);
@@ -824,7 +905,7 @@
     g.fillStyle = '#5b9cf0'; g.beginPath(); g.arc(0, 0, re, -Math.PI / 2, Math.PI / 2, false); g.ellipse(0, 0, Math.abs(1 - 2 * k) * re, re, 0, Math.PI / 2, -Math.PI / 2, k < 0.5); g.closePath(); g.fill(); g.restore();
     const gl = g.createRadialGradient(sxs, sys, rs, sxs, sys, Math.max(26, rs * 7)); gl.addColorStop(0, 'rgba(255,240,205,0.9)'); gl.addColorStop(0.25, 'rgba(255,225,160,0.28)'); gl.addColorStop(1, 'rgba(255,220,150,0)');
     g.fillStyle = gl; g.beginPath(); g.arc(sxs, sys, Math.max(26, rs * 7), 0, 7); g.fill(); g.fillStyle = '#fffaf0'; g.beginPath(); g.arc(sxs, sys, rs, 0, 7); g.fill();
-    g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, w, h);
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(off, 0, 0, w, h);
     g.font = FONTC(13); g.textBaseline = 'middle';
     const tag = (t, x, y, col, hidden, r) => {
       if (x < -20 || x > w + 20) return; if (hidden) { g.setLineDash([3, 3]); g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, Math.max(6, r), 0, 7); g.stroke(); g.setLineDash([]); }
@@ -837,16 +918,8 @@
     for (let a = Math.ceil((VW.az - fovH / 2) / stepA) * stepA; a <= VW.az + fovH / 2; a += stepA) { const x = (a - VW.az) / fovH * w + w / 2, aa = ((a % 360) + 360) % 360; g.beginPath(); g.moveTo(x, h - 4); g.lineTo(x, h - 9); g.stroke(); g.fillText(aa % 90 === 0 ? ['N', 'E', 'S', 'W'][aa / 90] : aa + '°', Math.max(12, Math.min(w - 12, x)), h - 12); }
     g.textAlign = 'left'; g.textBaseline = 'middle'; const stepE = fovV > 30 ? 5 : fovV > 12 ? 2 : 1;
     for (let e = Math.ceil((elC - fovV / 2) / stepE) * stepE; e <= elC + fovV / 2; e += stepE) { const y = Yc(e); if (y < 10 || y > h - 26) continue; g.beginPath(); g.moveTo(0, y); g.lineTo(5, y); g.stroke(); g.fillText((e > 0 ? '+' : e < 0 ? '−' : '') + Math.abs(e) + '°', 8, y); }
-    if (w >= 560 && S.ev) {
-      const line = (name, clr, ev) => name + ' ' + Math.abs(clr).toFixed(2) + '° ' + (clr > 0 ? 'above' : 'below') + ' the terrain · ' + (ev ? (clr > 0 ? 'sets in ' : 'rises in ') + fmtDur(ev.t - S.t) : (clr > 0 ? 'stays up for the next 90 days' : 'stays down for the next 90 days'));
-      const rowsH = [[line('Sun', c.sunClr, S.ev.sun), c.sunClr > 0 ? '#ffd98a' : 'rgba(255,217,138,0.55)'], [line('Earth', c.earthClr, S.ev.earth), c.earthClr > 0 ? '#b9d6ff' : 'rgba(185,214,255,0.55)']];
-      const both = c.sunClr > 0 && c.earthClr > 0, head = both ? 'POWER AND EARTH LINK' : c.sunClr > 0 ? 'POWER, NO EARTH LINK' : c.earthClr > 0 ? 'EARTH LINK, NO POWER' : 'NO POWER, NO EARTH LINK';
-      g.font = FONT(13); const bw = Math.max(g.measureText(rowsH[0][0]).width, g.measureText(rowsH[1][0]).width) + 44, bh = 74, bx = w - bw - 12, by = 12;
-      g.fillStyle = 'rgba(8,10,14,0.72)'; g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 1; g.beginPath(); g.roundRect ? g.roundRect(bx, by, bw, bh, 6) : g.rect(bx, by, bw, bh); g.fill(); g.stroke();
-      g.textAlign = 'left'; g.textBaseline = 'middle'; g.font = FONTC(13); g.fillStyle = both ? '#3fc78d' : '#e8894a'; g.fillText(head, bx + 14, by + 16);
-      g.font = FONT(13); rowsH.forEach(([t, col], k) => { const y = by + 38 + k * 20; g.fillStyle = col; g.beginPath(); g.arc(bx + 19, y, 4.5, 0, 7); g.fill(); g.fillText(t, bx + 32, y); });
-    }
-    $('surfcap').textContent = 'The view from ' + S.eye + ' m above the ground at ' + short(S.site) + ', ' + fmtDT(S.t) + ', ' + Math.round(fovH) + '° wide. Terrain and shadows come from NASA\'s LOLA height maps, served by the Lunar Skyline server; the Sun and Earth are drawn at their true sizes and nothing is stretched. There is no air, so far hills look as sharp as near ones. Drag sideways to look around.';
+    const rg = cache.get('rings|' + S.site.lat.toFixed(5) + ',' + S.site.lon.toFixed(5)), tier = rg && rg.v ? rg.v.tier : '';
+    $('surfcap').textContent = 'The view from ' + S.eye + ' m above the ground at ' + short(S.site) + ', ' + fmtDT(S.t) + ', ' + Math.round(fovH) + '° wide. Terrain and shadows from NASA\'s LOLA height maps (' + (tier || 'LOLA') + ' at the site); the Sun and Earth are drawn at their true sizes and nothing is stretched. There is no air, so far hills look as sharp as near ones. Texture finer than the height map is illustrative. Drag sideways to look around.';
   }
   function polarXY(lat, lon, R, cx, cy) { const rho = 2 * RM * Math.tan((90 + lat) / 2 * D2R) / RHO * R; return [cx + rho * Math.sin(lon * D2R), cy - rho * Math.cos(lon * D2R)]; }
   let mapGeom = null;
@@ -1108,7 +1181,7 @@
   function render() {
     if (!ready) return;
     ensureTab();
-    TER.focus = TER.patches(S.site) || null;
+    { const rg = TER.ringsFor(S.site); TER.rings = rg ? rg.rings : null; }
     S.now = bodyAt(S.t);
     const exact = skyExact(), lerped = stateAt(ser(S.site), S.t);
     if (exact) {
