@@ -1,0 +1,15 @@
+# Tested with Python 3.13 on macOS (arm64). Wheels for Python 3.12 to 3.14 on win_amd64 exist for all of these.
+numpy==2.5.4
+pandas==3.1.1
+scipy==1.18.1
+fastapi==0.163.0
+uvicorn==0.54.0
+pydantic==2.14.3
+requests==2.34.2
+tifffile==2026.11.12
+# the PGDA regional DEMs are deflate-compressed with a floating-point predictor, which tifffile decodes via imagecodecs
+imagecodecs==2026.11.11
+spiceypy==8.4.0
+# tests
+pytest==9.2.0
+httpx==0.28.1

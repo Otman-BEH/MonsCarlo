@@ -1,0 +1,42 @@
+# Fly.io deployment (one option; any host that runs a Docker container with a persistent disk works).
+#   fly launch --no-deploy --copy-config        (pick a unique app name)
+#   fly volumes create skyline_data --size 3    (GB, same region as the app)
+#   fly deploy
+# The first start downloads the NASA data (about 620 MB) and takes a few minutes; /health shows progress.
+app = "lunar-skyline"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  SKYLINE_DATA = "/data"
+  SKYLINE_READONLY = "1"        # public demo: saving and deleting landers is turned off
+  SKYLINE_HEAVY_JOBS = "2"      # at most two simulations at once
+
+[mounts]
+  source = "skyline_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+
+[[http_service.checks]]
+  grace_period = "600s"
+  interval = "30s"
+  method = "GET"
+  path = "/api"
+  timeout = "5s"
+
+[[vm]]
+  memory = "2gb"
+  cpu_kind = "shared"
+  cpus = 2
