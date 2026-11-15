@@ -736,7 +736,8 @@ import { createTerrain } from './js/terrain.js';
     const rho0 = 2 * RM * Math.tan((90 + Math.max(-89.999, S.site.lat)) / 2 * D2R), x0 = rho0 * nx, y0 = rho0 * ny, hEye = m.h0 + S.eye;
     const sa = c.sunAz * D2R, ux = nx * Math.cos(sa) + ex * Math.sin(sa), uy = ny * Math.cos(sa) + ey * Math.sin(sa), E = TER.elevXYsmooth;
     // shadows: fine near the site, coarser farther out, then the polar shadow map
-    const key = [S.site.lat, S.site.lon, S.t, fast ? 1 : 0].join('|');
+    // while playing, shadows are recomputed every 30 minutes of mission time instead of every frame
+    const key = [S.site.lat, S.site.lon, fast ? Math.round(S.t / 1800e3) : S.t, fast ? 1 : 0].join('|');
     if (VW.litKey !== key) {
       VW.litKey = key; sunRaster();
       VW.fine = fast ? null : litGrid(x0, y0, ux, uy, c.sunEl, 0.01, 300, 12);

@@ -29,6 +29,17 @@ Earth positions from JPL Horizons; later starts skip what is already there. Deta
 To put it online, host the backend from the `Dockerfile` on any host with a persistent disk (a `fly.toml` for Fly.io is
 included) and the frontend on any static host; see [Hosting](#hosting).
 
+## The page
+
+- **App bar**: the five views (Site, Plan a mission, Compare, Why the pole?, Method), the guided tour, a share link and
+  a light/dark switch.
+- **Site and time bar**: pick a listed site or a custom point, the mast height, the date, step through time or play.
+- **At a glance** (on every working view): the challenge's core answers. Sun and Earth above the terrain, time to
+  sunset and Earthset, solar power right now, and whether a direct link to Earth is possible (with the Deep Space
+  Network stations that can see the Moon).
+- The page only asks the server for expensive results (mission, design lab, landing risk, rescue, calendar) for the
+  view on screen, never while playing or dragging, and cancels questions that are out of date.
+
 ## What it does
 - **Plan a mission**: enter mission length, array output, loads, battery, reserve, link-gap limit and a terrain margin.
   The page simulates battery charge hour by hour and gives a verdict: meets the needs, marginal (passes only without the terrain margin), or fails, with the reason.

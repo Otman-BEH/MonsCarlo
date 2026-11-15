@@ -68,14 +68,23 @@ Flags: `--skip-fetch`, `--skip-prefetch`, `--all-data` (also the optional files:
 | `POST /rescue` | After a schedule slip: the plan's verdict, the verdict after the slip, and other sites and landing times ranked by verdict, extra wait and battery margin. |
 | `GET /series`, `GET /ephemeris` | Hourly series and skyline for a site, and hourly Moon-fixed Sun and Earth vectors (used by the page for charts and smooth playback). |
 | `GET /dsn` | Moon elevation at the three Deep Space Network complexes (SPICE). |
-| `GET /terrain/patch`, `GET /terrain/polar400`, `GET /terrain/moon.jpg` | Height grids around a site (40 m within 3 km, 240 m within 15 km), the 400 m south-pole raster and the Moon mosaic, for drawing the surface view, the shadow map and the globe. |
+| `GET /terrain/rings`, `GET /terrain/polar400`, `GET /terrain/moon.jpg` | Binary height grids around a site (10 m within 1.5 km, 40 m within 6 km, 160 m within 30 km, from the 5 m maps where present), the 400 m south-pole raster (both row-delta coded) and the Moon mosaic, for drawing the surface view, the shadow map and the globe. |
 
 Common inputs: location `site=<id>` or `lat=&lon=` (east positive); `time=` or `start=`/`end=` (ISO 8601 UTC, default
 now and 30 days); `lander=<id>` plus overrides; `dem=best|80m`. Every response has `meta`: ephemeris source per month,
 terrain tiers and citations, `lander_resolved` (the exact lander used) and `defaults_used`. Monte Carlo responses also
 carry the seed.
 
-Errors: 404 unknown site or lander, 422 invalid input, 400 outside 1900 to 2100, 503 when no ephemeris can be produced.
+Errors: 404 unknown site or lander, 422 invalid input, 400 outside 1900 to 2100, 503 when no ephemeris can be produced
+or when the server is busy (see below), 403 for lander changes on a read-only server.
+
+### Running it in public
+
+- `SKYLINE_READONLY=1`: turns off saving and deleting landers.
+- `SKYLINE_HEAVY_JOBS` (default 2): how many heavy jobs (landing risk, design lab, rescue, calendar) run at once; others
+  wait up to 45 s, then get a 503 with `Retry-After`.
+- Heavy results are kept in memory (the last 128) and reused when the same question is asked again.
+- `SKYLINE_CORS_ORIGINS`: comma list of page addresses allowed to call the API (default: any).
 
 ### Examples
 
