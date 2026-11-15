@@ -6,13 +6,13 @@ Paste each block into the matching field. Replace everything in [brackets].
 Lunar Skyline
 
 ## High-level project summary
-Lunar Skyline lets anyone stand on a landing site on the Moon and see where the Sun and the Earth sit against the real terrain horizon, for any date. It then answers the question a mission team actually has: will this lander have power and a radio link for its whole mission, and what are the options if the landing slips? The tool runs in a browser from a single file. It combines an ephemeris engine checked against JPL data, NASA's LOLA terrain, an hour-by-hour battery and communication model, a search for alternative sites and dates, and a Monte Carlo test of what happens when the lander misses its target.
+Lunar Skyline lets anyone stand on a landing site on the Moon and see where the Sun and the Earth sit against the real terrain horizon, for any date. It then answers the question a mission team actually has: will this lander have power and a radio link for its whole mission, and what are the options if the landing slips? A Python server does every calculation and serves the web page that draws the results; its API lets other apps and scripts ask the same questions. It combines Sun and Earth positions from NASA's JPL Horizons service, NASA's LOLA terrain down to 5 m resolution, an hour-by-hour battery and communication model, a search for alternative sites and dates, and a Monte Carlo test of what happens when the lander misses its target.
 
 ## Link to project demo
 [Public link to the 7-slide deck or a 30-second video]
 
 ## Link to final project
-[Public GitHub Pages link to index.html] · Code: [public repository link]
+[Public link to the hosted app] · Code: [public repository link]
 
 ## Detailed project description
 **What it does**
@@ -28,8 +28,8 @@ Lunar Skyline lets anyone stand on a landing site on the Moon and see where the 
 - *Compare sites and dates.* One horizon panorama per site for the same instant, side-by-side statistics and a twelve-month calendar of landing days that meet the mission needs.
 
 **How it works**
-- Sun and Earth positions are computed in the browser with the Astronomy Engine library and the IAU model of the Moon's rotation, including libration and the offset between the Moon's centre and the site. The largest difference from JPL's DE421 ephemeris (through SPICE) is 0.004 degrees over 3,166 dates at six sites, and an independent check against NASA's live JPL Horizons service agrees to 0.004 degrees over 1,260 comparisons.
-- Horizons are ray-cast from NASA's LOLA south-pole elevation model: at 80 m resolution in 720 directions for the listed south-pole sites, and in the browser for any other point.
+- Sun and Earth positions come from NASA's JPL Horizons service as Moon-fixed vectors (so libration and the offset between the Moon's centre and the site are included), fetched month by month and cached, with JPL's SPICE DE440 kernels as the fallback. Against JPL's DE421 ephemeris through SPICE the largest difference is 0.00002 degrees over 3,166 dates at six sites.
+- Skylines are ray-cast on the server from NASA's LOLA elevation models in 720 directions out to 330 km: 5 m site maps where they exist, the 80 m south-pole model, the 240 m model from 60 degrees south, and a global grid elsewhere.
 - 888 automatic tests cover geometry, terrain, the battery model and the Monte Carlo.
 
 **Who it is for**
@@ -45,12 +45,11 @@ JavaScript, HTML and CSS (no framework), Canvas 2D; Python (numpy, scipy, tifffi
 - LOLA south-pole elevation model LDEM_80S_80MPP_ADJ, NASA GSFC Planetary Geodynamics Data Archive ("A New View of the Lunar South Pole from LOLA", Barker et al.): terrain, horizons, shadow map, surface view.
 - JPL DE421 planetary and lunar ephemeris and the lunar orientation kernel, through SPICE: validation of Sun and Earth positions.
 - LOLA-derived global elevation grid and LROC-based Moon mosaic (packaged in LLNL's ssa-data-lunar): coarse terrain away from the south pole and the whole-Moon map.
-- JPL Horizons System: independent validation of Sun and Earth positions seen from the lunar surface (`build/horizons_check.js`).
+- JPL Horizons System: the source of Sun and Earth positions, fetched month by month by the backend and checked against JPL SPICE.
 - LROC Quickmap and Moon Trek: reference tools named in the challenge, used to understand what the tool should make easier.
 
 ## Space Agency Partner and other data
 - No Space Agency Partner dataset was used. [Edit if you used the CSA Moon Exploration portal.]
-- Astronomy Engine by Don Cross (MIT licence): ephemeris calculations.
 - LLNL ssa-data-lunar (MIT licence): packaged LOLA grid and Moon mosaic.
 
 ## Use of artificial intelligence
@@ -61,4 +60,3 @@ The code, tests, notebook, slide text and this description were drafted with Cla
 - Barker et al. (2021), Improved LOLA elevation maps for south pole landing sites, Planetary and Space Science 203.
 - NASA GSFC PGDA, https://pgda.gsfc.nasa.gov/products/90
 - JPL Horizons System, https://ssd.jpl.nasa.gov/horizons/
-- Astronomy Engine, https://github.com/cosinekitty/astronomy

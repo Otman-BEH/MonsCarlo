@@ -1,0 +1,53 @@
+{
+  "about": "Built-in lander presets. A preset cites a public source for each number or is marked illustrative.",
+  "landers": [
+    {
+      "id": "reference",
+      "name": "Reference small lander",
+      "source": "Lunar Skyline default (main's S.cfg in src/app.js)",
+      "illustrative": true,
+      "power": {
+        "array": {"type": "tracking", "peak_w": 400, "faces": null, "heading_deg": 0, "height_m": 2},
+        "battery": {"capacity_wh": 2000, "min_soc": 0.2, "charge_eff": 0.9},
+        "loads": {"sunlit_w": 180, "dark_w": 60},
+        "safe_mode": false
+      },
+      "comms": {"antenna_height_m": 2},
+      "landing": {"accuracy_m_3sigma": 500, "max_slope_deg": 12},
+      "mass": {"array_w_per_kg": null, "battery_wh_per_kg": null}
+    },
+    {
+      "id": "polar-vertical",
+      "name": "Illustrative polar lander, vertical panels",
+      "source": "illustrative: four vertical faces at 90 degree spacing, sized to match the reference lander's daily energy at the pole; not a real vehicle",
+      "illustrative": true,
+      "power": {
+        "array": {"type": "vertical", "peak_w": null, "faces": [
+          {"azimuth_deg": 0, "peak_w": 200}, {"azimuth_deg": 90, "peak_w": 200},
+          {"azimuth_deg": 180, "peak_w": 200}, {"azimuth_deg": 270, "peak_w": 200}],
+          "heading_deg": 0, "height_m": 3},
+        "battery": {"capacity_wh": 3000, "min_soc": 0.2, "charge_eff": 0.9},
+        "loads": {"sunlit_w": 180, "dark_w": 60},
+        "safe_mode": true
+      },
+      "comms": {"antenna_height_m": 4},
+      "landing": {"accuracy_m_3sigma": 100, "max_slope_deg": 10},
+      "mass": {"array_w_per_kg": null, "battery_wh_per_kg": null}
+    },
+    {
+      "id": "horizontal-deck",
+      "name": "Illustrative lander, horizontal deck array",
+      "source": "illustrative: the reference lander with its array flat on the deck (main's tracking: false); shows why flat panels fail near the pole",
+      "illustrative": true,
+      "power": {
+        "array": {"type": "horizontal", "peak_w": 400, "faces": null, "heading_deg": 0, "height_m": 2},
+        "battery": {"capacity_wh": 2000, "min_soc": 0.2, "charge_eff": 0.9},
+        "loads": {"sunlit_w": 180, "dark_w": 60},
+        "safe_mode": false
+      },
+      "comms": {"antenna_height_m": 2},
+      "landing": {"accuracy_m_3sigma": 500, "max_slope_deg": 12},
+      "mass": {"array_w_per_kg": null, "battery_wh_per_kg": null}
+    }
+  ]
+}
