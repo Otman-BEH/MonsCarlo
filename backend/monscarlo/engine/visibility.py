@@ -1,7 +1,7 @@
 """Hourly visibility series, crossings, window statistics. Port of main's src/analysis.js (stateWith, seriesAt, nextCross,
 stats) and src/app.js (nextEvent), vectorised over hours.
 
-Two skylines per site: the Sun is judged against the skyline at the solar array height, Earth against the skyline at the
+Two horizons per site: the Sun is judged against the horizon at the solar array height, Earth against the horizon at the
 antenna height. Each uses its own site basis (ground + that height).
 """
 from __future__ import annotations
@@ -19,12 +19,12 @@ F32 = np.float32
 
 @dataclass
 class View:
-    """Everything needed to evaluate a site: position, ground height and the two skylines."""
+    """Everything needed to evaluate a site: position, ground height and the two horizons."""
     lat: float
     lon: float
     ground_m: float
-    sun_mask: np.ndarray       # skyline at the array height, (naz,)
-    earth_mask: np.ndarray     # skyline at the antenna height, (naz,)
+    sun_mask: np.ndarray       # horizon at the array height, (naz,)
+    earth_mask: np.ndarray     # horizon at the antenna height, (naz,)
     array_h: float
     antenna_h: float
 

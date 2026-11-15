@@ -1,4 +1,4 @@
-/* Talking to the Lunar Skyline API: requests, one cache for everything fetched, and request slots for the expensive
+/* Talking to the Mons Carlo API: requests, one cache for everything fetched, and request slots for the expensive
    questions. The page redraws (onData) whenever an answer arrives. */
 export function createServer({ base, onData, isBusy }) {
   const srv = { lastErr: null };

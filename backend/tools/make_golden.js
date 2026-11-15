@@ -1,9 +1,9 @@
 /* Dump parity fixtures from the original in-browser JS engine for the Python port.
    That engine (src/, build/data.json) was removed when the web page moved onto the backend, so run this from a checkout
-   of the last commit that has it (afd9e78, "Lunar Skyline: lunar landing site navigator"):
-       git worktree add /tmp/ls-js afd9e78 && cp backend/tools/make_golden.js /tmp/ls-js/backend/tools/ 2>/dev/null
-       cd /tmp/ls-js && npm ci && mkdir -p backend/tools && node backend/tools/make_golden.js
-   then copy /tmp/ls-js/backend/tests/fixtures/golden.json back. Loads src/ exactly as build/test_core.js did. */
+   of the last commit that has it (afd9e78):
+       git worktree add /tmp/mc-js afd9e78 && cp backend/tools/make_golden.js /tmp/mc-js/backend/tools/ 2>/dev/null
+       cd /tmp/mc-js && npm ci && mkdir -p backend/tools && node backend/tools/make_golden.js
+   then copy /tmp/mc-js/backend/tests/fixtures/golden.json back. Loads src/ exactly as build/test_core.js did. */
 global.Eng = require('../../src/engine.js'); global.Terrain = require('../../src/terrain.js');
 const Ana = require('../../src/analysis.js'), data = require('../../build/data.json'), fs = require('fs'), path = require('path');
 const arr = a => Array.from(a, v => (Number.isFinite(v) ? v : (v > 0 ? 'Infinity' : v < 0 ? '-Infinity' : 'NaN')));
@@ -15,7 +15,7 @@ const arr = a => Array.from(a, v => (Number.isFinite(v) ? v : (v > 0 ? 'Infinity
   const T0 = Date.UTC(2026, 11, 1), N = 40 * 24, tab = Eng.makeTable(T0, 3600e3, N);
   out.table = { t0_ms: T0, step_ms: 3600e3, n: N, a: arr(tab.a) };
 
-  // 2. Skylines: 80 m profiles (curated sites) and in-browser ray casts (custom points, no fine patch focus)
+  // 2. HorizonMasks: 80 m profiles (curated sites) and in-browser ray casts (custom points, no fine patch focus)
   const ids = ['shack', 'ridge', 'gerl', 'ce7', 'mala', 'viper', 'im2', 'im1', 'pole'];
   out.sites = {}; for (const id of ids) { const q = Terrain.profiles.sites[id]; out.sites[id] = { lat: q.lat, lon: q.lon, h0: q.h0 }; }
   out.profileMask = {};

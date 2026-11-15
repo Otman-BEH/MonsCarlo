@@ -7,12 +7,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from skyline import config
-from skyline.engine import ephemeris as EP
-from skyline.engine.geometry import look, site_basis
-from skyline.prep import horizons as H
-from skyline.prep import spice
-from skyline.prep.store import Store
+from monscarlo import config
+from monscarlo.engine import ephemeris as EP
+from monscarlo.engine.geometry import look, site_basis
+from monscarlo.prep import horizons as H
+from monscarlo.prep import spice
+from monscarlo.prep.store import Store
 
 FIX = Path(__file__).resolve().parent / "fixtures"
 needs_kernels = pytest.mark.skipif(not spice.available(), reason="SPICE kernels not in the data directory")

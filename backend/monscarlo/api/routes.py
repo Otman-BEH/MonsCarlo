@@ -24,14 +24,14 @@ from .schemas import CalendarRequest, DesignRequest, MissionRequest, ReportReque
 router = APIRouter()
 
 # ---------------------------------------------------------------- protection for a public deployment
-# SKYLINE_READONLY=1 turns off saving and deleting landers. Heavy jobs (landing risk, design lab, rescue, calendar) run
-# at most SKYLINE_HEAVY_JOBS at a time (default 2); their results are kept (the inputs fully determine them), so the
+# MONS_CARLO_READONLY=1 turns off saving and deleting landers. Heavy jobs (landing risk, design lab, rescue, calendar) run
+# at most MONS_CARLO_HEAVY_JOBS at a time (default 2); their results are kept (the inputs fully determine them), so the
 # same question asked again is answered at once.
 import collections
 import os
 
-READONLY = os.environ.get("SKYLINE_READONLY", "").lower() in ("1", "true", "yes")
-_heavy_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("SKYLINE_HEAVY_JOBS", "2"))))
+READONLY = os.environ.get("MONS_CARLO_READONLY", "").lower() in ("1", "true", "yes")
+_heavy_slots = threading.BoundedSemaphore(max(1, int(os.environ.get("MONS_CARLO_HEAVY_JOBS", "2"))))
 _results: "collections.OrderedDict[str, dict]" = collections.OrderedDict()
 _rlock = threading.Lock()
 
@@ -85,7 +85,7 @@ CITATIONS = {
     "LOLA 5 m": "Barker et al. 2021, PSS 203, 105119, PGDA product 78, https://pgda.gsfc.nasa.gov/products/78",
     "LOLA 80 m": "Barker et al. 2021, LOLA south polar DEMs, PGDA product 90, https://pgda.gsfc.nasa.gov/products/90",
     "LOLA 240 m": "Barker et al. 2021, LOLA south polar DEMs, PGDA product 90, https://pgda.gsfc.nasa.gov/products/90",
-    "LOLA coarse grid": "LOLA global grid, 1/4 deg (LLNL ssa-data-lunar package), shipped in skyline/assets",
+    "LOLA coarse grid": "LOLA global grid, 1/4 deg (LLNL ssa-data-lunar package), shipped in monscarlo/assets",
     "LOLA 400 m": "LOLA 80 m DEM averaged to 400 m (PGDA product 90)",
 }
 
@@ -236,7 +236,7 @@ def horizon(site: Optional[str] = None, lat: Optional[float] = None, lon: Option
     return {**r, "meta": meta({"terrain": {"dem": dem, "tiers": r["tiers"], "ground_m": r["ground_m"]}, "ephemeris": {}})}
 
 
-@router.get("/sky", tags=["sky"], summary="Sun and Earth against the skyline now (the challenge's core question)")
+@router.get("/sky", tags=["sky"], summary="Sun and Earth against the horizon now (the challenge's core question)")
 def sky(site: Optional[str] = None, lat: Optional[float] = None, lon: Optional[float] = None,
         time: Optional[str] = Query(None, description="ISO 8601 UTC, default now"), lander: Optional[str] = LanderQ,
         array_height_m: Optional[float] = Query(None, ge=0, le=100), antenna_height_m: Optional[float] = Query(None, ge=0, le=100),
@@ -351,7 +351,7 @@ def _locs(items) -> list[SI.Location]:
     return [_loc(i.site, i.lat, i.lon) for i in items]
 
 
-@router.get("/series", tags=["sky"], summary="Hourly Sun and Earth series plus the skyline, for drawing charts")
+@router.get("/series", tags=["sky"], summary="Hourly Sun and Earth series plus the horizon, for drawing charts")
 def series(site: Optional[str] = None, lat: Optional[float] = None, lon: Optional[float] = None,
            start: Optional[str] = Query(None, description="default now"), hours: int = Query(720, ge=1, le=10320),
            step_h: int = Query(1, ge=1, le=24), array_height_m: Optional[float] = Query(None, ge=0, le=100),
@@ -374,7 +374,7 @@ def ephemeris(start: Optional[str] = Query(None, description="default now"), hou
 def dsn(time: Optional[str] = Query(None, description="default now")):
     t = parse_time(time)
     if not spice.available():
-        return JSONResponse(status_code=503, content={"detail": "the DSN view needs the SPICE kernels; run python -m skyline.prep.fetch_data"})
+        return JSONResponse(status_code=503, content={"detail": "the DSN view needs the SPICE kernels; run python -m monscarlo.prep.fetch_data"})
     return {"time": iso(t), "stations": spice.dsn_view(t), "meta": meta()}
 
 
@@ -420,7 +420,7 @@ _rings_cache: dict = {}
 @router.get("/terrain/rings", tags=["terrain"], summary="Nested height grids around a point, for drawing the surface view (binary)")
 def terrain_rings(lat: float = Query(..., ge=-90, le=-79), lon: float = Query(..., ge=-360, le=360)):
     """10 m within 1.5 km, 40 m within 6 km, 160 m within 30 km, from the finest terrain at each point. Layout in
-    skyline.engine.terrain.rings_binary."""
+    monscarlo.engine.terrain.rings_binary."""
     from fastapi.responses import Response as R
     from ..engine.terrain import rings_binary
     key = (round(lat, 5), round(lon, 5))

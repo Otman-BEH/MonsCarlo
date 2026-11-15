@@ -16,15 +16,15 @@ def _date(t: float) -> str:
 
 def summary(loc: Location, t: float, sky: dict, win: dict, mis: dict, lander: dict, risk: dict | None) -> str:
     s, e = sky["sun"], sky["earth"]
-    if s["above_skyline"]:
-        sun = f"the Sun is {s['clearance_deg']:.1f}° above the skyline"
+    if s["above_horizon"]:
+        sun = f"the Sun is {s['clearance_deg']:.1f}° above the horizon"
         if s["next_sunset"]["time"]:
             sun += f" and sets in {s['next_sunset']['in_text']}"
     else:
-        sun = f"the Sun is {abs(s['clearance_deg']):.1f}° below the skyline"
+        sun = f"the Sun is {abs(s['clearance_deg']):.1f}° below the horizon"
         if s["next_sunrise"]["time"]:
             sun += f" and rises in {s['next_sunrise']['in_text']}"
-    if e["above_skyline"]:
+    if e["above_horizon"]:
         earth = "Earth is in view" + (f" until Earthset in {e['next_earthset']['in_text']}" if e["next_earthset"]["time"] else "")
     else:
         earth = "Earth is hidden" + (f" until Earthrise in {e['next_earthrise']['in_text']}" if e["next_earthrise"]["time"] else "")

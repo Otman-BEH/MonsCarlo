@@ -1,4 +1,4 @@
-"""Site catalogue, location resolution and skylines (precomputed for listed sites, cast on demand elsewhere)."""
+"""Site catalogue, location resolution and horizons (precomputed for listed sites, cast on demand elsewhere)."""
 from __future__ import annotations
 
 import json
@@ -63,8 +63,8 @@ def resolve(site: str | None = None, lat: float | None = None, lon: float | None
     return Location(None, f"{abs(lat):.4f}°{'S' if lat < 0 else 'N'} {abs(lo):.4f}°{'W' if lo < 0 else 'E'}", float(lat), float(lo), float(lat), float(lo), False)
 
 
-class Skylines:
-    """Loads precomputed site skylines from derived/skylines; casts anything else with the terrain model."""
+class HorizonMasks:
+    """Loads precomputed site horizons from derived/horizon_masks; casts anything else with the terrain model."""
 
     def __init__(self, terrain: Terrain | None = None):
         self.terrain = terrain or default_terrain()
@@ -74,7 +74,7 @@ class Skylines:
 
     def _index(self) -> dict:
         if self._idx is None:
-            p = config.DERIVED_DIR / "skylines" / "index.json"
+            p = config.DERIVED_DIR / "horizon_masks" / "index.json"
             self._idx = json.loads(p.read_text()) if p.exists() else {"sites": {}}
         return self._idx
 
@@ -93,7 +93,7 @@ class Skylines:
         with self._lock:
             hm = self._mem.get(key)
             if hm is None:
-                m = np.load(config.DERIVED_DIR / "skylines" / rec["file"]).astype(np.float64)
+                m = np.load(config.DERIVED_DIR / "horizon_masks" / rec["file"]).astype(np.float64)
                 idx = self._index()
                 hm = HorizonMask(az_deg=np.arange(idx["naz"]) * 360.0 / idx["naz"], heights_m=[float(e) for e in idx["eyes_m"]],
                                  mask_deg=m, ground_m=rec["ground_m"], tiers=rec["tiers"], mode=mode, lat=loc.lat, lon=loc.lon)
@@ -101,7 +101,7 @@ class Skylines:
             return hm
 
     def get(self, loc: Location, heights: list[float], mode: str = "best", naz: int = config.NAZ) -> tuple[HorizonMask, dict[float, np.ndarray]]:
-        """Skyline and the mask at each requested height."""
+        """Horizon and the mask at each requested height."""
         hm = self._precomputed(loc, mode) if naz == config.NAZ else None
         if hm is not None and max(heights) <= hm.heights_m[-1]:
             return hm, {h: hm.at_height(h) for h in heights}
@@ -109,15 +109,15 @@ class Skylines:
         return hm, {h: hm.mask_deg[hm.heights_m.index(float(h))] for h in heights}
 
 
-_default: Skylines | None = None
+_default: HorizonMasks | None = None
 _dlock = threading.Lock()
 
 
-def default_skylines() -> Skylines:
+def default_horizon_masks() -> HorizonMasks:
     global _default
     with _dlock:
         if _default is None:
-            _default = Skylines()
+            _default = HorizonMasks()
         return _default
 
 

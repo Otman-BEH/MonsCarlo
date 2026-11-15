@@ -1,4 +1,4 @@
-"""Terrain: elevation tiers, sampling, horizon masks (skylines), slope.
+"""Terrain: elevation tiers, sampling, horizon masks, slope.
 
 Tiers, finest first (mode "best"):
     5 m PGDA site tiles  ->  80 m LOLA DEM (80S to the pole)  ->  240 m LOLA DEM (60S to the pole)  ->  coarse global grid
@@ -430,8 +430,8 @@ class Terrain:
     # ----- horizon
     def horizon(self, lat: float, lon: float, heights_m=None, naz: int = config.NAZ, mode: str = "best",
                 ground_m: float | None = None, use_cache: bool = True, fast: bool = False) -> HorizonMask:
-        """Skyline at each height. fast=True samples the finest tier at each point on main's hires distance schedule
-        (30 m steps near the site): used for the Monte Carlo grid, where hundreds of skylines are needed."""
+        """Horizon mask at each height. fast=True samples the finest tier at each point on main's hires distance schedule
+        (30 m steps near the site): used for the Monte Carlo grid, where hundreds of horizons are needed."""
         heights = [float(h) for h in (heights_m if heights_m is not None else config.EYES_M)]
         lat = float(max(-89.9999, min(89.9999, lat)))
         lon = float(lon)

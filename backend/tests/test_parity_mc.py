@@ -4,9 +4,9 @@ import numpy as np
 import pytest
 
 from conftest import arr
-from skyline.engine import mission as M
-from skyline.engine import montecarlo as MC
-from skyline.engine import visibility as V
+from monscarlo.engine import mission as M
+from monscarlo.engine import montecarlo as MC
+from monscarlo.engine import visibility as V
 from test_parity_core import view_from_golden
 
 
