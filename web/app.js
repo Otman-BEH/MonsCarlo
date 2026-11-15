@@ -747,28 +747,31 @@ import { createTerrain } from './js/terrain.js';
   function sunRaster() { if (polarBuilt && S.now && sunFt !== S.t) { castPolar(S.now.sun, false, 0.266, sunF, sunI); sunFt = S.t; } }
 
   // ---------- explore: first-person surface view ----------
-  const VW = { az: null, fov: 75, off: document.createElement('canvas'), litKey: '', fine: null, near: null, far: null, drag: false };
+  const VW = { az: null, fov: 75, off: document.createElement('canvas'), drag: false, lit: {}, have: null, job: null, ref: [] };
+  // The sharp picture is at most this many columns wide; the browser stretches it to the screen.
+  const SURF_MAX = 2000;
   // Which ground is in sunlight: for each cell of a grid around the site, march toward the Sun over the terrain and
-  // keep the steepest rise; the share of the solar disc above it is the light that cell gets.
-  function litGrid(x0, y0, ux, uy, sunEl, cell, n, tmax) {
-    const out = new Float32Array(n * n), H = TER.elevXY, half = (n - 1) / 2;
-    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-      const x = x0 + (i - half) * cell, y = y0 + (half - j) * cell, h1 = H(x, y);
-      const el = sunEl + ((x - x0) * ux + (y - y0) * uy) / RM * R2D, top = Math.tan((el + 0.27) * D2R);
-      let mt = -0.2;
-      for (let t = cell * 0.75; t < tmax; t += Math.max(cell * 0.75, t * 0.06)) {
-        const v = (H(x + ux * t, y + uy * t) - h1) / (1000 * t) - t / (2 * RM);
-        if (v > mt) { mt = v; if (mt > top) break; }
-      }
-      out[j * n + i] = discFrac(el, 0.266, Math.atan(mt) * R2D);
+  // keep the steepest rise; the share of the solar disc above it is the light that cell gets. A cell is worked out the
+  // first time the picture asks for it: most of a grid lies outside the field of view or behind a hill.
+  function litGrid(x0, y0, ux, uy, sunEl, cell, n, tmax) { return { a: new Float32Array(n * n).fill(NaN), n, cell, x0, y0, ux, uy, sunEl, tmax }; }
+  function litCell(g, k) {
+    const n = g.n, half = (n - 1) / 2, i = k % n, j = (k - i) / n, cell = g.cell, ux = g.ux, uy = g.uy, H = TER.elevXY;
+    const x = g.x0 + (i - half) * cell, y = g.y0 + (half - j) * cell, h1 = H(x, y);
+    const el = g.sunEl + ((x - g.x0) * ux + (y - g.y0) * uy) / RM * R2D, top = Math.tan((el + 0.27) * D2R);
+    let mt = -0.2;
+    for (let t = cell * 0.75; t < g.tmax; t += Math.max(cell * 0.75, t * 0.06)) {
+      const v = (H(x + ux * t, y + uy * t) - h1) / (1000 * t) - t / (2 * RM);
+      if (v > mt) { mt = v; if (mt > top) break; }
     }
-    return { a: out, n, cell, x0, y0 };
+    return g.a[k] = discFrac(el, 0.266, Math.atan(mt) * R2D);
   }
   function litAtGrid(g, x, y) {
     const half = (g.n - 1) / 2, i = (x - g.x0) / g.cell + half, j = half - (y - g.y0) / g.cell;
     if (!(i >= 0 && j >= 0 && i < g.n - 1 && j < g.n - 1)) return NaN;
-    const i0 = i | 0, j0 = j | 0, fi = i - i0, fj = j - j0, a = g.a, k = j0 * g.n + i0;
-    return (a[k] * (1 - fi) + a[k + 1] * fi) * (1 - fj) + (a[k + g.n] * (1 - fi) + a[k + g.n + 1] * fi) * fj;
+    const i0 = i | 0, j0 = j | 0, fi = i - i0, fj = j - j0, a = g.a, n = g.n, k = j0 * n + i0;
+    let p = a[k], q = a[k + 1], r = a[k + n], s = a[k + n + 1];
+    if (p !== p) p = litCell(g, k); if (q !== q) q = litCell(g, k + 1); if (r !== r) r = litCell(g, k + n); if (s !== s) s = litCell(g, k + n + 1);
+    return (p * (1 - fi) + q * fi) * (1 - fj) + (r * (1 - fi) + s * fi) * fj;
   }
   // Fine surface texture below the 5 to 10 m resolution of the data. Illustrative only: it changes the brightness by a
   // few percent within a few hundred metres of the camera and never changes heights, shadows or any number.
@@ -792,65 +795,101 @@ import { createTerrain } from './js/terrain.js';
     const { g, w, h } = prep(cv); g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
     if (!riskOk()) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('The surface view needs the polar terrain, which covers 80°S to the south pole.', w / 2, h / 2); $('surfcap').textContent = 'Pick a south-pole site to stand on the surface. The sky chart shows the horizon for any site.'; return; }
     if (!can) { g.fillStyle = 'rgba(255,255,255,0.65)'; g.font = FONT(13); g.textAlign = 'center'; g.fillText('Loading the terrain around the site…', w / 2, h / 2); return; }
-    const c = S.cur, m = siteMask(S.site), mask = m.mask, dpr = Math.min(window.devicePixelRatio || 1, 2), tStart = performance.now();
+    const c = S.cur, m = siteMask(S.site), mask = m.mask, dpr = Math.min(window.devicePixelRatio || 1, 2);
     if (VW.az === null) { const sepA = wrap180(c.earthAz - c.sunAz); VW.az = Math.abs(sepA) <= 0.86 * VW.fov ? c.sunAz + sepA / 2 : c.sunAz + VW.fov * 0.24; }
-    const fast = S.playing || VW.drag, Wc = Math.min(2600, Math.round(w * (fast ? Math.min(dpr, 1) * 0.6 : dpr))), Hc = Math.round(Wc * h / w);
-    const fovH = VW.fov, fovV = fovH * Hc / Wc, elC = -0.02 * fovV;
+    const live = S.playing || VW.drag, fovH = VW.fov, fovV = fovH * h / w, elC = -0.02 * fovV;
     const lam = S.site.lon * D2R, nx = Math.sin(lam), ny = Math.cos(lam), ex = Math.cos(lam), ey = -Math.sin(lam);
     const rho0 = 2 * RM * Math.tan((90 + Math.max(-89.999, S.site.lat)) / 2 * D2R), x0 = rho0 * nx, y0 = rho0 * ny, hEye = m.h0 + S.eye;
     const sa = c.sunAz * D2R, ux = nx * Math.cos(sa) + ex * Math.sin(sa), uy = ny * Math.cos(sa) + ey * Math.sin(sa), E = TER.elevXYsmooth;
-    // shadows: fine near the site, coarser farther out, then the polar shadow map
-    // while playing, shadows are recomputed every 30 minutes of mission time instead of every frame
-    const key = [S.site.lat, S.site.lon, fast ? Math.round(S.t / 1800e3) : S.t, fast ? 1 : 0].join('|');
-    if (VW.litKey !== key) {
-      VW.litKey = key; sunRaster();
-      VW.fine = fast ? null : litGrid(x0, y0, ux, uy, c.sunEl, 0.01, 300, 12);
-      VW.near = litGrid(x0, y0, ux, uy, c.sunEl, fast ? 0.12 : 0.04, fast ? 100 : 300, 40);
-      VW.far = litGrid(x0, y0, ux, uy, c.sunEl, fast ? 0.6 : 0.2, fast ? 100 : 300, 160);
-    }
-    const litAt = (x, y) => {
-      let v = VW.fine ? litAtGrid(VW.fine, x, y) : NaN; if (v === v) return v;
-      v = litAtGrid(VW.near, x, y); if (v === v) return v;
-      v = litAtGrid(VW.far, x, y); if (v === v) return v;
-      const px = Math.floor(x / PXKM + PS / 2), py = Math.floor(PS / 2 - y / PXKM); return px >= 0 && py >= 0 && px < PS && py < PS ? sunF[py * PS + px] : 1;
-    };
-    const off = VW.off; if (off.width !== Wc || off.height !== Hc) { off.width = Wc; off.height = Hc; }
-    const og = off.getContext('2d'), im = og.createImageData(Wc, Hc), buf = new Uint32Array(im.data.buffer);
-    const Y = el => (0.5 - (el - elC) / fovV) * Hc, expo = 1 / (6 * Math.sin(Math.max(0.6, c.sunEl) * D2R));
-    const mix = (c1, c2, f) => 0xff000000 | (((c1 >> 16 & 255) * f + (c2 >> 16 & 255) * (1 - f)) << 16) | (((c1 >> 8 & 255) * f + (c2 >> 8 & 255) * (1 - f)) << 8) | ((c1 & 255) * f + (c2 & 255) * (1 - f));
-    const stepK = fast ? 2 : 1;
-    for (let col = 0; col < Wc; col++) {
-      const az = VW.az + ((col + 0.5) / Wc - 0.5) * fovH, a = az * D2R, dx = nx * Math.cos(a) + ex * Math.sin(a), dy = ny * Math.cos(a) + ey * Math.sin(a), toSun = Math.cos(a - sa);
-      let yb = Hc, last = 0xff0a0a0a, lastV = -1, pr = -1, pf = 0, pc = 0;
-      const rowsPerDeg = Hc / fovV;
-      for (let d = 0.003; d < 300 && yb > 0;) {
-        const res = TER.resAt(d), x = x0 + dx * d, y = y0 + dy * d, hh = E(x, y), pyF = Y(Math.atan((hh - hEye) / (1000 * d) - d / (2 * RM)) * R2D), py = Math.floor(pyF);
-        // step: fine enough for the terrain at this distance, and no more than about one pixel row on screen
-        const rowsPerKm = (Math.abs(hh - hEye) / 1000 / (d * d) + 1 / (2 * RM)) * R2D * rowsPerDeg;
-        d += stepK * Math.min(Math.max(res * 0.5, d * (d > 25 ? 0.0035 : 0.006)), Math.max(0.00002, 1.1 / rowsPerKm));
-        if (py >= yb) { lastV = -1; continue; }   // hidden behind nearer ground: never blend across a silhouette
-        // ground normal at a scale tied to distance, so the 5 m and 10 m detail near the site shows without banding
-        const dl = Math.min(0.25, Math.max(0.006, d * 0.012)), gx = (E(x + dl, y) - E(x - dl, y)) / (2000 * dl), gy = (E(x, y + dl) - E(x, y - dl)) / (2000 * dl);
-        const elL = (c.sunEl + (d / RM) * toSun * R2D) * D2R, chh = Math.cos(elL), lam2 = Math.max(0, (-gx * ux * chh - gy * uy * chh + Math.sin(elL)) / Math.sqrt(1 + gx * gx + gy * gy));
-        const q = litAt(x, y) * lam2 * expo * 1.7 * regolith(x, y, d), v = 6 + 249 * Math.pow(q / (1 + q), 0.72);
-        last = 0xff000000 | ((v * 0.9) << 16) | ((v * 0.96) << 8) | v;
-        if (pr >= 0) buf[pr * Wc + col] = mix(pc, last, pf);
-        // fill the rows down to the previous sample, blending toward its brightness, so steps never show as bands
-        const span = yb - (py + 1), contiguous = lastV >= 0 && span <= 6;
-        for (let r = Math.max(0, py + 1); r < yb; r++) {
-          const vv = contiguous ? v + (lastV - v) * ((r - py) / (span + 1)) : v;
-          buf[r * Wc + col] = 0xff000000 | ((vv * 0.9) << 16) | ((vv * 0.96) << 8) | vv;
-        }
-        if (py >= 0) { buf[py * Wc + col] = last; pr = py; pf = py + 1 - pyF; pc = last; } else pr = -1;
-        yb = py; lastV = v;
+    // The terrain picture is drawn in two passes. A quick draft (fewer columns, coarser shadows) is painted at once, and
+    // it is all that is drawn while time plays or the view is dragged. The sharp picture is then worked out in the
+    // background a few columns at a time, so the page never freezes, and replaces the draft when it is complete.
+    // A picture is kept until something it depends on changes: a redraw for any other reason only repaints the labels.
+    const sharpW = Math.max(1, Math.min(SURF_MAX, Math.round(w * dpr))), draftW = Math.max(1, Math.min(sharpW, Math.round(w * Math.min(dpr, 1) * 0.6)));
+    // shadows: fine near the site, coarser farther out, then the polar shadow map.
+    // The draft's shadows are recomputed every 30 minutes of mission time instead of every frame.
+    const lit = sharp => {
+      const slot = sharp ? 'sharp' : 'draft', key = [S.site.lat, S.site.lon, sharp ? S.t : Math.round(S.t / 1800e3)].join('|');
+      let L = VW.lit[slot];
+      if (!L || L.key !== key) {
+        sunRaster();
+        L = VW.lit[slot] = { key,
+          fine: sharp ? litGrid(x0, y0, ux, uy, c.sunEl, 0.01, 300, 12) : null,
+          near: litGrid(x0, y0, ux, uy, c.sunEl, sharp ? 0.04 : 0.12, sharp ? 300 : 100, 40),
+          far: litGrid(x0, y0, ux, uy, c.sunEl, sharp ? 0.2 : 0.6, sharp ? 300 : 100, 160) };
       }
-      // the painted horizon agrees exactly with the server's horizon used for every number on the page
-      const ymF = Math.max(0, Math.min(Hc, Y(maskAt(mask, az)))), ym = Math.floor(ymF);
-      if (yb > ym) for (let r = ym; r < Math.min(Hc, yb); r++) buf[r * Wc + col] = last; else for (let r = Math.max(0, yb); r < ym; r++) buf[r * Wc + col] = 0;
-      if (ym >= 0 && ym < Hc) buf[ym * Wc + col] = (buf[ym * Wc + col] & 0x00ffffff) | (Math.round(255 * (ym + 1 - ymF)) << 24);
-    }
-    og.putImageData(im, 0, 0);
-    if (DEBUG) console.log('surface view: ' + Wc + ' columns in ' + Math.round(performance.now() - tStart) + ' ms' + (fast ? ' (fast)' : ''));
+      return L;
+    };
+    // one column of the picture: march outward from the camera and paint the ground from the bottom of the screen up
+    const columns = (Wc, Hc, buf, sharp) => {
+      const L = lit(sharp), stepK = sharp ? 1 : 2, rowsPerDeg = Hc / fovV;
+      const litAt = (x, y) => {
+        let v = L.fine ? litAtGrid(L.fine, x, y) : NaN; if (v === v) return v;
+        v = litAtGrid(L.near, x, y); if (v === v) return v;
+        v = litAtGrid(L.far, x, y); if (v === v) return v;
+        const px = Math.floor(x / PXKM + PS / 2), py = Math.floor(PS / 2 - y / PXKM); return px >= 0 && py >= 0 && px < PS && py < PS ? sunF[py * PS + px] : 1;
+      };
+      const Y = el => (0.5 - (el - elC) / fovV) * Hc, expo = 1 / (6 * Math.sin(Math.max(0.6, c.sunEl) * D2R)), az0 = VW.az, sunEl = c.sunEl;
+      const mix = (c1, c2, f) => 0xff000000 | (((c1 >> 16 & 255) * f + (c2 >> 16 & 255) * (1 - f)) << 16) | (((c1 >> 8 & 255) * f + (c2 >> 8 & 255) * (1 - f)) << 8) | ((c1 & 255) * f + (c2 & 255) * (1 - f));
+      return col => {
+        const az = az0 + ((col + 0.5) / Wc - 0.5) * fovH, a = az * D2R, dx = nx * Math.cos(a) + ex * Math.sin(a), dy = ny * Math.cos(a) + ey * Math.sin(a), toSun = Math.cos(a - sa);
+        // the painted horizon agrees exactly with the server's horizon used for every number on the page
+        const ymF = Math.max(0, Math.min(Hc, Y(maskAt(mask, az)))), ym = Math.floor(ymF);
+        let yb = Hc, last = 0xff0a0a0a, lastV = -1, pr = -1, pf = 0, pc = 0;
+        // Nothing is kept above that horizon, so the march stops as soon as the ground drawn so far has reached it.
+        for (let d = 0.003; d < 300 && yb > 0 && yb >= ym;) {
+          const res = TER.resAt(d), x = x0 + dx * d, y = y0 + dy * d, hh = E(x, y), pyF = Y(Math.atan((hh - hEye) / (1000 * d) - d / (2 * RM)) * R2D), py = Math.floor(pyF);
+          // step: fine enough for the terrain at this distance, and no more than about one pixel row on screen
+          const rowsPerKm = (Math.abs(hh - hEye) / 1000 / (d * d) + 1 / (2 * RM)) * R2D * rowsPerDeg;
+          d += stepK * Math.min(Math.max(res * 0.5, d * (d > 25 ? 0.0035 : 0.006)), Math.max(0.00002, 1.1 / rowsPerKm));
+          if (py >= yb) { lastV = -1; continue; }   // hidden behind nearer ground: never blend across a silhouette
+          // ground normal at a scale tied to distance, so the 5 m and 10 m detail near the site shows without banding
+          const dl = Math.min(0.25, Math.max(0.006, d * 0.012)), gx = (E(x + dl, y) - E(x - dl, y)) / (2000 * dl), gy = (E(x, y + dl) - E(x, y - dl)) / (2000 * dl);
+          const elL = (sunEl + (d / RM) * toSun * R2D) * D2R, chh = Math.cos(elL), lam2 = Math.max(0, (-gx * ux * chh - gy * uy * chh + Math.sin(elL)) / Math.sqrt(1 + gx * gx + gy * gy));
+          const q = litAt(x, y) * lam2 * expo * 1.7 * regolith(x, y, d), v = 6 + 249 * Math.pow(q / (1 + q), 0.72);
+          last = 0xff000000 | ((v * 0.9) << 16) | ((v * 0.96) << 8) | v;
+          if (pr >= 0) buf[pr * Wc + col] = mix(pc, last, pf);
+          // fill the rows down to the previous sample, blending toward its brightness, so steps never show as bands
+          const span = yb - (py + 1), contiguous = lastV >= 0 && span <= 6;
+          for (let r = Math.max(0, py + 1); r < yb; r++) {
+            const vv = contiguous ? v + (lastV - v) * ((r - py) / (span + 1)) : v;
+            buf[r * Wc + col] = 0xff000000 | ((vv * 0.9) << 16) | ((vv * 0.96) << 8) | vv;
+          }
+          if (py >= 0) { buf[py * Wc + col] = last; pr = py; pf = py + 1 - pyF; pc = last; } else pr = -1;
+          yb = py; lastV = v;
+        }
+        if (yb > ym) for (let r = ym; r < Math.min(Hc, yb); r++) buf[r * Wc + col] = last; else for (let r = Math.max(0, yb); r < ym; r++) buf[r * Wc + col] = 0;
+        if (ym >= 0 && ym < Hc) buf[ym * Wc + col] = (buf[ym * Wc + col] & 0x00ffffff) | (Math.round(255 * (ym + 1 - ymF)) << 24);
+      };
+    };
+    const off = VW.off, stopJob = () => { if (VW.job) { clearTimeout(VW.job.timer); VW.job.dead = true; VW.job = null; } };
+    const store = (im, Wc, Hc) => { if (off.width !== Wc || off.height !== Hc) { off.width = Wc; off.height = Hc; } off.getContext('2d').putImageData(im, 0, 0); };
+    const draft = () => {
+      const t0 = performance.now(), Wc = draftW, Hc = Math.max(1, Math.round(Wc * h / w)), im = new ImageData(Wc, Hc), col = columns(Wc, Hc, new Uint32Array(im.data.buffer), false);
+      for (let i = 0; i < Wc; i++) col(i);
+      store(im, Wc, Hc);
+      if (DEBUG) console.log('surface view: draft, ' + Wc + ' columns in ' + Math.round(performance.now() - t0) + ' ms');
+    };
+    const sharpen = key => {
+      const Wc = sharpW, Hc = Math.max(1, Math.round(Wc * h / w)), im = new ImageData(Wc, Hc), col = columns(Wc, Hc, new Uint32Array(im.data.buffer), true);
+      const job = VW.job = { key, dead: false, timer: 0, next: 0, work: 0, t0: performance.now() };
+      const slice = () => {
+        if (job.dead) return;
+        const t = performance.now(); do col(job.next++); while (job.next < Wc && performance.now() - t < 12);
+        job.work += performance.now() - t;
+        if (job.next < Wc) { job.timer = setTimeout(slice, 0); return; }
+        store(im, Wc, Hc); VW.have = { key, sharp: true }; VW.job = null;
+        if (DEBUG) console.log('surface view: sharp, ' + Wc + ' columns in ' + Math.round(job.work) + ' ms of work over ' + Math.round(performance.now() - job.t0) + ' ms');
+        drawSurface();
+      };
+      job.timer = setTimeout(slice, 30);   // the draft reaches the screen first
+    };
+    // what the picture depends on (the Sun's direction to 0.05 deg: the exact /sky answer replaces the interpolated one without a redraw)
+    const ref = [mask, TER.rings, TER.polar], key = [S.site.lat, S.site.lon, S.t, S.eye, VW.az.toFixed(3), fovH, w, h, sharpW, Math.round(c.sunAz * 20), Math.round(c.sunEl * 20)].join('|');
+    if (ref.some((r, i) => r !== VW.ref[i])) { VW.ref = ref; VW.have = null; VW.lit = {}; stopJob(); }
+    if (live) { stopJob(); draft(); VW.have = { key, sharp: false }; }
+    else if (!VW.have || VW.have.key !== key) { stopJob(); draft(); VW.have = { key, sharp: false }; sharpen(key); }
+    else if (!VW.have.sharp && !VW.job) sharpen(key);
     const X = az => (wrap180(az - VW.az) / fovH + 0.5) * w, Yc = el => (0.5 - (el - elC) / fovV) * h, ppd = w / fovH;
     const sep = Math.acos(Math.max(-1, Math.min(1, Math.sin(c.sunEl * D2R) * Math.sin(c.earthEl * D2R) + Math.cos(c.sunEl * D2R) * Math.cos(c.earthEl * D2R) * Math.cos((c.sunAz - c.earthAz) * D2R)))), k = (1 - Math.cos(sep)) / 2;
     const exs = X(c.earthAz), eys = Yc(c.earthEl), re = Math.max(3, c.earthRad * ppd), sxs = X(c.sunAz), sys = Yc(c.sunEl), rs = Math.max(1.6, c.sunRad * ppd);
@@ -867,6 +906,7 @@ import { createTerrain } from './js/terrain.js';
     };
     tag(c.earthClr > 0 ? 'Earth' : 'Earth, behind the terrain', exs, eys, '#b9d6ff', c.earthClr <= 0, re);
     tag(c.sunClr > 0 ? 'Sun' : 'Sun, behind the terrain', sxs, sys, '#ffd98a', c.sunClr <= 0, rs);
+    if (VW.job) { g.font = FONT(11); g.textAlign = 'right'; g.fillStyle = 'rgba(255,255,255,0.6)'; g.fillText('Sharpening…', w - 10, 14); }
     g.font = FONT(10); g.fillStyle = 'rgba(255,255,255,0.75)'; g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
     const stepA = fovH > 70 ? 15 : fovH > 40 ? 10 : 5;
     for (let a = Math.ceil((VW.az - fovH / 2) / stepA) * stepA; a <= VW.az + fovH / 2; a += stepA) { const x = (a - VW.az) / fovH * w + w / 2, aa = ((a % 360) + 360) % 360; g.beginPath(); g.moveTo(x, h - 4); g.lineTo(x, h - 9); g.stroke(); g.fillText(aa % 90 === 0 ? ['N', 'E', 'S', 'W'][aa / 90] : aa + '°', Math.max(12, Math.min(w - 12, x)), h - 12); }
@@ -1084,7 +1124,7 @@ import { createTerrain } from './js/terrain.js';
     $('addcmp').innerHTML = '<option value="">Choose…</option>' + Object.keys(groups).map(k => '<optgroup label="' + k + '">' + groups[k].filter(s => !inCmp.includes(s.id)).map(opt).join('') + '</optgroup>').join('');
   }
   function pickSite(id, keepMap) {
-    S.site = byId(id) || SITES[0]; VW.az = null; VW.litKey = '';
+    S.site = byId(id) || SITES[0]; VW.az = null;
     if (!keepMap) { S.mapTab = S.site.lat <= CAP ? 'pole' : 'globe'; GL.lat = Math.max(-62, Math.min(62, S.site.lat)); GL.lon = S.site.lon; }
     fillSelects(); syncInputs(); render();
   }
@@ -1205,7 +1245,7 @@ import { createTerrain } from './js/terrain.js';
   // ---------- events ----------
   $('site').addEventListener('change', e => pickSite(e.target.value));
   $('usecoord').addEventListener('click', () => { const la = parseFloat($('lat').value), lo = parseFloat($('lon').value); if (isFinite(la) && isFinite(lo)) setCustom(la, lo); });
-  $('eye').addEventListener('change', e => { const v = parseFloat(e.target.value); S.eye = isFinite(v) ? Math.max(0, Math.min(100, v)) : 2; e.target.value = S.eye; VW.litKey = ''; S.landerEdited = true; drawLanderSpec(); render(); });
+  $('eye').addEventListener('change', e => { const v = parseFloat(e.target.value); S.eye = isFinite(v) ? Math.max(0, Math.min(100, v)) : 2; e.target.value = S.eye; S.landerEdited = true; drawLanderSpec(); render(); });
   $('when').addEventListener('change', e => { const t = Date.parse(e.target.value + ':00Z'); if (isFinite(t)) setTime(t, true); });
   $('bnow').addEventListener('click', () => setTime(Math.round(Date.now() / 60000) * 60000, true));
   document.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => setTime(S.t + (+b.dataset.step) * HOUR, false)));
