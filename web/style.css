@@ -211,7 +211,7 @@ canvas { display: block; width: 100%; border-radius: 8px; }
 #surf { background: #000; touch-action: pan-y; cursor: grab; }
 #sky { height: 260px; background: var(--sky); }
 @media (min-width: 1000px) { #sky { height: 320px; } }
-#tl { height: 236px; touch-action: pan-y; cursor: ew-resize; }
+#tl { height: 290px; touch-action: pan-y; cursor: ew-resize; }
 #cmp { touch-action: pan-y; cursor: ew-resize; }
 #cal { touch-action: pan-y; cursor: pointer; }
 #map { background: var(--sky); cursor: crosshair; max-width: 600px; margin: 0 auto; }
@@ -247,3 +247,21 @@ canvas { display: block; width: 100%; border-radius: 8px; }
 .flash { outline: 2px solid var(--sun); outline-offset: 4px; transition: outline-color 1.2s; }
 .foot { max-width: 1320px; margin: 0 auto; padding: 8px 16px 32px; color: var(--muted); font-size: 12.5px; text-align: center; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .spin { animation: none; } }
+
+/* plain-language explanations under figures */
+.g .x { font-size: 11.5px; color: var(--muted); opacity: 0.85; margin-top: 4px; line-height: 1.35; }
+label.fl .fh { font-weight: 400; font-size: 11px; opacity: 0.85; }
+/* lander presets */
+.lspec { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; display: grid; gap: 6px; margin: 10px 0; }
+.lspec .lsrc { color: var(--muted); font-size: 12px; }
+.lspec ul { margin: 0; padding-left: 18px; }
+.lspec .as { color: var(--warn); font-size: 11.5px; font-weight: 500; }
+.lspec .mod { color: var(--warn); font-size: 12px; }
+.lspec table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.lspec td { padding: 2px 6px 2px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.lspec td:first-child { color: var(--muted); width: 45%; }
+/* DSN table */
+.dsn { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.dsn td { padding: 3px 6px 3px 0; vertical-align: top; }
+.dsn .up { color: var(--go); font-weight: 600; } .dsn .down { color: var(--muted); }
+.dsn .ant { color: var(--muted); font-size: 11.5px; }
