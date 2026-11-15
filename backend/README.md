@@ -79,6 +79,12 @@ Optional physics refinements, all off by default so results match the original e
 whole disc clear) and `mission.limb_darkening` (0.6 for the Sun in visible light). The page's "Stricter physics" switch
 turns all four on. `tests/test_physics_options.py` covers them.
 
+`lander.thermal` (omitted by default) adds a one-node heat balance: the body gains its electrical load and absorbed
+sunlight, radiates to cold surroundings, and thermostatic heaters hold it at `keep_above_c`; the heater power joins the
+load and the result reports `thermal.heater_wh`, `heater_hours`, `coldest_c` and `warmest_c`. `battery.initial_soc`
+sets the charge at touchdown. Earth passing in front of the Sun (a lunar eclipse seen from the Moon) is always on: it
+scales the irradiance by the uncovered share of the solar disc and is exactly 1 outside eclipses.
+
 Common inputs: the location as `site=<id>` or `lat=&lon=` (east positive); `time=` or `start=`/`end=` (ISO 8601 UTC,
 defaulting to now and 30 days); `lander=<id>` plus overrides; `dem=best|80m`. Every response carries `meta` with the
 ephemeris source for each month, the terrain tiers and citations, `lander_resolved` (the exact lander used) and

@@ -27,7 +27,7 @@ import { createTerrain } from './js/terrain.js';
   const t0 = Math.round(Date.now() / 60000) * 60000;
   const S = { site: null, custom: null, t: t0, eye: 2, span: 30, anchor: floorDay(t0), calAnchor: floorDay(t0), view: 'explore',
               cmp: ['mala', 'ridge'], mapTab: 'pole', layer: 'sun', playing: false, plan: null, slip: 14, flex: 21, scope: 'pole', acc: 500, tjit: 6, sig: { power: 5, load: 5, cap: 3, terrain: 0.15, slope: 12, corr: false, seed: 20261114 },
-              cfg: { days: 10, peakW: 400, loadSun: 180, loadDark: 60, capWh: 2000, minSoc: 0.2, tracking: true, needEarth: true, maxGapH: 12, margin: 0.3, chargeEff: 0.9, fault: { kind: 'none', day: 3 }, safe: false, autonomyH: 6, strict: false } };
+              cfg: { days: 10, peakW: 400, loadSun: 180, loadDark: 60, capWh: 2000, minSoc: 0.2, tracking: true, needEarth: true, maxGapH: 12, margin: 0.3, chargeEff: 0.9, fault: { kind: 'none', day: 3 }, safe: false, autonomyH: 6, strict: false, heat: false } };
 
   // ---------- theme and canvas ----------
   let C = {};
@@ -107,14 +107,16 @@ import { createTerrain } from './js/terrain.js';
              power: { array: { type: c.tracking ? 'tracking' : 'horizontal', peak_w: c.peakW, height_m: S.eye, ...(c.strict ? { incidence_loss: true } : {}) },
                       battery: { capacity_wh: c.capWh, min_soc: c.minSoc, charge_eff: c.chargeEff, ...(c.strict ? { discharge_eff: 0.95 } : {}) },
                       loads: { sunlit_w: c.loadSun, dark_w: c.loadDark }, safe_mode: c.safe },
-             comms: { antenna_height_m: S.eye }, landing: { accuracy_m_3sigma: S.acc, max_slope_deg: S.sig.slope } };
+             comms: { antenna_height_m: S.eye }, landing: { accuracy_m_3sigma: S.acc, max_slope_deg: S.sig.slope },
+             // heat model (off by default): the server's one-node heat balance with its default body
+             ...(c.heat ? { thermal: {} } : {}) };
   }
   function missionSpec() { const c = S.cfg; return { duration_days: c.days, needs_earth: c.needEarth, max_gap_h: c.maxGapH, autonomy_h: c.autonomyH, terrain_margin_deg: c.margin, fault: { kind: c.fault.kind, day: c.fault.day },
     // stricter physics (off by default): the whole Earth disc must clear the terrain, and the Sun is dimmer at its edge
     ...(c.strict ? { link_min_clearance_deg: 0.95, limb_darkening: 0.6 } : {}) }; }
   const landingTime = () => floorHour(S.t);
   const sumOf = x => x && { ok: x.ok, fails: x.fails, minSoc: x.min_soc, kMin: x.min_soc_at_h, kFail: x.below_reserve_at_h === null ? -1 : x.below_reserve_at_h, maxGapH: x.longest_link_gap_h,
-    maxDarkH: x.longest_dark_h, linkPct: x.link_pct, litPct: x.lit_pct, battNeedWh: x.battery_needed_wh === null ? Infinity : x.battery_needed_wh, n: x.hours_simulated, safeH: x.safe_mode_hours,
+    maxDarkH: x.longest_dark_h, linkPct: x.link_pct, litPct: x.lit_pct, battNeedWh: x.battery_needed_wh === null ? Infinity : x.battery_needed_wh, n: x.hours_simulated, safeH: x.safe_mode_hours, heat: x.thermal || null,
     faultK: x.fault_starts_at_h === null ? -1 : x.fault_starts_at_h };
   function missionNow() {
     const body = { location: loc(S.site), landing_time: iso(landingTime()), lander: lander(), mission: missionSpec(), include: ['trace'] }, key = 'mis|' + JSON.stringify(body);
@@ -133,7 +135,8 @@ import { createTerrain } from './js/terrain.js';
     const where = short(S.site) + ', landing ' + fmtDT(mv.t) + ', ' + cfg.days + '-day mission: ';
     $('mv-say').textContent = where + (st === 2 ? 'power and Earth contact hold for the whole mission, even with every horizon raised by ' + cfg.margin + '°.'
       : st === 1 ? 'it works on the modelled terrain, but with horizons raised by ' + cfg.margin + '° ' + rob.fails.join(' and ') + '.'
-      : nom.fails.join(', and ') + '.');
+      : nom.fails.join(', and ') + '.')
+      + (nom.heat ? (nom.heat.heater_hours ? ' Heaters ran for ' + nom.heat.heater_hours + ' h and used ' + fmtCap(nom.heat.heater_wh) + ' to hold the electronics at ' + Math.round(nom.heat.coldest_c) + ' °C.' : ' The heaters were never needed: the coldest the electronics got was ' + Math.round(nom.heat.coldest_c) + ' °C.') : '');
     $('mv-soc').textContent = Math.round(nom.minSoc * 100) + '%'; $('mv-soc-s').textContent = 'On mission day ' + (nom.kMin / 24).toFixed(1) + ' · reserve ' + Math.round(cfg.minSoc * 100) + '% · with margin ' + Math.round(rob.minSoc * 100) + '%';
     $('mv-gap').textContent = fmtH(nom.maxGapH); $('mv-gap-s').textContent = (cfg.needEarth ? 'Limit ' + cfg.maxGapH + ' h' : 'No direct link required') + ' · Earth in view ' + nom.linkPct.toFixed(0) + '% of the mission';
     $('mv-need').textContent = fmtWh(nom.battNeedWh); $('mv-need-s').textContent = 'To ride out the longest shortfall with the reserve · fitted ' + fmtWh(cfg.capWh);
@@ -191,7 +194,8 @@ import { createTerrain } from './js/terrain.js';
     LAB.res = R; LAB.F = R.frontier; const F = R.frontier, b = F.best, st = S.mv.st, mc = labMass(cfg.peakW, cfg.capWh);
     if (q.stale || S.mv.stale) { $('d-pill').innerHTML = '<span class="pill big off">' + (q.err ? 'Server error' : 'Updating…') + '</span>'; }
     $('d-apply').hidden = !b;
-    if (b) { $('d-best').textContent = fmtW(b.peakW) + ' + ' + fmtCap(b.capWh); $('d-best-s').textContent = 'About ' + fmtKg(b.mass) + ' of array and battery. A screening figure from the W per kg and Wh per kg above.'; }
+    if (b) { $('d-best').textContent = fmtW(b.peakW) + ' + ' + fmtCap(b.capWh); $('d-best-s').textContent = 'About ' + fmtKg(b.mass) + ' of array and battery. A screening figure from the W per kg and Wh per kg above.'
+      + (cfg.safe ? ' With safe mode on, a smaller design may also pass: shedding load early can let a smaller array or battery survive where a larger one does not.' : ''); }
     else { $('d-best').textContent = 'None'; $('d-best-s').textContent = 'No array and battery pass at this landing time, because ' + (R.why_none || 'the needs cannot be met') + '. Try another time in the atlas below.'; }
     $('d-cur').textContent = STN[st]; $('d-cur-s').textContent = fmtW(cfg.peakW) + ' + ' + fmtCap(cfg.capWh) + ', about ' + fmtKg(mc) + (b ? (st === 2 ? (mc - b.mass > 0.05 ? ' · ' + fmtKg(mc - b.mass) + ' more than the lightest' : ' · as light as it gets') : ' · the lightest passing design is ' + fmtKg(b.mass)) : '');
     if (!(q.stale || S.mv.stale)) $('d-pill').innerHTML = !b ? '<span class="pill big bad">No hardware works at this time</span>' : st === 2 ? '<span class="pill big go">' + ((mc - b.mass) / b.mass < 0.15 ? 'Lean design' : 'Passes, with mass to spare') + '</span>' : '<span class="pill big ' + (st === 1 ? 'warn">Marginal: needs more hardware' : 'bad">Fails: needs more hardware') + '</span>';
@@ -1081,7 +1085,7 @@ import { createTerrain } from './js/terrain.js';
     const c = S.cfg, q = new URLSearchParams();
     if (S.site.id === 'custom') { q.set('lat', S.site.lat.toFixed(4)); q.set('lon', S.site.lon.toFixed(4)); } else q.set('site', S.site.id);
     q.set('t', new Date(S.t).toISOString().slice(0, 16)); q.set('mast', S.eye); if (S.cmp.length) q.set('cmp', S.cmp.join('_'));
-    q.set('m', MKEYS.map(k => k[1](c)).join('_')); q.set('f', (c.tracking ? 1 : 0) + '_' + (c.needEarth ? 1 : 0)); if (c.fault.kind !== 'none' || c.safe || c.strict) q.set('x', c.fault.kind + '_' + c.fault.day + '_' + (c.safe ? 1 : 0) + '_' + (c.strict ? 1 : 0));
+    q.set('m', MKEYS.map(k => k[1](c)).join('_')); q.set('f', (c.tracking ? 1 : 0) + '_' + (c.needEarth ? 1 : 0)); if (c.fault.kind !== 'none' || c.safe || c.strict || c.heat) q.set('x', c.fault.kind + '_' + c.fault.day + '_' + (c.safe ? 1 : 0) + '_' + (c.strict ? 1 : 0) + '_' + (c.heat ? 1 : 0));
     return location.href.split('#')[0] + '#' + S.view + '?' + q.toString();
   }
   function applyLink() {
@@ -1091,7 +1095,7 @@ import { createTerrain } from './js/terrain.js';
     const m = (q.get('m') || '').split('_'); if (m.length === MKEYS.length && m.every(x => isFinite(parseFloat(x)))) MKEYS.forEach((kk, i) => { $(kk[0]).value = m[i]; });
     const f = (q.get('f') || '').split('_'); if (f.length === 2) { $('m-array').value = f[0] === '0' ? 'flat' : 'track'; $('m-dte').checked = f[1] !== '0'; }
     const x = (q.get('x') || 'none_3_0').split('_'), kinds = ['none', 'array', 'load', 'battery', 'antenna'];
-    $('m-fault').value = kinds.includes(x[0]) ? x[0] : 'none'; $('m-fday').value = isFinite(parseFloat(x[1])) ? x[1] : 3; $('m-safe').checked = x[2] === '1'; $('m-strict').checked = x[3] === '1';
+    $('m-fault').value = kinds.includes(x[0]) ? x[0] : 'none'; $('m-fday').value = isFinite(parseFloat(x[1])) ? x[1] : 3; $('m-safe').checked = x[2] === '1'; $('m-strict').checked = x[3] === '1'; $('m-heat').checked = x[4] === '1';
     readCfg();
     const eye = parseFloat(q.get('mast')); if (isFinite(eye)) { S.eye = Math.max(0, Math.min(100, eye)); $('eye').value = S.eye; }
     if (q.has('cmp')) S.cmp = q.get('cmp').split('_').filter(id => SITES.some(s => s.id === id)).slice(0, 4);
@@ -1109,7 +1113,7 @@ import { createTerrain } from './js/terrain.js';
     const c = S.cfg; c.days = Math.round(num('m-days', 1, 60, 10)); c.peakW = num('m-peak', 0, 1e5, 400); c.tracking = $('m-array').value === 'track'; c.loadSun = num('m-lsun', 0, 1e5, 180); c.loadDark = num('m-ldark', 0, 1e5, 60);
     c.capWh = num('m-cap', 1, 1e6, 2000); c.minSoc = num('m-res', 0, 90, 20) / 100; c.needEarth = $('m-dte').checked; c.maxGapH = num('m-gap', 0, 2000, 12); c.margin = num('m-margin', 0, 3, 0.3);
     c.autonomyH = num('m-auto', 0, 72, 6);
-    c.fault = { kind: $('m-fault').value, day: num('m-fday', 0, 60, 3) }; c.safe = $('m-safe').checked; c.strict = $('m-strict').checked; $('m-fday').disabled = c.fault.kind === 'none';
+    c.fault = { kind: $('m-fault').value, day: num('m-fday', 0, 60, 3) }; c.safe = $('m-safe').checked; c.strict = $('m-strict').checked; c.heat = $('m-heat').checked; $('m-fday').disabled = c.fault.kind === 'none';
     $('m-gap').disabled = !c.needEarth; render();
   }
 
@@ -1150,7 +1154,7 @@ import { createTerrain } from './js/terrain.js';
   document.querySelectorAll('[data-span]').forEach(b => b.addEventListener('click', () => { S.span = +b.dataset.span; if (S.t > S.anchor + S.span * DAY) S.anchor = floorDay(S.t); syncInputs(); render(); }));
   document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
   window.addEventListener('hashchange', () => { if (location.hash.includes('?') && applyLink()) { fillSelects(); syncInputs(); render(); return; } const v = hashView(); if (v && v !== S.view) setView(v); });
-  ['m-days', 'm-peak', 'm-array', 'm-lsun', 'm-ldark', 'm-cap', 'm-res', 'm-dte', 'm-gap', 'm-margin', 'm-auto', 'm-fault', 'm-fday', 'm-safe', 'm-strict'].forEach(id => $(id).addEventListener('change', readCfg));
+  ['m-days', 'm-peak', 'm-array', 'm-lsun', 'm-ldark', 'm-cap', 'm-res', 'm-dte', 'm-gap', 'm-margin', 'm-auto', 'm-fault', 'm-fday', 'm-safe', 'm-strict', 'm-heat'].forEach(id => $(id).addEventListener('change', readCfg));
   $('s-sun').addEventListener('click', () => { if (S.cur) { VW.az = S.cur.sunAz; drawSurface(); } });
   $('s-earth').addEventListener('click', () => { if (S.cur) { VW.az = S.cur.earthAz; drawSurface(); } });
   $('s-zoom').addEventListener('click', () => { VW.fov = VW.fov === 75 ? 40 : VW.fov === 40 ? 20 : 75; drawSurface(); });
